@@ -1018,6 +1018,38 @@ cmd_show() {
     ' "$TICKETS_DIR"/*.md 2>/dev/null
 }
 
+cmd_add_note() {
+    if [[ $# -lt 1 ]]; then
+        echo "Usage: ticket add-note <id> [note text]" >&2
+        return 1
+    fi
+
+    local file
+    file=$(ticket_path "$1") || return 1
+    shift
+
+    local note
+    if [[ $# -gt 0 ]]; then
+        note="$*"
+    elif [[ ! -t 0 ]]; then
+        note=$(cat)
+    else
+        echo "Error: no note provided" >&2
+        return 1
+    fi
+
+    local timestamp
+    timestamp=$(_iso_date)
+
+    # Add Notes section if missing, then append timestamped note
+    if ! grep -q '^## Notes' "$file"; then
+        printf '\n## Notes\n' >> "$file"
+    fi
+    printf '\n**%s**\n\n%s\n' "$timestamp" "$note" >> "$file"
+
+    echo "Note added to $(basename "$file" .md)"
+}
+
 cmd_edit() {
     if [[ $# -lt 1 ]]; then
         echo "Usage: ticket edit <id>" >&2
@@ -1182,6 +1214,7 @@ Commands:
   closed [--limit=N]       List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
   edit <id>                Open ticket in \$EDITOR
+  add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSON, optionally filtered
   migrate-beads            Import tickets from .beads/issues.jsonl
 
@@ -1207,6 +1240,7 @@ case "${1:-help}" in
     closed) shift; cmd_closed "$@" ;;
     show)   shift; cmd_show "$@" ;;
     edit)   shift; cmd_edit "$@" ;;
+    add-note) shift; cmd_add_note "$@" ;;
     query) shift; cmd_query "$@" ;;
     migrate-beads) shift; cmd_migrate_beads "$@" ;;
     help|--help|-h) cmd_help ;;
