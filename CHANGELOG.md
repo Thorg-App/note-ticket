@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.2] - 2026-02-03
 
 ### Fixed
 - Ticket ID lookup now trims leading/trailing whitespace (fixes issue with AI agents passing extra spaces)
