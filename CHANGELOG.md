@@ -6,6 +6,8 @@
 - Plugin system: executables named `tk-<cmd>` or `ticket-<cmd>` in PATH are invoked automatically
 - `super` command to bypass plugins and run built-in commands directly
 - `TICKETS_DIR` and `TK_SCRIPT` environment variables exported for plugins
+- `help` command lists installed plugins with descriptions
+- Plugin metadata convention: `# tk-plugin: description` comment
 
 ## [0.3.2] - 2026-02-03
 
