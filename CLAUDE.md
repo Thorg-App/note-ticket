@@ -9,11 +9,16 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 **Core script:** Single-file bash implementation (`ticket`, ~1000 lines). Uses awk for performant bulk operations on large ticket sets.
 
 Key functions:
-- `generate_id()` - Creates IDs from directory name prefix + random suffix
-- `ticket_path()` - Resolves partial IDs to full file paths
+- `generate_id()` - Creates 25-char random `[a-z0-9]` IDs (decoupled from filename)
+- `title_to_filename()` - Converts title to slug for filename, handles collisions
+- `ticket_path()` - Resolves partial IDs by searching frontmatter `id:` fields (single awk pass)
+- `id_from_file()` - Extracts `id:` from a file's YAML frontmatter
+- `_file_to_jsonl()` - Shared awk-based JSONL generator (used by create and query)
 - `yaml_field()` / `update_yaml_field()` - YAML frontmatter manipulation via sed
 - `cmd_*()` - Command handlers
 - `cmd_ready()`, `cmd_blocked()`, `cmd_ls()` - awk-based bulk listing with sorting
+
+Data model: Filenames are title-based (e.g., `my-note.md`). The `id` field in frontmatter is the stable identifier. `title` is stored in frontmatter (double-quoted). No `# heading` for title in body.
 
 Dependencies: bash, sed, awk, find. Optional: ripgrep (faster grep).
 
