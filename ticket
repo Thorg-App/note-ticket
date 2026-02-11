@@ -299,7 +299,7 @@ cmd_create() {
         echo "status: open"
         echo "deps: []"
         echo "links: []"
-        echo "created: $now"
+        echo "created_iso: $now"
         echo "type: $issue_type"
         echo "priority: $priority"
         [[ -n "$assignee" ]] && echo "assignee: $assignee"

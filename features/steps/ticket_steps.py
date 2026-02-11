@@ -60,7 +60,7 @@ title: "{escaped_title}"
 status: open
 deps: []
 links: []
-created: 2024-01-01T00:00:00Z
+created_iso: 2024-01-01T00:00:00Z
 type: task
 priority: {priority}
 '''
@@ -273,7 +273,7 @@ title: "{escaped_title}"
 status: open
 deps: []
 links: []
-created: 2024-01-01T00:00:00Z
+created_iso: 2024-01-01T00:00:00Z
 type: task
 priority: 2
 ---
@@ -542,9 +542,9 @@ def step_created_ticket_has_timestamp(context):
     ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
-    pattern = r'^created:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z'
+    pattern = r'^created_iso:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z'
     assert re.search(pattern, content, re.MULTILINE), \
-        f"No valid created timestamp found\nContent: {content}"
+        f"No valid created_iso timestamp found\nContent: {content}"
 
 
 @then(r'ticket "(?P<ticket_id>[^"]+)" should have field "(?P<field>[^"]+)" with value "(?P<value>[^"]+)"')
