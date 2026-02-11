@@ -94,6 +94,11 @@ title_to_filename() {
     # collapse consecutive hyphens, trim leading/trailing hyphens
     slug=$(printf '%s' "$title" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g; s/-\{2,\}/-/g; s/^-//; s/-$//')
 
+    # Truncate to 200 chars to stay within filesystem limits
+    slug="${slug:0:200}"
+    # Trim trailing hyphen from truncation
+    slug="${slug%-}"
+
     # Fallback if empty
     [[ -z "$slug" ]] && slug="untitled"
 
@@ -210,7 +215,7 @@ _file_to_jsonl() {
         field_vals[field_count] = val
     }
     function json_escape(s) {
-        gsub(/\\/, "\\\\", s)
+        gsub(/\\/, "\\\\\\\\", s)
         gsub(/"/, "\\\"", s)
         return s
     }
@@ -280,7 +285,7 @@ cmd_create() {
     fi
 
     title="${title:-Untitled}"
-    local id slug file now
+    local id slug file now escaped_title
     id=$(generate_id)
     slug=$(title_to_filename "$title")
     file="$TICKETS_DIR/${slug}.md"
@@ -289,7 +294,8 @@ cmd_create() {
     {
         echo "---"
         echo "id: $id"
-        echo "title: \"$title\""
+        escaped_title="${title//\"/\\\"}"
+        echo "title: \"$escaped_title\""
         echo "status: open"
         echo "deps: []"
         echo "links: []"
