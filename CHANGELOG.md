@@ -2,8 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+- Ticket filenames are now derived from the title (e.g., `my-ticket-title.md`) instead of the ID
+- Ticket IDs are now 25-character random lowercase alphanumeric strings stored in frontmatter
+- Title is now stored in YAML frontmatter (`title: "..."`) instead of as a `# heading` in body
+- `create` command outputs JSONL (with id, title, full_path, and all fields) instead of just the ID
+- `query` command always includes `full_path` in output (removed `--include-full-path` flag)
+- ID resolution now searches frontmatter `id:` fields instead of matching filenames
+
 ### Added
-- `query --include-full-path` flag to include absolute file path in JSON output
 - Plugin system: executables named `tk-<cmd>` or `ticket-<cmd>` in PATH are invoked automatically
 - `super` command to bypass plugins and run built-in commands directly
 - `TICKETS_DIR` and `TK_SCRIPT` environment variables exported for plugins

@@ -77,23 +77,43 @@ _sed_i() {
     sed "$@" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
-# Generate ticket ID from directory name + random string
+# Generate 25-char random lowercase alphanumeric ID
 generate_id() {
-    local dir_name
-    dir_name=$(basename "$(pwd)")
+    local id
+    id=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 25 || true)
+    printf '%s' "$id"
+}
 
-    # Extract first letter of each hyphenated/underscored segment
-    local prefix
-    prefix=$(echo "$dir_name" | sed 's/[-_]/ /g' | awk '{for(i=1;i<=NF;i++) printf substr($i,1,1)}')
+# Convert title string to a filename-safe slug
+# Handles collisions by appending -1, -2, etc.
+title_to_filename() {
+    local title="$1"
+    local slug
 
-    # Fallback to first 3 chars if single segment (prefix too short)
-    [[ ${#prefix} -lt 2 ]] && prefix="${dir_name:0:3}"
+    # Lowercase, spaces to hyphens, strip non-alnum except hyphens,
+    # collapse consecutive hyphens, trim leading/trailing hyphens
+    slug=$(printf '%s' "$title" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g; s/-\{2,\}/-/g; s/^-//; s/-$//')
 
-    # 4-char random lower case alphanumeric string
-    local hash
-    hash=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
+    # Fallback if empty
+    [[ -z "$slug" ]] && slug="untitled"
 
-    echo "${prefix}-${hash}"
+    # Check for filename collisions in TICKETS_DIR
+    if [[ -d "$TICKETS_DIR" ]]; then
+        if [[ -f "$TICKETS_DIR/${slug}.md" ]]; then
+            local counter=1
+            while [[ -f "$TICKETS_DIR/${slug}-${counter}.md" ]]; do
+                ((counter++))
+            done
+            slug="${slug}-${counter}"
+        fi
+    fi
+
+    printf '%s' "$slug"
+}
+
+# Extract id from a file's YAML frontmatter
+id_from_file() {
+    yaml_field "$1" "id"
 }
 
 # Ensure tickets directory exists
@@ -101,34 +121,50 @@ ensure_dir() {
     mkdir -p "$TICKETS_DIR"
 }
 
-# Get ticket file path (supports partial ID matching)
+# Get ticket file path by searching frontmatter id: fields (supports partial ID matching)
 ticket_path() {
-    local id="$1"
+    local search="$1"
     # Trim leading/trailing whitespace (handles Claude/agent quirks)
-    read -r id <<< "$id"
-    local exact="$TICKETS_DIR/${id}.md"
+    read -r search <<< "$search"
 
-    if [[ -f "$exact" ]]; then
-        echo "$exact"
-        return 0
-    fi
-
-    # Try partial match (anywhere in filename)
-    local matches
-    matches=$(find "$TICKETS_DIR" -maxdepth 1 -name "*${id}*.md" 2>/dev/null | head -2)
-    local count
-    count=$(echo "$matches" | _grep -c . || true)
-
-    if [[ "$count" -eq 1 ]]; then
-        echo "$matches"
-        return 0
-    elif [[ "$count" -gt 1 ]]; then
-        echo "Error: ambiguous ID '$id' matches multiple tickets" >&2
-        return 1
-    else
-        echo "Error: ticket '$id' not found" >&2
+    # Guard: no .md files means no tickets
+    local md_files
+    md_files=("$TICKETS_DIR"/*.md)
+    if [[ ! -f "${md_files[0]}" ]]; then
+        echo "Error: ticket '$search' not found" >&2
         return 1
     fi
+
+    # Single awk pass: collect all id-to-filename mappings, then resolve
+    local result
+    result=$(awk -v search="$search" '
+    FNR==1 {
+        if (prev_file && id != "") {
+            if (id == search) { exact_count++; exact_file = prev_file }
+            else if (index(id, search) > 0) { partial_count++; partial_file = prev_file }
+        }
+        id = ""; in_front = 0; prev_file = FILENAME
+    }
+    /^---$/ { in_front = !in_front; next }
+    in_front && /^id:/ { id = substr($0, 5); gsub(/^ +| +$/, "", id) }
+    END {
+        if (prev_file && id != "") {
+            if (id == search) { exact_count++; exact_file = prev_file }
+            else if (index(id, search) > 0) { partial_count++; partial_file = prev_file }
+        }
+        if (exact_count == 1) { print exact_file; exit 0 }
+        if (exact_count > 1) { printf "Error: ambiguous ID \x27%s\x27 matches multiple tickets\n", search > "/dev/stderr"; exit 1 }
+        if (partial_count == 1) { print partial_file; exit 0 }
+        if (partial_count > 1) { printf "Error: ambiguous ID \x27%s\x27 matches multiple tickets\n", search > "/dev/stderr"; exit 1 }
+        printf "Error: ticket \x27%s\x27 not found\n", search > "/dev/stderr"; exit 1
+    }
+    ' "${md_files[@]}")
+
+    local rc=$?
+    if [[ $rc -ne 0 ]]; then
+        return 1
+    fi
+    echo "$result"
 }
 
 # Extract YAML field value
@@ -152,6 +188,62 @@ update_yaml_field() {
 ${field}: ${value}
 }"
     fi
+}
+
+# Generate JSONL from one or more ticket files
+# Usage: _file_to_jsonl file1.md [file2.md ...]
+_file_to_jsonl() {
+    awk '
+    BEGIN { FS=": "; in_front=0 }
+    FNR==1 {
+        if (prev_file) emit()
+        field_count=0; in_front=0
+        prev_file=FILENAME
+    }
+    /^---$/ { in_front = !in_front; next }
+    in_front && /^[a-zA-Z]/ {
+        key = $1
+        val = substr($0, length($1) + 3)
+        gsub(/^ +| +$/, "", val)
+        field_count++
+        field_keys[field_count] = key
+        field_vals[field_count] = val
+    }
+    function json_escape(s) {
+        gsub(/\\/, "\\\\", s)
+        gsub(/"/, "\\\"", s)
+        return s
+    }
+    function emit(    i, key, val, n, j, items) {
+        if (field_count > 0) {
+            printf "{"
+            for (i = 1; i <= field_count; i++) {
+                if (i > 1) printf ","
+                key = field_keys[i]
+                val = field_vals[i]
+                # Handle arrays
+                if (val ~ /^\[.*\]$/) {
+                    gsub(/^\[|\]$/, "", val)
+                    n = split(val, items, ", *")
+                    printf "\"%s\":[", json_escape(key)
+                    for (j = 1; j <= n; j++) {
+                        if (j > 1) printf ","
+                        gsub(/^ +| +$/, "", items[j])
+                        if (items[j] != "") printf "\"%s\"", json_escape(items[j])
+                    }
+                    printf "]"
+                } else {
+                    # Strip surrounding double quotes from value (e.g., title: "My Title")
+                    if (val ~ /^".*"$/) { val = substr(val, 2, length(val) - 2) }
+                    printf "\"%s\":\"%s\"", json_escape(key), json_escape(val)
+                }
+            }
+            printf ",\"full_path\":\"%s\"", json_escape(prev_file)
+            printf "}\n"
+        }
+    }
+    END { if (prev_file) emit() }
+    ' "$@"
 }
 
 cmd_create() {
@@ -184,19 +276,20 @@ cmd_create() {
     if [[ -n "$parent" ]]; then
         local parent_file
         parent_file=$(ticket_path "$parent") || return 1
-        parent=$(basename "$parent_file" .md)
+        parent=$(id_from_file "$parent_file")
     fi
 
     title="${title:-Untitled}"
-    local id
+    local id slug file now
     id=$(generate_id)
-    local file="$TICKETS_DIR/${id}.md"
-    local now
+    slug=$(title_to_filename "$title")
+    file="$TICKETS_DIR/${slug}.md"
     now=$(_iso_date)
 
     {
         echo "---"
         echo "id: $id"
+        echo "title: \"$title\""
         echo "status: open"
         echo "deps: []"
         echo "links: []"
@@ -210,7 +303,6 @@ cmd_create() {
             echo "tags: [${tags//,/, }]"
         fi
         echo "---"
-        echo "# $title"
         echo ""
         if [[ -n "$description" ]]; then
             echo "$description"
@@ -230,7 +322,7 @@ cmd_create() {
         fi
     } > "$file"
 
-    echo "$id"
+    _file_to_jsonl "$file"
 }
 
 # Valid statuses
@@ -261,7 +353,7 @@ cmd_status() {
     file=$(ticket_path "$id") || return 1
 
     update_yaml_field "$file" "status" "$status"
-    echo "Updated $(basename "$file" .md) -> $status"
+    echo "Updated $(id_from_file "$file") -> $status"
 }
 
 cmd_start() {
@@ -318,7 +410,7 @@ cmd_dep_tree() {
         deps = $2
         gsub(/[\[\] ]/, "", deps)
     }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
     function store() {
         if (id != "") {
             statuses[id] = status
@@ -502,7 +594,7 @@ cmd_dep_cycle() {
         deps = $2
         gsub(/[\[\] ]/, "", deps)
     }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
     function store() {
         if (id != "" && status != "closed") {
             statuses[id] = status
@@ -626,7 +718,7 @@ cmd_dep() {
     # Verify dependency exists and resolve to full ID
     local dep_file
     dep_file=$(ticket_path "$dep_id") || return 1
-    dep_id=$(basename "$dep_file" .md)
+    dep_id=$(id_from_file "$dep_file")
 
     # Get current deps
     local current_deps
@@ -647,7 +739,7 @@ cmd_dep() {
         update_yaml_field "$file" "deps" "$new_deps"
     fi
 
-    echo "Added dependency: $(basename "$file" .md) -> $dep_id"
+    echo "Added dependency: $(id_from_file "$file") -> $dep_id"
 }
 
 cmd_ls() {
@@ -679,7 +771,7 @@ cmd_ls() {
         deps = $2
         gsub(/[\[\] ]/, "", deps)
     }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
     END { if (prev_file) emit() }
     function has_tag(tags_str, tag,    i, n, arr) {
         n = split(tags_str, arr, ",")
@@ -726,7 +818,7 @@ cmd_ready() {
         deps = $2
         gsub(/[\[\] ]/, "", deps)
     }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
     function has_tag(tags_str, tag,    i, n, arr) {
         n = split(tags_str, arr, ",")
         for (i = 1; i <= n; i++) if (arr[i] == tag) return 1
@@ -816,7 +908,7 @@ cmd_closed() {
     in_front && /^status:/ { status = $2 }
     in_front && /^assignee:/ { assignee = $2 }
     in_front && /^tags:/ { tags = $2; gsub(/[\[\] ]/, "", tags) }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
     function has_tag(tags_str, tag,    i, n, arr) {
         n = split(tags_str, arr, ",")
         for (i = 1; i <= n; i++) if (arr[i] == tag) return 1
@@ -863,7 +955,7 @@ cmd_blocked() {
         deps = $2
         gsub(/[\[\] ]/, "", deps)
     }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
     function has_tag(tags_str, tag,    i, n, arr) {
         n = split(tags_str, arr, ",")
         for (i = 1; i <= n; i++) if (arr[i] == tag) return 1
@@ -947,7 +1039,7 @@ cmd_undep() {
     # Resolve dep_id to full ID
     local dep_file
     dep_file=$(ticket_path "$dep_id") || return 1
-    dep_id=$(basename "$dep_file" .md)
+    dep_id=$(id_from_file "$dep_file")
 
     local current_deps
     current_deps=$(yaml_field "$file" "deps")
@@ -964,7 +1056,7 @@ cmd_undep() {
     [[ "$new_deps" == "[]" || "$new_deps" == "[, ]" || "$new_deps" == "[ ]" ]] && new_deps="[]"
 
     update_yaml_field "$file" "deps" "$new_deps"
-    echo "Removed dependency: $(basename "$file" .md) -/-> $dep_id"
+    echo "Removed dependency: $(id_from_file "$file") -/-> $dep_id"
 }
 
 add_link_to_file() {
@@ -1000,7 +1092,7 @@ cmd_link() {
     for arg in "$@"; do
         local file
         file=$(ticket_path "$arg") || return 1
-        ids+=("$(basename "$file" .md)")
+        ids+=("$(id_from_file "$file")")
         files+=("$file")
     done
 
@@ -1098,8 +1190,8 @@ cmd_unlink() {
     file=$(ticket_path "$1") || return 1
     target_file=$(ticket_path "$2") || return 1
     local id target_id
-    id=$(basename "$file" .md)
-    target_id=$(basename "$target_file" .md)
+    id=$(id_from_file "$file")
+    target_id=$(id_from_file "$target_file")
 
     local current_links
     current_links=$(yaml_field "$file" "links" || true)
@@ -1113,7 +1205,7 @@ cmd_unlink() {
     remove_link_from_file "$file" "$target_id"
     remove_link_from_file "$target_file" "$id"
 
-    echo "Removed link: $(basename "$file" .md) <-> $target_id"
+    echo "Removed link: $id <-> $target_id"
 }
 
 cmd_show() {
@@ -1125,7 +1217,7 @@ cmd_show() {
     local file
     file=$(ticket_path "$1") || return 1
     local target_id
-    target_id=$(basename "$file" .md)
+    target_id=$(id_from_file "$file")
 
     _show_output() {
         awk -v target="$target_id" -v target_file="$file" '
@@ -1143,7 +1235,7 @@ cmd_show() {
     in_front && /^deps:/ { deps = $2; gsub(/[\[\] ]/, "", deps) }
     in_front && /^links:/ { links = $2; gsub(/[\[\] ]/, "", links) }
     in_front && /^parent:/ { parent = $2 }
-    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    in_front && /^title:/ { title = substr($0, 8); gsub(/^ +| +$/, "", title); if (title ~ /^".*"$/) title = substr(title, 2, length(title) - 2) }
 
     function store() {
         if (id != "") {
@@ -1299,7 +1391,7 @@ cmd_add_note() {
     fi
     printf '\n**%s**\n\n%s\n' "$timestamp" "$note" >> "$file"
 
-    echo "Note added to $(basename "$file" .md)"
+    echo "Note added to $(id_from_file "$file")"
 }
 
 cmd_edit() {
@@ -1319,62 +1411,16 @@ cmd_edit() {
 }
 
 cmd_query() {
-    local filter="" include_full_path=0
+    local filter=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --include-full-path) include_full_path=1; shift ;;
             *) filter="$1"; shift ;;
         esac
     done
 
-    # Generate all JSON in one awk pass
+    # Generate all JSON using shared _file_to_jsonl (always includes full_path)
     local json_output
-    json_output=$(awk -v include_path="$include_full_path" '
-    BEGIN { FS=": "; in_front=0 }
-    FNR==1 {
-        if (prev_file) emit()
-        field_count=0; in_front=0
-        prev_file=FILENAME
-    }
-    /^---$/ { in_front = !in_front; next }
-    in_front && /^[a-zA-Z]/ {
-        key = $1
-        val = substr($0, length($1) + 3)
-        gsub(/^ +| +$/, "", val)
-        field_count++
-        field_keys[field_count] = key
-        field_vals[field_count] = val
-    }
-    function emit() {
-        if (field_count > 0) {
-            printf "{"
-            for (i = 1; i <= field_count; i++) {
-                if (i > 1) printf ","
-                key = field_keys[i]
-                val = field_vals[i]
-                # Handle arrays
-                if (val ~ /^\[.*\]$/) {
-                    gsub(/^\[|\]$/, "", val)
-                    n = split(val, items, ", *")
-                    printf "\"%s\":[", key
-                    for (j = 1; j <= n; j++) {
-                        if (j > 1) printf ","
-                        gsub(/^ +| +$/, "", items[j])
-                        if (items[j] != "") printf "\"%s\"", items[j]
-                    }
-                    printf "]"
-                } else {
-                    printf "\"%s\":\"%s\"", key, val
-                }
-            }
-            if (include_path == 1) {
-                printf ",\"full_path\":\"%s\"", prev_file
-            }
-            printf "}\n"
-        }
-    }
-    END { if (prev_file) emit() }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null)
+    json_output=$(_file_to_jsonl "$TICKETS_DIR"/*.md 2>/dev/null)
 
     if [[ -n "$filter" ]]; then
         echo "$json_output" | jq -c "select($filter)"
@@ -1484,7 +1530,7 @@ $cmd - minimal ticket system with dependency tracking
 Usage: $cmd <command> [args]
 
 Commands:
-  create [title] [options] Create ticket, prints ID
+  create [title] [options] Create ticket, prints JSON with id and full_path
     -d, --description      Description text
     --design               Design notes
     --acceptance           Acceptance criteria
@@ -1511,8 +1557,7 @@ Commands:
   show <id>                Display ticket
   edit <id>                Open ticket in \$EDITOR
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
-  query [options] [jq-filter] Output tickets as JSON, optionally filtered
-    --include-full-path      Include absolute file path in each JSON object
+  query [jq-filter]        Output tickets as JSONL (includes full_path)
   migrate-beads            Import tickets from .beads/issues.jsonl
   super <cmd> [args]       Bypass plugins, run built-in command directly
 EOF
@@ -1535,8 +1580,8 @@ env vars; use '\$TK_SCRIPT super <cmd>' to call built-ins.
 
 Plugin descriptions: comment '# tk-plugin: text' or --tk-describe flag
 
-Tickets stored as markdown files in .tickets/
-Supports partial ID matching (e.g., '$cmd show 5c4' matches 'nw-5c46')
+Tickets stored as markdown files in .tickets/ (filenames derived from title)
+IDs are stored in frontmatter; supports partial ID matching
 EOF
 }
 

@@ -6,13 +6,7 @@ The git-backed issue tracker for AI agents. Rooted in the Unix Philosophy, `tk` 
 
 Tickets are markdown files with YAML frontmatter in `.tickets/`. This allows AI agents to easily search them for relevant content without dumping ten thousand character JSONL lines into their context window.
 
-Using ticket IDs as file names also allows IDEs to quickly navigate to the ticket for you. For example, you might run `git log` in your terminal and see something like:
-
-```
-nw-5c46: add SSE connection management 
-```
-
-VS Code allows you to Ctrl+Click or Cmd+Click the ID and jump directly to the file to read the details.
+Ticket filenames are derived from the title (e.g., `add-sse-connection-management.md`) while a random 25-character ID in the YAML frontmatter serves as the stable identifier for dependencies, links, and lookups.
 
 ## Install
 
@@ -57,7 +51,7 @@ tk - minimal ticket system with dependency tracking
 Usage: tk <command> [args]
 
 Commands:
-  create [title] [options] Create ticket, prints ID
+  create [title] [options] Create ticket, prints JSON with id and full_path
     -d, --description      Description text
     --design               Design notes
     --acceptance           Acceptance criteria
@@ -84,13 +78,13 @@ Commands:
   show <id>                Display ticket
   edit <id>                Open ticket in $EDITOR
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
-  query [options] [jq-filter] Output tickets as JSON, optionally filtered
-    --include-full-path      Include absolute file path in each JSON object
+  query [jq-filter]        Output tickets as JSONL (includes full_path)
   migrate-beads            Import tickets from .beads/issues.jsonl
   super <cmd> [args]       Bypass plugins, run built-in command directly
 
 Searches parent directories for .tickets/ (override with TICKETS_DIR env var)
-Supports partial ID matching (e.g., 'tk show 5c4' matches 'nw-5c46')
+Tickets stored as markdown files in .tickets/ (filenames derived from title)
+IDs are stored in frontmatter; supports partial ID matching
 ```
 
 ## Plugins
@@ -123,8 +117,9 @@ tk help         # lists it under "Plugins"
 ```bash
 #!/bin/bash
 # tk-plugin: Custom create with extras
-id=$("$TK_SCRIPT" super create "$@")
-echo "Created $id, doing extra stuff..."
+json=$("$TK_SCRIPT" super create "$@")
+echo "Created ticket: $json"
+echo "Doing extra stuff..."
 ```
 
 Use `tk super <cmd>` to bypass plugins and run the built-in directly.
