@@ -27,14 +27,36 @@ def get_ticket_script(context):
     return str(Path(context.project_dir) / 'ticket')
 
 
+def title_to_slug(title):
+    """Convert a title to a filename-safe slug (mirrors bash title_to_filename)."""
+    slug = title.lower().replace(' ', '-')
+    slug = re.sub(r'[^a-z0-9-]', '', slug)
+    slug = re.sub(r'-{2,}', '-', slug)
+    slug = slug.strip('-')
+    if not slug:
+        slug = 'untitled'
+    return slug
+
+
 def create_ticket(context, ticket_id, title, priority=2, parent=None):
-    """Helper to create a ticket file."""
+    """Helper to create a ticket file with title-based filename and frontmatter title."""
     tickets_dir = Path(context.test_dir) / '.tickets'
     tickets_dir.mkdir(parents=True, exist_ok=True)
 
-    ticket_path = tickets_dir / f'{ticket_id}.md'
+    slug = title_to_slug(title)
+    ticket_path = tickets_dir / f'{slug}.md'
+
+    # Handle filename collisions
+    if ticket_path.exists():
+        counter = 1
+        while (tickets_dir / f'{slug}-{counter}.md').exists():
+            counter += 1
+        ticket_path = tickets_dir / f'{slug}-{counter}.md'
+
+    escaped_title = title.replace('"', '\\"')
     content = f'''---
 id: {ticket_id}
+title: "{escaped_title}"
 status: open
 deps: []
 links: []
@@ -44,8 +66,7 @@ priority: {priority}
 '''
     if parent:
         content += f'parent: {parent}\n'
-    content += f'''---
-# {title}
+    content += '''---
 
 Description
 '''
@@ -55,6 +76,40 @@ Description
         context.tickets = {}
     context.tickets[ticket_id] = ticket_path
     return ticket_path
+
+
+def find_ticket_file(context, ticket_id):
+    """Find a ticket file by searching frontmatter id: field.
+    First checks context.tickets dict, then falls back to scanning files."""
+    if hasattr(context, 'tickets') and ticket_id in context.tickets:
+        path = context.tickets[ticket_id]
+        if path.exists():
+            return path
+
+    # Fallback: scan .tickets/ directory
+    tickets_dir = Path(context.test_dir) / '.tickets'
+    if not tickets_dir.exists():
+        raise FileNotFoundError(f"Tickets directory not found at {tickets_dir}")
+
+    for md_file in tickets_dir.glob('*.md'):
+        content = md_file.read_text()
+        if re.search(rf'^id:\s*{re.escape(ticket_id)}\s*$', content, re.MULTILINE):
+            return md_file
+
+    raise FileNotFoundError(f"No ticket file found with id: {ticket_id}")
+
+
+def extract_created_id(stdout):
+    """Extract ticket ID from create command output (JSON format)."""
+    output = stdout.strip()
+    if not output:
+        return None
+    try:
+        data = json.loads(output)
+        return data.get('id')
+    except json.JSONDecodeError:
+        # Fallback: return raw output (for non-JSON commands)
+        return output
 
 
 # ============================================================================
@@ -102,7 +157,7 @@ def step_ticket_exists(context, ticket_id, title):
 @given(r'ticket "(?P<ticket_id>[^"]+)" has status "(?P<status>[^"]+)"')
 def step_ticket_has_status(context, ticket_id, status):
     """Set ticket status."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
     content = re.sub(r'^status: \w+', f'status: {status}', content, flags=re.MULTILINE)
     ticket_path.write_text(content)
@@ -111,7 +166,7 @@ def step_ticket_has_status(context, ticket_id, status):
 @given(r'ticket "(?P<ticket_id>[^"]+)" depends on "(?P<dep_id>[^"]+)"')
 def step_ticket_depends_on(context, ticket_id, dep_id):
     """Add dependency to ticket."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     # Parse current deps
@@ -134,7 +189,7 @@ def step_ticket_depends_on(context, ticket_id, dep_id):
 def step_ticket_linked_to(context, ticket_id, link_id):
     """Create bidirectional link between tickets."""
     # Update first ticket
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
     links_match = re.search(r'^links: \[(.*?)\]', content, re.MULTILINE)
     if links_match:
@@ -150,7 +205,7 @@ def step_ticket_linked_to(context, ticket_id, link_id):
     ticket_path.write_text(content)
 
     # Update second ticket
-    link_path = Path(context.test_dir) / '.tickets' / f'{link_id}.md'
+    link_path = find_ticket_file(context, link_id)
     content = link_path.read_text()
     links_match = re.search(r'^links: \[(.*?)\]', content, re.MULTILINE)
     if links_match:
@@ -169,7 +224,7 @@ def step_ticket_linked_to(context, ticket_id, link_id):
 @given(r'ticket "(?P<ticket_id>[^"]+)" has a notes section')
 def step_ticket_has_notes(context, ticket_id):
     """Ensure ticket has a notes section."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
     if '## Notes' not in content:
         content += '\n## Notes\n'
@@ -190,9 +245,13 @@ def step_separate_tickets_dir(context, dir_path, ticket_id, title):
     tickets_dir = Path(context.test_dir) / dir_path
     tickets_dir.mkdir(parents=True, exist_ok=True)
 
-    ticket_path = tickets_dir / f'{ticket_id}.md'
+    slug = title_to_slug(title)
+    ticket_path = tickets_dir / f'{slug}.md'
+
+    escaped_title = title.replace('"', '\\"')
     content = f'''---
 id: {ticket_id}
+title: "{escaped_title}"
 status: open
 deps: []
 links: []
@@ -200,7 +259,6 @@ created: 2024-01-01T00:00:00Z
 type: task
 priority: 2
 ---
-# {title}
 
 Description
 '''
@@ -320,9 +378,20 @@ def step_run_command(context, command):
     context.returncode = result.returncode
     context.last_command = command
 
-    # If this was a create command, track the created ticket ID
+    # If this was a create command, track the created ticket ID from JSON output
     if 'ticket create' in command and result.returncode == 0:
-        context.last_created_id = result.stdout.strip()
+        created_id = extract_created_id(result.stdout)
+        if created_id:
+            context.last_created_id = created_id
+            # Also try to store the full_path for later lookups
+            try:
+                data = json.loads(result.stdout.strip())
+                if 'full_path' in data:
+                    if not hasattr(context, 'tickets'):
+                        context.tickets = {}
+                    context.tickets[created_id] = Path(data['full_path'])
+            except (json.JSONDecodeError, KeyError):
+                pass
 
 
 # ============================================================================
@@ -370,13 +439,26 @@ def step_output_not_contains(context, text):
     assert text not in output, f"Expected output to NOT contain '{text}'\nActual output: {output}"
 
 
+@then(r'the output should be valid JSON with an id field')
+def step_output_valid_json_with_id(context):
+    """Assert output is valid JSON containing an id field."""
+    try:
+        data = json.loads(context.stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"Output is not valid JSON: {context.stdout}\nError: {e}")
+    assert 'id' in data, f"JSON output missing 'id' field\nData: {data}"
+
+
 @then(r'the output should match a ticket ID pattern')
 def step_output_matches_id_pattern(context):
-    """Assert output matches ticket ID pattern (prefix-hash)."""
-    # Prefix can be alphanumeric (from directory name), hash is 4 hex chars
-    pattern = r'^[a-z0-9]+-[a-z0-9]{4}$'
-    assert re.match(pattern, context.stdout), \
-        f"Output '{context.stdout}' does not match ticket ID pattern"
+    """Assert output is valid JSON from create command (new behavior)."""
+    try:
+        data = json.loads(context.stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"Output is not valid JSON: {context.stdout}\nError: {e}")
+    assert 'id' in data, f"JSON output missing 'id' field\nData: {data}"
+    assert isinstance(data['id'], str) and len(data['id']) > 0, \
+        f"JSON 'id' field is not a non-empty string: {data['id']}"
 
 
 @then(r'the output should match pattern "(?P<pattern>[^"]+)"')
@@ -396,14 +478,15 @@ def step_output_matches_tree_format(context):
 
 @then(r'a ticket file should exist with title "(?P<title>[^"]+)"')
 def step_ticket_file_exists_with_title(context, title):
-    """Assert a ticket file exists with given title."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
+    """Assert a ticket file exists with given title in frontmatter."""
     ticket_id = context.last_created_id
-    ticket_path = tickets_dir / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
 
     assert ticket_path.exists(), f"Ticket file {ticket_path} does not exist"
     content = ticket_path.read_text()
-    assert f'# {title}' in content, f"Ticket does not have title '{title}'\nContent: {content}"
+    # Title is now in frontmatter, not body
+    assert re.search(rf'^title:\s*"?{re.escape(title)}"?\s*$', content, re.MULTILINE), \
+        f"Ticket does not have title '{title}' in frontmatter\nContent: {content}"
 
 
 @then(r'the tickets directory should exist')
@@ -425,7 +508,7 @@ def step_tickets_dir_exists_in_subdir(context):
 def step_created_ticket_contains(context, text):
     """Assert the most recently created ticket contains text."""
     ticket_id = context.last_created_id
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
     assert text in content, f"Ticket does not contain '{text}'\nContent: {content}"
 
@@ -434,21 +517,24 @@ def step_created_ticket_contains(context, text):
 def step_created_ticket_has_field(context, field, value):
     """Assert the most recently created ticket has a field with value."""
     ticket_id = context.last_created_id
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     pattern = rf'^{re.escape(field)}:\s*(.+)$'
     match = re.search(pattern, content, re.MULTILINE)
     assert match, f"Field '{field}' not found in ticket\nContent: {content}"
     actual = match.group(1).strip()
-    assert actual == value, f"Field '{field}' has value '{actual}', expected '{value}'"
+    # Strip surrounding quotes for comparison (title is stored as "value")
+    actual_unquoted = actual.strip('"')
+    assert actual == value or actual_unquoted == value, \
+        f"Field '{field}' has value '{actual}', expected '{value}'"
 
 
 @then(r'the created ticket should have a valid created timestamp')
 def step_created_ticket_has_timestamp(context):
     """Assert the created ticket has a valid timestamp."""
     ticket_id = context.last_created_id
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     pattern = r'^created:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z'
@@ -459,7 +545,7 @@ def step_created_ticket_has_timestamp(context):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should have field "(?P<field>[^"]+)" with value "(?P<value>[^"]+)"')
 def step_ticket_has_field_value(context, ticket_id, field, value):
     """Assert ticket has a field with specific value."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     pattern = rf'^{re.escape(field)}:\s*(.+)$'
@@ -472,7 +558,7 @@ def step_ticket_has_field_value(context, ticket_id, field, value):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should have "(?P<dep_id>[^"]+)" in deps')
 def step_ticket_has_dep(context, ticket_id, dep_id):
     """Assert ticket has a dependency."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     deps_match = re.search(r'^deps:\s*\[([^\]]*)\]', content, re.MULTILINE)
@@ -484,7 +570,7 @@ def step_ticket_has_dep(context, ticket_id, dep_id):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should not have "(?P<dep_id>[^"]+)" in deps')
 def step_ticket_not_has_dep(context, ticket_id, dep_id):
     """Assert ticket does not have a dependency."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     deps_match = re.search(r'^deps:\s*\[([^\]]*)\]', content, re.MULTILINE)
@@ -496,7 +582,7 @@ def step_ticket_not_has_dep(context, ticket_id, dep_id):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should have "(?P<link_id>[^"]+)" in links')
 def step_ticket_has_link(context, ticket_id, link_id):
     """Assert ticket has a link."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     links_match = re.search(r'^links:\s*\[([^\]]*)\]', content, re.MULTILINE)
@@ -508,7 +594,7 @@ def step_ticket_has_link(context, ticket_id, link_id):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should not have "(?P<link_id>[^"]+)" in links')
 def step_ticket_not_has_link(context, ticket_id, link_id):
     """Assert ticket does not have a link."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     links_match = re.search(r'^links:\s*\[([^\]]*)\]', content, re.MULTILINE)
@@ -520,7 +606,7 @@ def step_ticket_not_has_link(context, ticket_id, link_id):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should contain "(?P<text>[^"]+)"')
 def step_ticket_contains(context, ticket_id, text):
     """Assert ticket file contains text."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
     assert text in content, f"Ticket does not contain '{text}'\nContent: {content}"
 
@@ -528,7 +614,7 @@ def step_ticket_contains(context, ticket_id, text):
 @then(r'ticket "(?P<ticket_id>[^"]+)" should contain a timestamp in notes')
 def step_ticket_has_timestamp_in_notes(context, ticket_id):
     """Assert ticket has a timestamp in notes section."""
-    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
 
     pattern = r'\*\*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\*\*'
@@ -618,6 +704,27 @@ def step_dep_tree_order(context, first_id, second_id):
         f"Expected '{first_id}' (line {first_line + 1}) before '{second_id}' (line {second_line + 1})\nOutput:\n{output}"
 
 
+@then(r'every JSONL line should have field "(?P<field>[^"]+)"')
+def step_every_jsonl_line_has_field(context, field):
+    """Assert every JSONL line has a specific field."""
+    lines = context.stdout.strip().split('\n')
+    assert lines and lines[0].strip(), "No JSONL output"
+
+    for line in lines:
+        if line.strip():
+            data = json.loads(line)
+            assert field in data, f"Field '{field}' not found in JSONL line\nData: {data}"
+
+
+@then(r'a file named "(?P<filename>[^"]+)" should exist in tickets directory')
+def step_file_named_exists_in_tickets(context, filename):
+    """Assert a specific filename exists in .tickets/ directory."""
+    tickets_dir = Path(context.test_dir) / '.tickets'
+    file_path = tickets_dir / filename
+    assert file_path.exists(), \
+        f"File {filename} does not exist in .tickets/\nFiles present: {[f.name for f in tickets_dir.glob('*.md')]}"
+
+
 # ============================================================================
 # Plugin Steps
 # ============================================================================
@@ -661,8 +768,19 @@ def run_with_plugin_path(context, command):
     context.returncode = result.returncode
     context.last_command = command
 
+    # If this was a create command, track the created ticket ID from JSON output
     if 'ticket create' in command and result.returncode == 0:
-        context.last_created_id = result.stdout.strip()
+        created_id = extract_created_id(result.stdout)
+        if created_id:
+            context.last_created_id = created_id
+            try:
+                data = json.loads(result.stdout.strip())
+                if 'full_path' in data:
+                    if not hasattr(context, 'tickets'):
+                        context.tickets = {}
+                    context.tickets[created_id] = Path(data['full_path'])
+            except (json.JSONDecodeError, KeyError):
+                pass
 
 
 @given(r'a plugin "(?P<name>[^"]+)" that outputs "(?P<output>[^"]+)"')

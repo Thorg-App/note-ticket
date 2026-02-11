@@ -11,7 +11,8 @@ Feature: Ticket Show
     When I run "ticket show show-001"
     Then the command should succeed
     And the output should contain "id: show-001"
-    And the output should contain "# Test ticket"
+    And the output should contain "title:"
+    And the output should contain "Test ticket"
 
   Scenario: Show displays all frontmatter fields
     Given a ticket exists with ID "show-001" and title "Full ticket"
@@ -73,7 +74,7 @@ Feature: Ticket Show
     When I run "ticket show show-002"
     Then the command should succeed
     And the output should contain "parent: show-001"
-    And the output should contain "# Parent ticket"
+    And the output should contain "Parent ticket"
 
   Scenario: Show non-existent ticket
     When I run "ticket show nonexistent"

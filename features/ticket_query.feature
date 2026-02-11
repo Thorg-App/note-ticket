@@ -47,26 +47,17 @@ Feature: Ticket Query
     Then the command should succeed
     And the JSONL deps field should be a JSON array
 
-  Scenario: Query with --include-full-path includes file path
+  Scenario: Query always includes full_path
     Given a ticket exists with ID "query-001" and title "Path ticket"
-    When I run "ticket query --include-full-path"
-    Then the command should succeed
-    And the output should be valid JSONL
-    And the JSONL output should have field "full_path"
-    And the output should contain "query-001.md"
-
-  Scenario: Query with --include-full-path and jq filter
-    Given a ticket exists with ID "query-001" and title "Open path ticket"
-    And a ticket exists with ID "query-002" and title "Closed path ticket"
-    And ticket "query-002" has status "closed"
-    When I run "ticket query --include-full-path '.status == \"open\"'"
-    Then the command should succeed
-    And the JSONL output should have field "full_path"
-    And the output should contain "query-001"
-    And the output should not contain "query-002"
-
-  Scenario: Query without --include-full-path excludes file path
-    Given a ticket exists with ID "query-001" and title "No path ticket"
     When I run "ticket query"
     Then the command should succeed
-    And the output should not contain "full_path"
+    And the output should be valid JSONL
+    And every JSONL line should have field "full_path"
+
+  Scenario: Query includes title field
+    Given a ticket exists with ID "query-001" and title "Title test ticket"
+    When I run "ticket query"
+    Then the command should succeed
+    And the output should be valid JSONL
+    And the JSONL output should have field "title"
+    And the output should contain "Title test ticket"

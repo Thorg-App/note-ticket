@@ -9,13 +9,13 @@ Feature: Ticket Creation
   Scenario: Create a basic ticket with title
     When I run "ticket create 'My first ticket'"
     Then the command should succeed
-    And the output should match a ticket ID pattern
+    And the output should be valid JSON with an id field
     And a ticket file should exist with title "My first ticket"
 
   Scenario: Create a ticket with default title
     When I run "ticket create"
     Then the command should succeed
-    And the output should match a ticket ID pattern
+    And the output should be valid JSON with an id field
     And a ticket file should exist with title "Untitled"
 
   Scenario: Create a ticket with description
@@ -96,3 +96,29 @@ Feature: Ticket Creation
     When I run "ticket create 'First ticket'"
     Then the command should succeed
     And the tickets directory should exist
+
+  Scenario: Title-based filename generation
+    When I run "ticket create 'My Test Ticket'"
+    Then the command should succeed
+    And a file named "my-test-ticket.md" should exist in tickets directory
+
+  Scenario: Duplicate title creates suffixed filename
+    When I run "ticket create 'Duplicate'"
+    And I run "ticket create 'Duplicate'"
+    Then the command should succeed
+    And a file named "duplicate.md" should exist in tickets directory
+    And a file named "duplicate-1.md" should exist in tickets directory
+
+  Scenario: Create outputs JSON with expected fields
+    When I run "ticket create 'JSON output test'"
+    Then the command should succeed
+    And the output should be valid JSONL
+    And the JSONL output should have field "id"
+    And the JSONL output should have field "title"
+    And the JSONL output should have field "status"
+    And the JSONL output should have field "full_path"
+
+  Scenario: Title is stored in frontmatter
+    When I run "ticket create 'Frontmatter Title'"
+    Then the command should succeed
+    And the created ticket should have field "title" with value "Frontmatter Title"

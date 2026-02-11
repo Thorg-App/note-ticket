@@ -33,7 +33,7 @@ Feature: Plugin System
     And a plugin "tk-create" that outputs "plugin create"
     When I run "ticket super create \"Test ticket\""
     Then the command should succeed
-    And the output should match a ticket ID pattern
+    And the output should be valid JSON with an id field
 
   Scenario: Plugin receives TICKETS_DIR environment variable
     Given a clean tickets directory
@@ -67,11 +67,11 @@ Feature: Plugin System
     And a plugin "tk-wrapper" that calls super create
     When I run "ticket wrapper \"Wrapped ticket\""
     Then the command should succeed
-    And the output should match a ticket ID pattern
+    And the output should be valid JSON with an id field
 
   Scenario: Built-in commands still work with plugins present
     Given a clean tickets directory
     And a plugin "tk-hello" that outputs "Hello!"
     When I run "ticket create \"Normal ticket\""
     Then the command should succeed
-    And the output should match a ticket ID pattern
+    And the output should be valid JSON with an id field

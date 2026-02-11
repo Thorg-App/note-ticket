@@ -31,7 +31,7 @@ Feature: Ticket Directory Resolution
     And I am in subdirectory "new-project"
     When I run "ticket create 'First ticket'"
     Then the command should succeed
-    And the output should match a ticket ID pattern
+    And the output should be valid JSON with an id field
     And tickets directory should exist in current subdirectory
 
   Scenario: Error when no tickets directory for read command
