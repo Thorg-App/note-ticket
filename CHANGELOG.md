@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Renamed `created` frontmatter field to `created_iso` for clarity
+
 ### Removed
 - Removed `migrate-beads` command
 

@@ -86,7 +86,7 @@ Feature: Ticket Creation
     Then the command should succeed
     And the created ticket should have field "links" with value "[]"
 
-  Scenario: Ticket has created timestamp
+  Scenario: Ticket has created_iso timestamp
     When I run "ticket create 'Timestamped'"
     Then the command should succeed
     And the created ticket should have a valid created timestamp
