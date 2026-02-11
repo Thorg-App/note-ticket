@@ -2,13 +2,11 @@
 
 ## [Unreleased]
 
-### Changed
-- Renamed `created` frontmatter field to `created_iso` for clarity
-
 ### Removed
 - Removed `migrate-beads` command
 
 ### Changed
+- Renamed `created` frontmatter field to `created_iso` for clarity
 - Ticket filenames are now derived from the title (e.g., `my-ticket-title.md`) instead of the ID
 - Ticket IDs are now 25-character random lowercase alphanumeric strings stored in frontmatter
 - Title is now stored in YAML frontmatter (`title: "..."`) instead of as a `# heading` in body
