@@ -1,47 +1,36 @@
-# Review Private Notes
+# Review Private Notes -- Final Iteration
 
-## Status: CONDITIONAL PASS
+## Status: PASS
 
-## Key Finding: Same Bug in 9 Other Locations
+## Verification Summary
 
-This is the most important finding. The fix is correct for `_file_to_jsonl()` but the same `in_front = !in_front` toggle pattern exists in 9 other awk blocks. Full list:
+All three items from the conditional pass have been properly addressed:
 
-- Line 153: `ticket_path()` -- only reads `id:`, low practical risk but still semantically wrong
-- Line 412: `cmd_dep_tree()` -- reads multiple fields
-- Line 596: `cmd_dep_cycle()` -- reads multiple fields
-- Line 771: `cmd_ls()` -- reads multiple fields
-- Line 817: `cmd_ready()` -- reads multiple fields
-- Line 912: `cmd_closed()` -- reads multiple fields
-- Line 954: `cmd_blocked()` -- reads multiple fields
-- Line 1238: `cmd_show()` first pass -- reads multiple fields
-- Line 1283: `cmd_show()` getline re-read -- only checks parent
+1. **9 remaining awk parsers fixed** -- Confirmed via `grep -n 'in_front = !in_front'` returning zero matches, and `grep -c 'front_count++; in_front = (front_count == 1)'` returning 9 (plus 1 `show_front_count` variant = 10 total).
 
-The practical risk depends on whether ticket body content ever contains `---` with subsequent `key: value` patterns that match field names like `status:`, `deps:`, `priority:`, etc. With AI agents writing ticket body content (which is the stated use case), this is plausible.
+2. **CHANGELOG entry added** -- Wording is appropriately scoped to "awk frontmatter parsers" (plural), not just `_file_to_jsonl()`.
 
-## DRY Observation
+3. **Positive assertions added** -- Both `query-001` and `HR ticket` are now asserted present.
 
-The frontmatter parsing awk pattern is duplicated ~10 times. Each has:
-```awk
-BEGIN { FS=": "; in_front=0 }
-FNR==1 { ...; in_front=0; ... }
-/^---$/ { in_front = !in_front; next }
-in_front && /^field:/ { ... }
-```
+## cmd_show() show_front_count Detail
 
-A proper fix would extract this into a shared mechanism, but that's a larger refactor.
+The `cmd_show()` function has two awk frontmatter parsing locations within the same awk program:
+- Line 1238: Multi-file first pass (uses `front_count`)
+- Line 1283: Single-file getline re-read loop (uses `show_front_count`)
 
-## CHANGELOG Missing
+Using `show_front_count` for the second location avoids collision with the `front_count` variable used in the first pass. This is correct because both blocks are in the same awk invocation, so they share the same variable namespace.
 
-The `[Unreleased]` section has `### Removed` and `### Changed` and `### Added` but no `### Fixed`. Need to add one.
+## DRY Observation (Still Applicable, Out of Scope)
 
-## Test Quality
+The frontmatter parsing pattern is still duplicated 10 times. A future refactor to extract a shared mechanism remains a good idea but is correctly out of scope for this bug fix PR.
 
-The test is good. The step definition creates a realistic scenario. One minor suggestion: also assert the legitimate fields ARE present (positive assertion alongside the negative ones).
+## Grep Tool Limitation Noted
 
-## `yaml_field` is safe
+The Grep tool (ripgrep) did not find matches for `in_front` or `front_count` in the `ticket` file. This appears to be because the patterns are inside single-quoted awk heredoc strings embedded in bash, which ripgrep may not index. Had to fall back to `bash grep` for verification. This is a tooling quirk to be aware of.
 
-Uses `sed -n '/^---$/,/^---$/p'` which correctly limits to the first range. The sed range syntax stops after the second delimiter and does NOT re-enter.
+## No Security or Correctness Concerns
 
-## `cmd_show` line 1283 context
-
-This is in a `getline` loop for re-reading the target file, not the multi-file awk pass. It uses the toggle for displaying frontmatter content with enhancements (parent title). The risk is lower since it only checks `parent:` pattern, but it's still semantically wrong.
+- No existing tests removed
+- No anchor points affected
+- No behavioral changes beyond the bug fix
+- The counter-based approach is strictly more correct than the toggle
