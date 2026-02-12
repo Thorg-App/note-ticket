@@ -61,3 +61,12 @@ Feature: Ticket Query
     And the output should be valid JSONL
     And the JSONL output should have field "title"
     And the output should contain "Title test ticket"
+
+  Scenario: Query ignores horizontal rules and body content that looks like frontmatter
+    Given a ticket exists with ID "query-001" and title "HR ticket"
+    And ticket "query-001" has body content with a horizontal rule and fake frontmatter
+    When I run "ticket query"
+    Then the command should succeed
+    And the output should be valid JSONL
+    And the output should not contain "fake_field"
+    And the output should not contain "leaked_value"

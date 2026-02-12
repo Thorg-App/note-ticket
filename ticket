@@ -202,10 +202,10 @@ _file_to_jsonl() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) emit()
-        field_count=0; in_front=0
+        field_count=0; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^[a-zA-Z]/ {
         key = $1
         val = substr($0, length($1) + 3)
