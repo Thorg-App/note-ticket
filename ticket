@@ -1534,6 +1534,7 @@ env vars; use '\$TK_SCRIPT super <cmd>' to call built-ins.
 
 Plugin descriptions: comment '# tk-plugin: text' or --tk-describe flag
 
+Searches parent directories for .tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
 Tickets stored as markdown files in .tickets/ (filenames derived from title)
 IDs are stored in frontmatter; supports partial ID matching
 EOF
