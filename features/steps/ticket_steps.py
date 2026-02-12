@@ -249,6 +249,15 @@ def step_ticket_has_notes(context, ticket_id):
         ticket_path.write_text(content)
 
 
+@given(r'ticket "(?P<ticket_id>[^"]+)" has body content with a horizontal rule and fake frontmatter')
+def step_ticket_has_hr_and_fake_frontmatter(context, ticket_id):
+    """Append body content containing a --- horizontal rule and fake key: value lines."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    content += '\nSome notes above the rule.\n\n---\n\nfake_field: leaked_value\n'
+    ticket_path.write_text(content)
+
+
 @given(r'I am in subdirectory "(?P<subdir>[^"]+)"')
 def step_in_subdirectory(context, subdir):
     """Change to a subdirectory (creating it if needed)."""

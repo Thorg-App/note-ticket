@@ -148,9 +148,9 @@ ticket_path() {
             if (id == search) { exact_count++; exact_file = prev_file }
             else if (index(id, search) > 0) { partial_count++; partial_file = prev_file }
         }
-        id = ""; in_front = 0; prev_file = FILENAME
+        id = ""; in_front = 0; front_count = 0; prev_file = FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = substr($0, 5); gsub(/^ +| +$/, "", id) }
     END {
         if (prev_file && id != "") {
@@ -202,10 +202,10 @@ _file_to_jsonl() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) emit()
-        field_count=0; in_front=0
+        field_count=0; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^[a-zA-Z]/ {
         key = $1
         val = substr($0, length($1) + 3)
@@ -406,10 +406,10 @@ cmd_dep_tree() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
-        id=""; status=""; title=""; deps=""; in_front=0
+        id=""; status=""; title=""; deps=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^deps:/ {
@@ -590,10 +590,10 @@ cmd_dep_cycle() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
-        id=""; status=""; title=""; deps=""; in_front=0
+        id=""; status=""; title=""; deps=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^deps:/ {
@@ -765,10 +765,10 @@ cmd_ls() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) emit()
-        id=""; status=""; title=""; deps=""; assignee=""; tags=""; in_front=0
+        id=""; status=""; title=""; deps=""; assignee=""; tags=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^assignee:/ { assignee = $2 }
@@ -811,10 +811,10 @@ cmd_ready() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
-        id=""; status=""; title=""; deps=""; priority=""; assignee=""; tags=""; in_front=0
+        id=""; status=""; title=""; deps=""; priority=""; assignee=""; tags=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^priority:/ { priority = $2 }
@@ -906,10 +906,10 @@ cmd_closed() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) emit()
-        id=""; status=""; title=""; assignee=""; tags=""; in_front=0
+        id=""; status=""; title=""; assignee=""; tags=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^assignee:/ { assignee = $2 }
@@ -948,10 +948,10 @@ cmd_blocked() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
-        id=""; status=""; title=""; deps=""; priority=""; assignee=""; tags=""; in_front=0
+        id=""; status=""; title=""; deps=""; priority=""; assignee=""; tags=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^priority:/ { priority = $2 }
@@ -1232,10 +1232,10 @@ cmd_show() {
     # First pass: collect all ticket metadata
     FNR==1 {
         if (prev_file) store()
-        id=""; status=""; title=""; deps=""; links=""; parent=""; in_front=0
+        id=""; status=""; title=""; deps=""; links=""; parent=""; in_front=0; front_count=0
         prev_file=FILENAME
     }
-    /^---$/ { in_front = !in_front; next }
+    /^---$/ { front_count++; in_front = (front_count == 1); next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^deps:/ { deps = $2; gsub(/[\[\] ]/, "", deps) }
@@ -1277,10 +1277,10 @@ cmd_show() {
         }
 
         # Now output the target file with enhancements
-        in_front = 0
+        in_front = 0; show_front_count = 0
         while ((getline line < target_file) > 0) {
             if (line == "---") {
-                in_front = !in_front
+                show_front_count++; in_front = (show_front_count == 1)
                 print line
             } else if (in_front && line ~ /^parent:/) {
                 # Add parent title as comment

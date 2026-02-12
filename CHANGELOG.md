@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
+
 ### Removed
 - Removed `migrate-beads` command
 
