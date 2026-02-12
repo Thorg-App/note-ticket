@@ -68,5 +68,7 @@ Feature: Ticket Query
     When I run "ticket query"
     Then the command should succeed
     And the output should be valid JSONL
+    And the output should contain "query-001"
+    And the output should contain "HR ticket"
     And the output should not contain "fake_field"
     And the output should not contain "leaked_value"
