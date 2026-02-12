@@ -79,7 +79,7 @@ Commands:
   query [jq-filter]        Output tickets as JSONL (includes full_path)
   super <cmd> [args]       Bypass plugins, run built-in command directly
 
-Searches parent directories for .tickets/ (override with TICKETS_DIR env var)
+Searches parent directories for .tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
 Tickets stored as markdown files in .tickets/ (filenames derived from title)
 IDs are stored in frontmatter; supports partial ID matching
 ```

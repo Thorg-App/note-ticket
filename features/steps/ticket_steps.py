@@ -258,6 +258,38 @@ def step_ticket_has_hr_and_fake_frontmatter(context, ticket_id):
     ticket_path.write_text(content)
 
 
+@given(r'a \.git directory exists in the test root')
+def step_git_dir_in_test_root(context):
+    """Create a .git directory in the test root (simulates regular repo)."""
+    git_dir = Path(context.test_dir) / '.git'
+    git_dir.mkdir(parents=True, exist_ok=True)
+
+
+@given(r'a \.git file exists in the test root')
+def step_git_file_in_test_root(context):
+    """Create a .git file in the test root (simulates submodule)."""
+    git_file = Path(context.test_dir) / '.git'
+    git_file.write_text('gitdir: ../../../.git/modules/my-submodule\n')
+
+
+@given(r'a \.git directory exists in subdirectory "(?P<subdir>[^"]+)"')
+def step_git_dir_in_subdir(context, subdir):
+    """Create a .git directory in the specified subdirectory."""
+    subdir_path = Path(context.test_dir) / subdir
+    subdir_path.mkdir(parents=True, exist_ok=True)
+    git_dir = subdir_path / '.git'
+    git_dir.mkdir(parents=True, exist_ok=True)
+
+
+@given(r'a \.git file exists in subdirectory "(?P<subdir>[^"]+)"')
+def step_git_file_in_subdir(context, subdir):
+    """Create a .git file in the specified subdirectory (simulates submodule)."""
+    subdir_path = Path(context.test_dir) / subdir
+    subdir_path.mkdir(parents=True, exist_ok=True)
+    git_file = subdir_path / '.git'
+    git_file.write_text('gitdir: ../../../.git/modules/my-submodule\n')
+
+
 @given(r'I am in subdirectory "(?P<subdir>[^"]+)"')
 def step_in_subdirectory(context, subdir):
     """Change to a subdirectory (creating it if needed)."""
@@ -516,6 +548,21 @@ def step_tickets_dir_exists_in_subdir(context):
     cwd = getattr(context, 'working_dir', context.test_dir)
     tickets_dir = Path(cwd) / '.tickets'
     assert tickets_dir.exists(), f".tickets directory does not exist in {cwd}"
+
+
+@then(r'tickets directory should exist in test root')
+def step_tickets_dir_exists_in_test_root(context):
+    """Assert .tickets directory exists in the test root directory."""
+    tickets_dir = Path(context.test_dir) / '.tickets'
+    assert tickets_dir.exists(), f".tickets directory does not exist in test root {context.test_dir}"
+
+
+@then(r'tickets directory should exist in subdirectory "(?P<subdir>[^"]+)"')
+def step_tickets_dir_exists_in_named_subdir(context, subdir):
+    """Assert .tickets directory exists in the specified subdirectory."""
+    subdir_path = Path(context.test_dir) / subdir
+    tickets_dir = subdir_path / '.tickets'
+    assert tickets_dir.exists(), f".tickets directory does not exist in {subdir_path}"
 
 
 @then(r'the created ticket should contain "(?P<text>[^"]+)"')

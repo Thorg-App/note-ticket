@@ -76,3 +76,56 @@ Feature: Ticket Directory Resolution
     When I run "ticket help"
     Then the command should succeed
     And the output should contain "minimal ticket system"
+
+  # .git boundary scenarios
+
+  Scenario: Stop at .git directory (regular repo root)
+    Given the tickets directory does not exist
+    And a .git directory exists in the test root
+    And I am in subdirectory "src/components"
+    When I run "ticket create 'Repo root ticket'"
+    Then the command should succeed
+    And the output should be valid JSON with an id field
+    And tickets directory should exist in test root
+
+  Scenario: Stop at .git file (submodule root)
+    Given the tickets directory does not exist
+    And a .git file exists in the test root
+    And I am in subdirectory "lib/utils"
+    When I run "ticket create 'Submodule ticket'"
+    Then the command should succeed
+    And the output should be valid JSON with an id field
+    And tickets directory should exist in test root
+
+  Scenario: Existing .tickets takes priority over .git in same directory
+    Given a .git directory exists in the test root
+    And a ticket exists with ID "existing-001" and title "Existing ticket"
+    And I am in subdirectory "src"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "existing-001"
+
+  Scenario: Read command fails gracefully at .git boundary with no tickets
+    Given the tickets directory does not exist
+    And a .git directory exists in the test root
+    And I am in subdirectory "src"
+    When I run "ticket ls"
+    Then the command should fail
+    And the output should contain "does not exist"
+
+  Scenario: Do not walk past .git boundary into parent
+    Given a ticket exists with ID "outer-001" and title "Outer ticket"
+    And a .git directory exists in subdirectory "inner-repo"
+    And I am in subdirectory "inner-repo/deep/path"
+    When I run "ticket ls"
+    Then the command should fail
+    And the output should contain "does not exist"
+
+  Scenario: Create in submodule does not use parent repo tickets
+    Given a ticket exists with ID "parent-001" and title "Parent ticket"
+    And a .git file exists in subdirectory "my-submodule"
+    And I am in subdirectory "my-submodule"
+    When I run "ticket create 'Submodule ticket'"
+    Then the command should succeed
+    And the output should be valid JSON with an id field
+    And tickets directory should exist in subdirectory "my-submodule"
