@@ -9,10 +9,15 @@ find_tickets_dir() {
     # Explicit env var takes priority
     [[ -n "${TICKETS_DIR:-}" ]] && { echo "$TICKETS_DIR"; return 0; }
 
-    # Walk parents looking for .tickets
+    # Walk parents looking for .tickets or .git boundary
     local dir="$PWD"
     while [[ "$dir" != "/" ]]; do
         if [[ -d "$dir/.tickets" ]]; then
+            echo "$dir/.tickets"
+            return 0
+        fi
+        # .git (file for submodules, directory for regular repos) = repo root boundary
+        if [[ -e "$dir/.git" ]]; then
             echo "$dir/.tickets"
             return 0
         fi

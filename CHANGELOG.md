@@ -9,6 +9,7 @@
 - Removed `migrate-beads` command
 
 ### Changed
+- `find_tickets_dir` stops at `.git` boundaries (file or directory), anchoring tickets to the repository root instead of walking into parent repositories
 - Renamed `created` frontmatter field to `created_iso` for clarity
 - Ticket filenames are now derived from the title (e.g., `my-ticket-title.md`) instead of the ID
 - Ticket IDs are now 25-character random lowercase alphanumeric strings stored in frontmatter
