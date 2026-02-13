@@ -1456,42 +1456,6 @@ cmd_query() {
     fi
 }
 
-
-# List installed plugins with descriptions
-# Scripts: # tk-plugin: description (comment in first 10 lines)
-# Binaries: --tk-describe flag outputs description
-_list_plugins() {
-    local seen="" plugin cmd desc path out
-
-    for prefix in tk ticket; do
-        while IFS= read -r plugin; do
-            [[ -z "$plugin" ]] && continue
-            cmd="${plugin#${prefix}-}"
-
-            # Skip if already seen (tk- takes precedence over ticket-)
-            case " $seen " in *" $cmd "*) continue ;; esac
-            seen="$seen $cmd"
-
-            path=$(command -v "$plugin" 2>/dev/null) || continue
-            [[ -f "$path" ]] || continue
-
-            desc=""
-            # Try comment first (fast, no execution)
-            desc=$(head -10 "$path" 2>/dev/null | grep -m1 '^# tk-plugin:' | sed 's/^# tk-plugin: *//')
-
-            # Fall back to --tk-describe for binaries (requires timeout command)
-            if [[ -z "$desc" ]] && command -v timeout &>/dev/null; then
-                if out=$(timeout 1 "$path" --tk-describe 2>/dev/null); then
-                    out=$(printf '%s' "$out" | head -1)
-                    [[ "$out" == "tk-plugin:"* ]] && desc="${out#tk-plugin: }"
-                fi
-            fi
-
-            printf "  %-22s %s\n" "$cmd" "${desc:-(no description)}"
-        done < <(compgen -c "${prefix}-" 2>/dev/null | sort -u)
-    done
-}
-
 cmd_help() {
     local cmd
     cmd=$(basename "$0")
@@ -1529,26 +1493,6 @@ Commands:
   edit <id>                Open ticket in \$EDITOR
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
-  super <cmd> [args]       Bypass plugins, run built-in command directly
-EOF
-
-    # List installed plugins
-    local plugins
-    plugins=$(_list_plugins 2>/dev/null)
-    if [[ -n "$plugins" ]]; then
-        cat << EOF
-
-Plugins (tk-<cmd> or ticket-<cmd> in PATH):
-$plugins
-EOF
-    fi
-
-    cat << EOF
-
-Use 'super' to bypass plugins. Plugins receive TICKETS_DIR and TK_SCRIPT
-env vars; use '\$TK_SCRIPT super <cmd>' to call built-ins.
-
-Plugin descriptions: comment '# tk-plugin: text' or --tk-describe flag
 
 Searches parent directories for .tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
 Tickets stored as markdown files in .tickets/ (filenames derived from title)
@@ -1557,28 +1501,6 @@ EOF
 }
 
 # Main dispatch
-
-# Handle 'super' to bypass plugins
-_tk_super=0
-if [[ "${1:-}" == "super" ]]; then
-    _tk_super=1
-    shift
-fi
-
-# Check for plugin commands first (unless super mode)
-# Plugins are responsible for their own TICKETS_DIR handling
-if [[ $_tk_super -eq 0 && -n "${1:-}" && "${1:-}" != "help" && "${1:-}" != "--help" && "${1:-}" != "-h" ]]; then
-    for _prefix in tk ticket; do
-        _plugin="${_prefix}-$1"
-        if command -v "$_plugin" &>/dev/null; then
-            # Export context for plugins
-            export TICKETS_DIR="${TICKETS_DIR:-$(find_tickets_dir 2>/dev/null || echo "")}"
-            export TK_SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-            shift
-            exec "$_plugin" "$@"
-        fi
-    done
-fi
 
 # Initialize tickets dir for built-in commands (skip for help)
 case "${1:-help}" in
