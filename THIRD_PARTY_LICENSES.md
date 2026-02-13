@@ -1,3 +1,13 @@
+# Third Party Licenses
+
+## wedow/ticket
+**Source:** https://github.com/wedow/ticket
+**License:** MIT  
+
+Portions of note-ticket are based on or derived from wedow/ticket.
+
+---
+
 MIT License
 
 Copyright (c) 2025

@@ -133,4 +133,6 @@ make test
 
 ## License
 
-MIT
+[Thorg Core License, Version 1.0](LICENSE.md) (ThorgCL-1.0)
+
+Portions derived from [wedow/ticket](https://github.com/wedow/ticket) under MIT — see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
