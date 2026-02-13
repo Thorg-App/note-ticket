@@ -1470,6 +1470,8 @@ Commands:
                            MUST be self contained, if referencing files make sure they are referenced
                            with full relative path from git repo. And NOT just the file names.
                            This should give GOOD context for new agent picking this up.
+                           For newlines use bash \$'...\\n...' quoting, e.g.:
+                             -d \$'First line.\\n\\nSecond paragraph.\\n- bullet'
     --design               Design notes
     --acceptance           Acceptance criteria
     -t, --type             Type (bug|feature|task|epic|chore) [default: task]

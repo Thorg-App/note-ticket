@@ -50,7 +50,9 @@ Usage: tk <command> [args]
 
 Commands:
   create [title] [options] Create ticket, prints JSON with id and full_path
-    -d, --description      Description text
+    -d, --description      Description text. Goes into markdown body of the ticket.
+                           For newlines use bash $'...\n...' quoting, e.g.:
+                             -d $'First line.\n\nSecond paragraph.\n- bullet'
     --design               Design notes
     --acceptance           Acceptance criteria
     -t, --type             Type (bug|feature|task|epic|chore) [default: task]
