@@ -81,7 +81,7 @@ BDD tests using [Behave](https://behave.readthedocs.io/). Run with `make test` (
 - Step definitions: `features/steps/ticket_steps.py`
 - CI runs tests on push to master and all PRs
 
-When adding new commands or flags, add corresponding scenarios to the appropriate feature file.
+Every new feature or behavior change MUST include BDD scenarios in the appropriate feature file.
 
 ## Changelog
 
