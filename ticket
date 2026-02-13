@@ -200,6 +200,15 @@ ${field}: ${value}
     fi
 }
 
+# Remove YAML field from frontmatter (idempotent - no-op if field absent)
+remove_yaml_field() {
+    local file="$1"
+    local field="$2"
+    if _grep -q "^${field}:" "$file"; then
+        _sed_i "$file" "/^${field}:/d"
+    fi
+}
+
 # Generate JSONL from one or more ticket files
 # Usage: _file_to_jsonl file1.md [file2.md ...]
 _file_to_jsonl() {
@@ -364,6 +373,13 @@ cmd_status() {
     file=$(ticket_path "$id") || return 1
 
     update_yaml_field "$file" "status" "$status"
+
+    if [[ "$status" == "closed" ]]; then
+        update_yaml_field "$file" "closed_iso" "$(_iso_date)"
+    else
+        remove_yaml_field "$file" "closed_iso"
+    fi
+
     echo "Updated $(id_from_file "$file") -> $status"
 }
 

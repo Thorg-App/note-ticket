@@ -60,3 +60,48 @@ Feature: Ticket Status Management
     When I run "ticket status 0001 in_progress"
     Then the command should succeed
     And ticket "test-0001" should have field "status" with value "in_progress"
+
+  Scenario: Closing a ticket sets closed_iso timestamp
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have field "status" with value "closed"
+    And ticket "test-0001" should have a valid "closed_iso" timestamp
+
+  Scenario: Reopening a closed ticket removes closed_iso
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "closed_iso" timestamp
+    When I run "ticket reopen test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have field "status" with value "open"
+    And ticket "test-0001" should not have field "closed_iso"
+
+  Scenario: Setting status to in_progress removes closed_iso
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "closed_iso" timestamp
+    When I run "ticket status test-0001 in_progress"
+    Then the command should succeed
+    And ticket "test-0001" should have field "status" with value "in_progress"
+    And ticket "test-0001" should not have field "closed_iso"
+
+  Scenario: Ticket that was never closed has no closed_iso
+    When I run "ticket start test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should not have field "closed_iso"
+
+  Scenario: Closing via status command sets closed_iso
+    When I run "ticket status test-0001 closed"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "closed_iso" timestamp
+
+  Scenario: Close-reopen-close cycle updates closed_iso
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "closed_iso" timestamp
+    When I run "ticket reopen test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should not have field "closed_iso"
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "closed_iso" timestamp

@@ -777,6 +777,26 @@ def step_every_jsonl_line_has_field(context, field):
             assert field in data, f"Field '{field}' not found in JSONL line\nData: {data}"
 
 
+@then(r'ticket "(?P<ticket_id>[^"]+)" should not have field "(?P<field>[^"]+)"')
+def step_ticket_should_not_have_field(context, ticket_id, field):
+    """Assert ticket does not have a specific field in frontmatter."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    pattern = rf'^{re.escape(field)}:'
+    assert not re.search(pattern, content, re.MULTILINE), \
+        f"Field '{field}' should not exist in ticket but was found\nContent: {content}"
+
+
+@then(r'ticket "(?P<ticket_id>[^"]+)" should have a valid "(?P<field>[^"]+)" timestamp')
+def step_ticket_has_valid_timestamp(context, ticket_id, field):
+    """Assert ticket has a valid ISO timestamp in the specified field."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    pattern = rf'^{re.escape(field)}:\s*\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}Z'
+    assert re.search(pattern, content, re.MULTILINE), \
+        f"No valid ISO timestamp found in field '{field}'\nContent: {content}"
+
+
 @then(r'a file named "(?P<filename>[^"]+)" should exist in tickets directory')
 def step_file_named_exists_in_tickets(context, filename):
     """Assert a specific filename exists in .tickets/ directory."""

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `closed_iso` field automatically set when ticket is closed, removed when reopened
+
 ### Fixed
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
 
