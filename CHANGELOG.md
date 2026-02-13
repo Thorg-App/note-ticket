@@ -10,6 +10,8 @@
 
 ### Removed
 - Removed `migrate-beads` command
+- Removed plugin system (`tk-<cmd>` / `ticket-<cmd>` dispatch, `super` command, plugin help listing)
+- Removed multi-package distribution (`ticket-extras`, individual plugin packages); only `ticket-core` remains
 
 ### Changed
 - `find_tickets_dir` stops at `.git` boundaries (file or directory), anchoring tickets to the repository root instead of walking into parent repositories
@@ -20,15 +22,6 @@
 - `create` command outputs JSONL (with id, title, full_path, and all fields) instead of just the ID
 - `query` command always includes `full_path` in output (removed `--include-full-path` flag)
 - ID resolution now searches frontmatter `id:` fields instead of matching filenames
-
-### Added
-- Plugin system: executables named `tk-<cmd>` or `ticket-<cmd>` in PATH are invoked automatically
-- `super` command to bypass plugins and run built-in commands directly
-- `TICKETS_DIR` and `TK_SCRIPT` environment variables exported for plugins
-- `help` command lists installed plugins with descriptions
-- Plugin metadata: `# tk-plugin:` comment for scripts, `--tk-describe` flag for binaries
-- Multi-package distribution: `ticket-core`, `ticket-extras`, and individual plugin packages
-- CI scripts for publishing to Homebrew tap and AUR
 
 ## [0.3.2] - 2026-02-03
 
