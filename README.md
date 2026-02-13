@@ -77,49 +77,11 @@ Commands:
   edit <id>                Open ticket in $EDITOR
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
-  super <cmd> [args]       Bypass plugins, run built-in command directly
 
 Searches parent directories for .tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
 Tickets stored as markdown files in .tickets/ (filenames derived from title)
 IDs are stored in frontmatter; supports partial ID matching
 ```
-
-## Plugins
-
-Executables named `tk-<cmd>` or `ticket-<cmd>` in your PATH are invoked automatically. This allows you to add custom commands or override built-in ones.
-
-```bash
-# Create a simple plugin
-cat > ~/.local/bin/tk-hello <<'EOF'
-#!/bin/bash
-# tk-plugin: Say hello
-echo "Hello from plugin!"
-EOF
-chmod +x ~/.local/bin/tk-hello
-
-# Now it's available
-tk hello        # runs tk-hello
-tk help         # lists it under "Plugins"
-```
-
-**Plugin descriptions** (shown in `tk help`):
-- Scripts: comment `# tk-plugin: description` in first 10 lines
-- Binaries: `--tk-describe` flag outputs `tk-plugin: description`
-
-**Plugin environment variables:**
-- `TICKETS_DIR` - path to the .tickets directory (may be empty)
-- `TK_SCRIPT` - absolute path to the tk script
-
-**Calling built-ins from plugins:**
-```bash
-#!/bin/bash
-# tk-plugin: Custom create with extras
-json=$("$TK_SCRIPT" super create "$@")
-echo "Created ticket: $json"
-echo "Doing extra stuff..."
-```
-
-Use `tk super <cmd>` to bypass plugins and run the built-in directly.
 
 ## Testing
 
