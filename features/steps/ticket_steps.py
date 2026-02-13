@@ -4,7 +4,6 @@ import json
 import os
 import re
 import subprocess
-import tempfile
 from pathlib import Path
 
 from behave import given, when, then, register_type, use_step_matcher
@@ -416,10 +415,7 @@ def step_run_command(context, command):
     # Use working_dir if set (from subdirectory step), otherwise test_dir
     cwd = getattr(context, 'working_dir', context.test_dir)
 
-    # Include plugin directory in PATH if plugins were created
     env = os.environ.copy()
-    if hasattr(context, 'plugin_dir'):
-        env['PATH'] = context.plugin_dir + ':' + env.get('PATH', '')
 
     result = subprocess.run(
         cmd,
@@ -804,125 +800,3 @@ def step_file_named_exists_in_tickets(context, filename):
     file_path = tickets_dir / filename
     assert file_path.exists(), \
         f"File {filename} does not exist in .tickets/\nFiles present: {[f.name for f in tickets_dir.glob('*.md')]}"
-
-
-# ============================================================================
-# Plugin Steps
-# ============================================================================
-
-def create_plugin(context, name, content):
-    """Helper to create a plugin script in a temporary bin directory."""
-    if not hasattr(context, 'plugin_dir'):
-        context.plugin_dir = tempfile.mkdtemp(prefix='ticket_plugins_')
-
-    plugin_path = Path(context.plugin_dir) / name
-    plugin_path.write_text(content)
-    plugin_path.chmod(0o755)
-    return plugin_path
-
-
-def run_with_plugin_path(context, command):
-    """Run a command with the plugin directory in PATH."""
-    command = command.replace('\\"', '"')
-    ticket_script = get_ticket_script(context)
-    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
-
-    cwd = getattr(context, 'working_dir', context.test_dir)
-
-    env = os.environ.copy()
-    if hasattr(context, 'plugin_dir'):
-        env['PATH'] = context.plugin_dir + ':' + env.get('PATH', '')
-
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        env=env
-    )
-
-    context.result = result
-    context.stdout = result.stdout.strip()
-    context.stderr = result.stderr.strip()
-    context.returncode = result.returncode
-    context.last_command = command
-
-    _track_created_ticket(context, command, result)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" that outputs "(?P<output>[^"]+)"')
-def step_plugin_outputs(context, name, output):
-    """Create a plugin that outputs a fixed string."""
-    content = f'''#!/usr/bin/env bash
-# tk-plugin: Test plugin
-echo "{output}"
-'''
-    create_plugin(context, name, content)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" that outputs its arguments')
-def step_plugin_echo_args(context, name):
-    """Create a plugin that echoes its arguments."""
-    content = '''#!/usr/bin/env bash
-# tk-plugin: Echo arguments
-echo "$@"
-'''
-    create_plugin(context, name, content)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" that outputs TICKETS_DIR')
-def step_plugin_outputs_tickets_dir(context, name):
-    """Create a plugin that outputs the TICKETS_DIR env var."""
-    content = '''#!/usr/bin/env bash
-# tk-plugin: Output TICKETS_DIR
-echo "$TICKETS_DIR"
-'''
-    create_plugin(context, name, content)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" that outputs TK_SCRIPT')
-def step_plugin_outputs_tk_script(context, name):
-    """Create a plugin that outputs the TK_SCRIPT env var."""
-    content = '''#!/usr/bin/env bash
-# tk-plugin: Output TK_SCRIPT
-echo "$TK_SCRIPT"
-'''
-    create_plugin(context, name, content)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" with description "(?P<desc>[^"]+)"')
-def step_plugin_with_description(context, name, desc):
-    """Create a plugin with a specific description."""
-    content = f'''#!/usr/bin/env bash
-# tk-plugin: {desc}
-echo "plugin executed"
-'''
-    create_plugin(context, name, content)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" that outputs "(?P<output>[^"]+)" without metadata')
-def step_plugin_no_metadata(context, name, output):
-    """Create a plugin without tk-plugin metadata comment."""
-    content = f'''#!/usr/bin/env bash
-echo "{output}"
-'''
-    create_plugin(context, name, content)
-
-
-@given(r'a plugin "(?P<name>[^"]+)" that calls super create')
-def step_plugin_calls_super(context, name):
-    """Create a plugin that calls the built-in create via super."""
-    content = '''#!/usr/bin/env bash
-# tk-plugin: Wrapper that calls super
-exec "$TK_SCRIPT" super create "$@"
-'''
-    create_plugin(context, name, content)
-
-
-# Override the run step for plugin scenarios to include plugin PATH
-@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with plugins')
-def step_run_with_plugins(context, command):
-    """Run a command with plugins in PATH."""
-    run_with_plugin_path(context, command)
