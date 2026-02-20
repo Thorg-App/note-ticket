@@ -14,6 +14,7 @@
 - Removed multi-package distribution (`ticket-extras`, individual plugin packages); only `ticket-core` remains
 
 ### Changed
+- **BREAKING**: Default tickets directory changed from `.tickets` to `_tickets` so tools like `fd` and `rg` do not ignore it by default. Use `TICKETS_DIR=.tickets` to keep the old behavior.
 - `find_tickets_dir` stops at `.git` boundaries (file or directory), anchoring tickets to the repository root instead of walking into parent repositories
 - Renamed `created` frontmatter field to `created_iso` for clarity
 - Ticket filenames are now derived from the title (e.g., `my-ticket-title.md`) instead of the ID

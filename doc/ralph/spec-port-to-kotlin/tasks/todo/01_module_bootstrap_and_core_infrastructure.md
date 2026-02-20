@@ -33,11 +33,11 @@ Create the Kotlin JVM module with build infrastructure and implement all foundat
   - `saveNewTicket(ticket, body)` — create file with frontmatter + body
   - `updateField(file, field, value)` — update single YAML field in-place
   - `removeField(file, field)` — remove YAML field
-- `TicketsDirectoryResolver`: find `.tickets/` directory
+- `TicketsDirectoryResolver`: find `_tickets/` directory
   - Walk parent directories from `$PWD`
   - Stop at `.git` boundary (file or directory — supports submodules)
   - Respect `TICKETS_DIR` env var override
-  - Auto-create `.tickets/` for write commands
+  - Auto-create `_tickets/` for write commands
 - Out/OutFactory wiring: `ConsoleOutToErrorStreamFactory` for CLI stderr logging
 - Custom `ValType`s for ticket domain: `TICKET_ID`, `TICKET_STATUS` (or reuse appropriate existing types)
 - Comprehensive unit tests using AsgardDescribeSpec with GIVEN/WHEN/THEN naming
@@ -99,9 +99,9 @@ Create the Kotlin JVM module with build infrastructure and implement all foundat
   ```
   1. If TICKETS_DIR env var set → use it
   2. Walk from PWD upward:
-     - If .tickets/ exists → return it
+     - If _tickets/ exists → return it
      - If .git exists (file or dir) → stop (repo boundary)
-  3. Check /.tickets at root
+  3. Check /_tickets at root
   4. Not found → error
   ```
 
@@ -127,7 +127,7 @@ Create the Kotlin JVM module with build infrastructure and implement all foundat
 - [ ] `TicketIdGenerator` produces 25-char lowercase alphanumeric IDs
 - [ ] `FileNameGenerator` matches bash `title_to_filename()` behavior exactly (including collisions)
 - [ ] `TicketRepository` resolves tickets by exact ID, partial ID, handles not-found and ambiguous cases
-- [ ] `TicketsDirectoryResolver` finds `.tickets/` via parent walk, respects `TICKETS_DIR`, stops at `.git`
+- [ ] `TicketsDirectoryResolver` finds `_tickets/` via parent walk, respects `TICKETS_DIR`, stops at `.git`
 - [ ] All unit tests pass using AsgardDescribeSpec
 - [ ] Out/OutFactory is wired and producing structured logs
 - [ ] Tests pass

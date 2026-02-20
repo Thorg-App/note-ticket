@@ -1,6 +1,6 @@
 Feature: Ticket Directory Resolution
   As a user
-  I want tk to find .tickets by walking parent directories
+  I want tk to find _tickets by walking parent directories
   So that I can run commands from any subdirectory of my project
 
   Background:
@@ -38,14 +38,14 @@ Feature: Ticket Directory Resolution
     Given the tickets directory does not exist
     When I run "ticket ls"
     Then the command should fail
-    And the output should contain "no .tickets directory found"
+    And the output should contain "no _tickets directory found"
 
   Scenario: Error when no tickets directory in any parent
     Given the tickets directory does not exist
     And I am in subdirectory "orphan/deep/path"
     When I run "ticket ready"
     Then the command should fail
-    And the output should contain "no .tickets directory found"
+    And the output should contain "no _tickets directory found"
 
   Scenario: TICKETS_DIR env var takes priority over parent walking
     Given a ticket exists with ID "parent-0001" and title "Parent ticket"
@@ -97,7 +97,7 @@ Feature: Ticket Directory Resolution
     And the output should be valid JSON with an id field
     And tickets directory should exist in test root
 
-  Scenario: Existing .tickets takes priority over .git in same directory
+  Scenario: Existing _tickets takes priority over .git in same directory
     Given a .git directory exists in the test root
     And a ticket exists with ID "existing-001" and title "Existing ticket"
     And I am in subdirectory "src"

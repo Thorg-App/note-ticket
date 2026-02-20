@@ -39,7 +39,7 @@ def title_to_slug(title):
 
 def create_ticket(context, ticket_id, title, priority=2, parent=None):
     """Helper to create a ticket file with title-based filename and frontmatter title."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
+    tickets_dir = Path(context.test_dir) / '_tickets'
     tickets_dir.mkdir(parents=True, exist_ok=True)
 
     slug = title_to_slug(title)
@@ -85,8 +85,8 @@ def find_ticket_file(context, ticket_id):
         if path.exists():
             return path
 
-    # Fallback: scan .tickets/ directory
-    tickets_dir = Path(context.test_dir) / '.tickets'
+    # Fallback: scan _tickets/ directory
+    tickets_dir = Path(context.test_dir) / '_tickets'
     if not tickets_dir.exists():
         raise FileNotFoundError(f"Tickets directory not found at {tickets_dir}")
 
@@ -135,8 +135,8 @@ def _track_created_ticket(context, command, result):
 
 @given(r'a clean tickets directory')
 def step_clean_tickets_directory(context):
-    """Ensure we start with a clean .tickets directory."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
+    """Ensure we start with a clean _tickets directory."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
     if tickets_dir.exists():
         import shutil
         shutil.rmtree(tickets_dir)
@@ -145,8 +145,8 @@ def step_clean_tickets_directory(context):
 
 @given(r'the tickets directory does not exist')
 def step_tickets_dir_not_exist(context):
-    """Ensure .tickets directory does not exist."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
+    """Ensure _tickets directory does not exist."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
     if tickets_dir.exists():
         import shutil
         shutil.rmtree(tickets_dir)
@@ -533,32 +533,32 @@ def step_ticket_file_exists_with_title(context, title):
 
 @then(r'the tickets directory should exist')
 def step_tickets_dir_exists(context):
-    """Assert .tickets directory exists."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
-    assert tickets_dir.exists(), f".tickets directory does not exist"
+    """Assert _tickets directory exists."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
+    assert tickets_dir.exists(), f"_tickets directory does not exist"
 
 
 @then(r'tickets directory should exist in current subdirectory')
 def step_tickets_dir_exists_in_subdir(context):
-    """Assert .tickets directory exists in the current working subdirectory."""
+    """Assert _tickets directory exists in the current working subdirectory."""
     cwd = getattr(context, 'working_dir', context.test_dir)
-    tickets_dir = Path(cwd) / '.tickets'
-    assert tickets_dir.exists(), f".tickets directory does not exist in {cwd}"
+    tickets_dir = Path(cwd) / '_tickets'
+    assert tickets_dir.exists(), f"_tickets directory does not exist in {cwd}"
 
 
 @then(r'tickets directory should exist in test root')
 def step_tickets_dir_exists_in_test_root(context):
-    """Assert .tickets directory exists in the test root directory."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
-    assert tickets_dir.exists(), f".tickets directory does not exist in test root {context.test_dir}"
+    """Assert _tickets directory exists in the test root directory."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
+    assert tickets_dir.exists(), f"_tickets directory does not exist in test root {context.test_dir}"
 
 
 @then(r'tickets directory should exist in subdirectory "(?P<subdir>[^"]+)"')
 def step_tickets_dir_exists_in_named_subdir(context, subdir):
-    """Assert .tickets directory exists in the specified subdirectory."""
+    """Assert _tickets directory exists in the specified subdirectory."""
     subdir_path = Path(context.test_dir) / subdir
-    tickets_dir = subdir_path / '.tickets'
-    assert tickets_dir.exists(), f".tickets directory does not exist in {subdir_path}"
+    tickets_dir = subdir_path / '_tickets'
+    assert tickets_dir.exists(), f"_tickets directory does not exist in {subdir_path}"
 
 
 @then(r'the created ticket should contain "(?P<text>[^"]+)"')
@@ -795,8 +795,8 @@ def step_ticket_has_valid_timestamp(context, ticket_id, field):
 
 @then(r'a file named "(?P<filename>[^"]+)" should exist in tickets directory')
 def step_file_named_exists_in_tickets(context, filename):
-    """Assert a specific filename exists in .tickets/ directory."""
-    tickets_dir = Path(context.test_dir) / '.tickets'
+    """Assert a specific filename exists in _tickets/ directory."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
     file_path = tickets_dir / filename
     assert file_path.exists(), \
-        f"File {filename} does not exist in .tickets/\nFiles present: {[f.name for f in tickets_dir.glob('*.md')]}"
+        f"File {filename} does not exist in _tickets/\nFiles present: {[f.name for f in tickets_dir.glob('*.md')]}"

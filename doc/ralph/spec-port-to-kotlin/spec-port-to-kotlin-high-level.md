@@ -15,7 +15,7 @@ The `ticket` CLI (~1500 lines of bash) has grown complex with platform-specific 
 - New features beyond what the bash script already does
 - Modifying existing BDD tests (except if obviously broken behavior is discovered)
 - Modifying `bash_ticket` (backup copy of original script)
-- Changing the `.tickets/` directory format or frontmatter schema
+- Changing the `_tickets/` directory format or frontmatter schema
 
 ## Solution Overview
 Create a new Kotlin JVM module at `source/libraries/kotlin-mp/kotlin-jvm/ticket` (package `com.asgard.ticket`) that implements all `ticket` commands. Build a fat JAR (ShadowJar). The existing `ticket` bash script becomes a thin wrapper that checks for Java, locates the JAR, and passes CLI arguments through. The bash wrapper retains jq piping for `query` backward compatibility.
@@ -24,7 +24,7 @@ Create a new Kotlin JVM module at `source/libraries/kotlin-mp/kotlin-jvm/ticket`
 All existing behaviors are PRESERVED. The 10 BDD feature files define the canonical behavior. Below are the key behavioral categories (not exhaustive—BDD tests are authoritative):
 
 - **Behavior: Create Ticket**
-  - GIVEN a .tickets/ directory exists (or will be auto-created)
+  - GIVEN a _tickets/ directory exists (or will be auto-created)
   - WHEN user runs `tk create "Title" [-d desc] [--design X] [--acceptance X] [-t type] [-p priority] [-a assignee] [--external-ref ref] [--parent id] [--tags t1,t2]`
   - THEN a markdown file is created with YAML frontmatter containing all fields
   - AND a JSON line is printed to stdout with `id` and `full_path`
@@ -106,7 +106,7 @@ All existing behaviors are PRESERVED. The 10 BDD feature files define the canoni
 | `TicketRepository` | File-based ticket storage | `com.asgard.ticket.repository` | findById(id), findByPartialId(partialId), listAll(), save(ticket, body), delete(id) |
 | `TicketIdGenerator` | 25-char random ID creation | `com.asgard.ticket.model` | generate(): String |
 | `FileNameGenerator` | Title-to-filename with collision handling | `com.asgard.ticket.repository` | generateFilename(title, existingFiles): String |
-| `TicketsDirectoryResolver` | Find .tickets/ dir (parent walk + .git boundary) | `com.asgard.ticket.repository` | resolve(startDir): Directory? |
+| `TicketsDirectoryResolver` | Find _tickets/ dir (parent walk + .git boundary) | `com.asgard.ticket.repository` | resolve(startDir): Directory? |
 | `CommandDispatcher` | CLI argument parsing and routing | `com.asgard.ticket.cli` | dispatch(args): Int (exit code) |
 
 ## Components / Architecture
@@ -125,7 +125,7 @@ Repository Layer (com.asgard.ticket.repository)
   └─ TicketRepository (find, list, save, update field)
   └─ TicketFrontMatter (parse/serialize YAML frontmatter)
   └─ FileNameGenerator (title → slug with collision handling)
-  └─ TicketsDirectoryResolver (find .tickets/ directory)
+  └─ TicketsDirectoryResolver (find _tickets/ directory)
 
 Infrastructure (from asgard ecosystem)
   └─ File/Directory (asgardCore) - file I/O
