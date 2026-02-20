@@ -59,7 +59,7 @@ Implement the command dispatcher (single main entry point) and the core CRUD/sta
 
 ### Create Command Details
 Study the bash `cmd_create()` carefully. Key behaviors:
-- `ensure_dir()` — creates `.tickets/` if needed
+- `ensure_dir()` — creates `_tickets/` if needed
 - Default assignee from `git config user.name` (or empty if not in git repo)
 - Title extraction from positional args after option parsing
 - Body construction: optional description, `## Design`, `## Acceptance Criteria` sections

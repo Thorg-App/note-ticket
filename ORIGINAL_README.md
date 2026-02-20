@@ -2,7 +2,7 @@
 
 The git-backed issue tracker for AI agents. Rooted in the Unix Philosophy, `tk` is inspired by Joe Armstrong's [Minimal Viable Program](https://joearms.github.io/published/2014-06-25-minimal-viable-program.html) with additional quality of life features for managing and querying against complex issue dependency graphs.
 
-Tickets are markdown files with YAML frontmatter in `.tickets/`. This allows AI agents to easily search them for relevant content without dumping ten thousand character JSONL lines into their context window.
+Tickets are markdown files with YAML frontmatter in `_tickets/`. This allows AI agents to easily search them for relevant content without dumping ten thousand character JSONL lines into their context window.
 
 Ticket filenames are derived from the title (e.g., `add-sse-connection-management.md`) while a random 25-character ID in the YAML frontmatter serves as the stable identifier for dependencies, links, and lookups.
 
@@ -80,8 +80,8 @@ Commands:
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
 
-Searches parent directories for .tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
-Tickets stored as markdown files in .tickets/ (filenames derived from title)
+Searches parent directories for _tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
+Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter; supports partial ID matching
 ```
 

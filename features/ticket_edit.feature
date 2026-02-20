@@ -11,7 +11,7 @@ Feature: Ticket Edit
     When I run "ticket edit edit-0001" in non-TTY mode
     Then the command should succeed
     And the output should contain "Edit ticket file:"
-    And the output should contain ".tickets/editable-ticket.md"
+    And the output should contain "_tickets/editable-ticket.md"
 
   Scenario: Edit non-existent ticket
     When I run "ticket edit nonexistent"

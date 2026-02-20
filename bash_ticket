@@ -4,36 +4,36 @@ set -euo pipefail
 # Almost original ticket. (some modifications)
 # --------------------------------------------------------------------------------
 # ticket - minimal ticket system with dependency tracking
-# Stores markdown files with YAML frontmatter in .tickets/
+# Stores markdown files with YAML frontmatter in _tickets/
 
-# Find .tickets directory by walking parent directories
+# Find _tickets directory by walking parent directories
 find_tickets_dir() {
     # Explicit env var takes priority
     [[ -n "${TICKETS_DIR:-}" ]] && { echo "$TICKETS_DIR"; return 0; }
 
-    # Walk parents looking for .tickets or .git boundary
+    # Walk parents looking for _tickets or .git boundary
     local dir="$PWD"
     while [[ "$dir" != "/" ]]; do
-        if [[ -d "$dir/.tickets" ]]; then
-            echo "$dir/.tickets"
+        if [[ -d "$dir/_tickets" ]]; then
+            echo "$dir/_tickets"
             return 0
         fi
         # .git (file for submodules, directory for regular repos) = repo root boundary
         if [[ -e "$dir/.git" ]]; then
-            echo "$dir/.tickets"
+            echo "$dir/_tickets"
             return 0
         fi
         dir=$(dirname "$dir")
     done
 
     # Check root too
-    [[ -d "/.tickets" ]] && { echo "/.tickets"; return 0; }
+    [[ -d "/_tickets" ]] && { echo "/_tickets"; return 0; }
 
     # Not found
     return 1
 }
 
-# Commands that can create .tickets if not found
+# Commands that can create _tickets if not found
 WRITE_COMMANDS="create"
 
 # Initialize TICKETS_DIR based on command type
@@ -53,11 +53,11 @@ init_tickets_dir() {
 
     # Not found - write commands can initialize in current directory
     if [[ $is_write_cmd -eq 1 ]]; then
-        TICKETS_DIR=".tickets"
+        TICKETS_DIR="_tickets"
         return 0
     fi
 
-    echo "Error: no .tickets directory found (searched parent directories)" >&2
+    echo "Error: no _tickets directory found (searched parent directories)" >&2
     echo "Run 'tk create' to initialize, or set TICKETS_DIR env var" >&2
     return 1
 }
@@ -1552,8 +1552,8 @@ env vars; use '\$TK_SCRIPT super <cmd>' to call built-ins.
 
 Plugin descriptions: comment '# tk-plugin: text' or --tk-describe flag
 
-Searches parent directories for .tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
-Tickets stored as markdown files in .tickets/ (filenames derived from title)
+Searches parent directories for _tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
+Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter; supports partial ID matching
 EOF
 }
