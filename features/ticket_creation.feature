@@ -91,6 +91,11 @@ Feature: Ticket Creation
     Then the command should succeed
     And the created ticket should have a valid created timestamp
 
+  Scenario: Ticket has status_updated_iso timestamp at creation
+    When I run "ticket create 'Status tracked'"
+    Then the command should succeed
+    And the created ticket should have a valid "status_updated_iso" timestamp
+
   Scenario: Tickets directory created on demand
     Given the tickets directory does not exist
     When I run "ticket create 'First ticket'"

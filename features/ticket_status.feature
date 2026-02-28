@@ -105,3 +105,16 @@ Feature: Ticket Status Management
     When I run "ticket close test-0001"
     Then the command should succeed
     And ticket "test-0001" should have a valid "closed_iso" timestamp
+
+  Scenario: Status change updates status_updated_iso
+    When I run "ticket status test-0001 in_progress"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "status_updated_iso" timestamp
+
+  Scenario: Reopening preserves status_updated_iso
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "status_updated_iso" timestamp
+    When I run "ticket reopen test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "status_updated_iso" timestamp

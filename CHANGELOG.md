@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `status_updated_iso` field: ISO8601 timestamp set at creation and updated on every status change
 - `closed_iso` field automatically set when ticket is closed, removed when reopened
 
 ### Fixed
