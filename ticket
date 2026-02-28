@@ -314,6 +314,7 @@ cmd_create() {
         echo "deps: []"
         echo "links: []"
         echo "created_iso: $now"
+        echo "status_updated_iso: $now"
         echo "type: $issue_type"
         echo "priority: $priority"
         [[ -n "$assignee" ]] && echo "assignee: $assignee"
@@ -373,6 +374,7 @@ cmd_status() {
     file=$(ticket_path "$id") || return 1
 
     update_yaml_field "$file" "status" "$status"
+    update_yaml_field "$file" "status_updated_iso" "$(_iso_date)"
 
     if [[ "$status" == "closed" ]]; then
         update_yaml_field "$file" "closed_iso" "$(_iso_date)"

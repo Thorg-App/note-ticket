@@ -60,6 +60,7 @@ status: open
 deps: []
 links: []
 created_iso: 2024-01-01T00:00:00Z
+status_updated_iso: 2024-01-01T00:00:00Z
 type: task
 priority: {priority}
 '''
@@ -314,6 +315,7 @@ status: open
 deps: []
 links: []
 created_iso: 2024-01-01T00:00:00Z
+status_updated_iso: 2024-01-01T00:00:00Z
 type: task
 priority: 2
 ---
@@ -597,6 +599,17 @@ def step_created_ticket_has_timestamp(context):
     pattern = r'^created_iso:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z'
     assert re.search(pattern, content, re.MULTILINE), \
         f"No valid created_iso timestamp found\nContent: {content}"
+
+
+@then(r'the created ticket should have a valid "(?P<field>[^"]+)" timestamp')
+def step_created_ticket_has_valid_field_timestamp(context, field):
+    """Assert the created ticket has a valid ISO timestamp in the specified field."""
+    ticket_id = context.last_created_id
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    pattern = rf'^{re.escape(field)}:\s*\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}Z'
+    assert re.search(pattern, content, re.MULTILINE), \
+        f"No valid ISO timestamp found in field '{field}'\nContent: {content}"
 
 
 @then(r'ticket "(?P<ticket_id>[^"]+)" should have field "(?P<field>[^"]+)" with value "(?P<value>[^"]+)"')
