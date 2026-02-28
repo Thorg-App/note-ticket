@@ -1,7 +1,7 @@
 ---
 id: 7f209dtd2styppry2w3uqlg8c
 title: "Add status updated iso timestamp"
-status: open
+status: in_progress
 deps: []
 links: []
 created_iso: 2026-02-28T01:53:54Z
