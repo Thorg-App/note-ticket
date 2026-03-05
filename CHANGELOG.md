@@ -5,6 +5,7 @@
 ### Added
 - `status_updated_iso` field: ISO8601 timestamp set at creation and updated on every status change
 - `closed_iso` field automatically set when ticket is closed, removed when reopened
+- Ticket IDs now use `nid_` prefix and `_E` suffix (e.g. `nid_7f209dtd2styppry2w3uqlg8c_E`). Existing tickets are not affected.
 
 ### Fixed
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
