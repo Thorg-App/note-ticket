@@ -9,7 +9,7 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 **Core script:** Single-file bash implementation (`ticket`, ~1000 lines). Uses awk for performant bulk operations on large ticket sets.
 
 Key functions:
-- `generate_id()` - Creates 25-char random `[a-z0-9]` IDs (decoupled from filename)
+- `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_E` (decoupled from filename)
 - `title_to_filename()` - Converts title to slug for filename, handles collisions
 - `ticket_path()` - Resolves partial IDs by searching frontmatter `id:` fields (single awk pass)
 - `id_from_file()` - Extracts `id:` from a file's YAML frontmatter

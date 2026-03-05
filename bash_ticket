@@ -84,11 +84,11 @@ _sed_i() {
     sed "$@" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
-# Generate 25-char random lowercase alphanumeric ID
+# Generate ID in format nid_<25-char-random-alphanumeric>_E
 generate_id() {
     local id
     id=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 25 || true)
-    printf '%s' "$id"
+    printf 'nid_%s_E' "$id"
 }
 
 # Convert title string to a filename-safe slug
