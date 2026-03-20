@@ -1467,7 +1467,10 @@ $cmd - minimal ticket system with dependency tracking
 Usage: $cmd <command> [args]
 
 Commands:
-  create [title] [options] Create ticket, prints JSON with id and full_path
+  create [title] [options] Create ticket, prints JSON with id and full_path.
+                           When creating tickets SPLIT them up so that processing each ticket
+                           will fit into 200K context window. IF common planning is required for tickets
+                           create a ticket for plan creation and make it a dependency of implementation tickets.
     -d, --description      Description text. Goes into markdown body of the ticket.
                            MUST be self contained, if referencing files make sure they are referenced
                            with full relative path from git repo. And NOT just the file names.
@@ -1501,7 +1504,7 @@ Commands:
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
 
-Searches parent directories for _tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
+Searches parent directories for _tickets/, stopping at .git boundary.
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
 EOF
