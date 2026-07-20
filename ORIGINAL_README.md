@@ -29,7 +29,7 @@ cd ticket && ln -s "$PWD/ticket" ~/.local/bin/tk
 
 ## Requirements
 
-`tk` is a portable bash script requiring only coreutils, so it works out of the box on any POSIX system with bash installed. The `query` command requires `jq`. Uses `rg` (ripgrep) if available, falls back to `grep`.
+`tk` is a portable bash script requiring only coreutils and `git`, so it works out of the box on any POSIX system with bash installed. Tickets are anchored to the enclosing git repository root, so `tk` must be run inside a git repo (or with `TICKETS_DIR` set). The `query` command requires `jq`. Uses `rg` (ripgrep) if available, falls back to `grep`.
 
 ## Agent Setup
 
@@ -80,7 +80,7 @@ Commands:
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
 
-Searches parent directories for _tickets/, stopping at .git boundary (override with TICKETS_DIR env var)
+Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var)
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter; supports partial ID matching
 ```

@@ -258,36 +258,28 @@ def step_ticket_has_hr_and_fake_frontmatter(context, ticket_id):
     ticket_path.write_text(content)
 
 
-@given(r'a \.git directory exists in the test root')
-def step_git_dir_in_test_root(context):
-    """Create a .git directory in the test root (simulates regular repo)."""
+@given(r'the test root is not a git repository')
+def step_test_root_not_git(context):
+    """Remove the git repository from the test root."""
     git_dir = Path(context.test_dir) / '.git'
-    git_dir.mkdir(parents=True, exist_ok=True)
+    if git_dir.exists():
+        import shutil
+        shutil.rmtree(git_dir)
 
 
-@given(r'a \.git file exists in the test root')
-def step_git_file_in_test_root(context):
-    """Create a .git file in the test root (simulates submodule)."""
-    git_file = Path(context.test_dir) / '.git'
-    git_file.write_text('gitdir: ../../../.git/modules/my-submodule\n')
-
-
-@given(r'a \.git directory exists in subdirectory "(?P<subdir>[^"]+)"')
-def step_git_dir_in_subdir(context, subdir):
-    """Create a .git directory in the specified subdirectory."""
+@given(r'a nested git repository exists in subdirectory "(?P<subdir>[^"]+)"')
+def step_nested_git_repo_in_subdir(context, subdir):
+    """Initialize a nested git repository in the specified subdirectory.
+    A nested repo is its own tickets root (mirrors a git submodule)."""
     subdir_path = Path(context.test_dir) / subdir
     subdir_path.mkdir(parents=True, exist_ok=True)
-    git_dir = subdir_path / '.git'
-    git_dir.mkdir(parents=True, exist_ok=True)
-
-
-@given(r'a \.git file exists in subdirectory "(?P<subdir>[^"]+)"')
-def step_git_file_in_subdir(context, subdir):
-    """Create a .git file in the specified subdirectory (simulates submodule)."""
-    subdir_path = Path(context.test_dir) / subdir
-    subdir_path.mkdir(parents=True, exist_ok=True)
-    git_file = subdir_path / '.git'
-    git_file.write_text('gitdir: ../../../.git/modules/my-submodule\n')
+    subprocess.run(
+        ['git', 'init', '-q'],
+        cwd=str(subdir_path),
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 @given(r'I am in subdirectory "(?P<subdir>[^"]+)"')

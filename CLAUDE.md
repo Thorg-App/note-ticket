@@ -9,6 +9,7 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 **Core script:** Single-file bash implementation (`ticket`, ~1000 lines). Uses awk for performant bulk operations on large ticket sets.
 
 Key functions:
+- `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides
 - `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_E` (decoupled from filename)
 - `title_to_filename()` - Converts title to slug for filename, handles collisions
 - `ticket_path()` - Resolves partial IDs by searching frontmatter `id:` fields (single awk pass)
@@ -20,7 +21,7 @@ Key functions:
 
 Data model: Filenames are title-based (e.g., `my-note.md`). The `id` field in frontmatter is the stable identifier. `title` is stored in frontmatter (double-quoted). No `# heading` for title in body.
 
-Dependencies: bash, sed, awk, find. Optional: ripgrep (faster grep).
+Dependencies: bash, git, sed, awk, find. Optional: ripgrep (faster grep).
 
 ## Testing
 

@@ -2,33 +2,18 @@
 set -euo pipefail
 
 # ticket - minimal ticket system with dependency tracking
-# Stores markdown files with YAML frontmatter in _tickets/
+# Stores markdown files with YAML frontmatter in <git-repo-root>/_tickets/
 
-# Find _tickets directory by walking parent directories
+# Resolve the tickets directory. Tickets live at the git repository root
+# (<repo-root>/_tickets), so commands work from any subdirectory of the repo.
 find_tickets_dir() {
     # Explicit env var takes priority
     [[ -n "${TICKETS_DIR:-}" ]] && { echo "$TICKETS_DIR"; return 0; }
 
-    # Walk parents looking for _tickets or .git boundary
-    local dir="$PWD"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -d "$dir/_tickets" ]]; then
-            echo "$dir/_tickets"
-            return 0
-        fi
-        # .git (file for submodules, directory for regular repos) = repo root boundary
-        if [[ -e "$dir/.git" ]]; then
-            echo "$dir/_tickets"
-            return 0
-        fi
-        dir=$(dirname "$dir")
-    done
-
-    # Check root too
-    [[ -d "/_tickets" ]] && { echo "/_tickets"; return 0; }
-
-    # Not found
-    return 1
+    # Anchor to the enclosing git repository root
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+    printf '%s/_tickets' "$repo_root"
 }
 
 # Commands that can create _tickets if not found
@@ -40,24 +25,19 @@ init_tickets_dir() {
     local is_write_cmd=0
     [[ " $WRITE_COMMANDS " == *" $cmd "* ]] && is_write_cmd=1
 
-    if TICKETS_DIR=$(find_tickets_dir); then
-        # For read commands, verify the directory exists
-        if [[ $is_write_cmd -eq 0 ]] && [[ ! -d "$TICKETS_DIR" ]]; then
-            echo "Error: tickets directory '$TICKETS_DIR' does not exist" >&2
-            return 1
-        fi
-        return 0
+    if ! TICKETS_DIR=$(find_tickets_dir); then
+        echo "Error: not inside a git repository" >&2
+        echo "Run inside a git repo, or set TICKETS_DIR env var" >&2
+        return 1
     fi
 
-    # Not found - write commands can initialize in current directory
-    if [[ $is_write_cmd -eq 1 ]]; then
-        TICKETS_DIR="_tickets"
-        return 0
+    # Read commands require an existing directory; write commands (create)
+    # initialize it at the repo root on demand.
+    if [[ $is_write_cmd -eq 0 ]] && [[ ! -d "$TICKETS_DIR" ]]; then
+        echo "Error: tickets directory '$TICKETS_DIR' does not exist" >&2
+        return 1
     fi
-
-    echo "Error: no _tickets directory found (searched parent directories)" >&2
-    echo "Run 'tk create' to initialize, or set TICKETS_DIR env var" >&2
-    return 1
+    return 0
 }
 
 TICKET_PAGER="${TICKET_PAGER:-${PAGER:-}}"
@@ -1504,7 +1484,7 @@ Commands:
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
 
-Searches parent directories for _tickets/, stopping at .git boundary.
+Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var).
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
 EOF

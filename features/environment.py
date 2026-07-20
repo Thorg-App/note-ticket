@@ -2,8 +2,20 @@
 
 import os
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
+
+
+def _git_init(path):
+    """Initialize a git repository at path (tickets are anchored to the repo root)."""
+    subprocess.run(
+        ['git', 'init', '-q'],
+        cwd=str(path),
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def before_all(context):
@@ -14,8 +26,10 @@ def before_all(context):
 
 def before_scenario(context, scenario):
     """Create a fresh temporary directory for each scenario."""
-    # Create a temporary directory for this scenario
+    # Create a temporary directory for this scenario, initialized as a git repo
+    # so that `git rev-parse --show-toplevel` resolves it as the tickets root.
     context.test_dir = tempfile.mkdtemp(prefix='ticket_test_')
+    _git_init(context.test_dir)
 
     # Initialize tracking
     context.tickets = {}
