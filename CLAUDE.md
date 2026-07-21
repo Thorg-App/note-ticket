@@ -10,7 +10,7 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 
 Key functions:
 - `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides
-- `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_E` (decoupled from filename)
+- `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_e` (decoupled from filename)
 - `title_to_filename()` - Converts title to slug for filename, handles collisions
 - `ticket_path()` - Resolves partial IDs by searching frontmatter `id:` fields (single awk pass)
 - `id_from_file()` - Extracts `id:` from a file's YAML frontmatter
