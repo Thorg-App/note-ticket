@@ -128,7 +128,7 @@ Feature: Ticket Creation
     Then the command should succeed
     And the created ticket should have field "title" with value "Frontmatter Title"
 
-  Scenario: Generated ticket ID has nid_ prefix and _E suffix
+  Scenario: Generated ticket ID has nid_ prefix and _e suffix
     When I run "ticket create 'ID format test'"
     Then the command should succeed
     And the output should match a ticket ID pattern

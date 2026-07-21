@@ -487,16 +487,16 @@ def step_output_valid_json_with_id(context):
 
 @then(r'the output should match a ticket ID pattern')
 def step_output_matches_id_pattern(context):
-    """Assert output is valid JSON from create command with ID matching nid_<25chars>_E format."""
+    """Assert output is valid JSON from create command with ID matching nid_<25chars>_e format."""
     try:
         data = json.loads(context.stdout)
     except json.JSONDecodeError as e:
         raise AssertionError(f"Output is not valid JSON: {context.stdout}\nError: {e}")
     assert 'id' in data, f"JSON output missing 'id' field\nData: {data}"
     ticket_id = data['id']
-    id_pattern = re.compile(r'^nid_[a-z0-9]{25}_E$')
+    id_pattern = re.compile(r'^nid_[a-z0-9]{25}_e$')
     assert id_pattern.match(ticket_id), \
-        f"Ticket ID '{ticket_id}' does not match expected pattern 'nid_<25chars>_E'"
+        f"Ticket ID '{ticket_id}' does not match expected pattern 'nid_<25chars>_e'"
 
 
 @then(r'the output should match pattern "(?P<pattern>[^"]+)"')
