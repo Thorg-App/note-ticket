@@ -112,8 +112,10 @@ Feature: Nested Folders Under _tickets
     And ticket "nest-0002" depends on "nest-0001"
     And I move ticket "nest-0002" to subfolder "backend"
     When I run "ticket dep cycle"
-    Then the command should fail
+    Then the command should succeed
+    And the output should contain "Cycle 1:"
     And the output should contain "nest-0001"
+    And the output should contain "nest-0002"
 
   Scenario: Add-note appends to a nested ticket
     Given a ticket exists with ID "nest-0001" and title "Nested ticket"
@@ -129,6 +131,14 @@ Feature: Nested Folders Under _tickets
     When I run "ticket link nest-0001 nest-0002"
     Then the command should succeed
     And ticket "nest-0001" should have "nest-0002" in links
+
+  Scenario: Commands handle a subfolder name containing spaces
+    Given a ticket exists with ID "nest-0001" and title "Spaced folder ticket"
+    And ticket "nest-0001" has status "closed"
+    And I move ticket "nest-0001" to subfolder "my archive/old stuff"
+    When I run "ticket closed"
+    Then the command should succeed
+    And the output should contain "nest-0001"
 
   Scenario: An empty subfolder does not break listing
     Given a ticket exists with ID "nest-0001" and title "Root ticket"
@@ -146,6 +156,12 @@ Feature: Nested Folders Under _tickets
   Scenario: Ready with only empty subfolders produces no output
     Given an empty subfolder "backend/api" exists under the tickets directory
     When I run "ticket ready"
+    Then the command should succeed
+    And the output should be empty
+
+  Scenario: Closed with only empty subfolders produces no output
+    Given an empty subfolder "backend/api" exists under the tickets directory
+    When I run "ticket closed"
     Then the command should succeed
     And the output should be empty
 
