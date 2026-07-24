@@ -246,6 +246,13 @@ Feature: Nested Folders Under _tickets
     And the output should contain "nest-0001"
     And the output should not contain "nest-0002"
 
+  Scenario: A hidden ticket file outside a hidden folder is still a ticket
+    Given a ticket exists with ID "nest-0001" and title "Draft ticket"
+    And I rename the file of ticket "nest-0001" to ".draft.md"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "nest-0001"
+
   Scenario Outline: Listing commands never block on stdin when there are no tickets
     Given an empty subfolder "backend/api" exists under the tickets directory
     When I run "ticket <command>" with stdin left open

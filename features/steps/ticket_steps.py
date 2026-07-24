@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import signal
 import subprocess
 from pathlib import Path
 
@@ -180,6 +181,15 @@ def step_move_ticket_to_subfolder(context, ticket_id, subfolder):
     target_dir = Path(context.test_dir) / '_tickets' / subfolder
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / ticket_path.name
+    ticket_path.rename(target_path)
+    context.tickets[ticket_id] = target_path
+
+
+@given(r'I rename the file of ticket "(?P<ticket_id>[^"]+)" to "(?P<filename>[^"]+)"')
+def step_rename_ticket_file(context, ticket_id, filename):
+    """Rename a ticket file in place, keeping it in the same directory."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    target_path = ticket_path.parent / filename
     ticket_path.rename(target_path)
     context.tickets[ticket_id] = target_path
 
@@ -449,30 +459,48 @@ def step_run_command_stdin_left_open(context, command):
     WHY: `awk 'prog'` with no file operands reads stdin. If a command ever passes an
     empty file list to awk it would block forever on a terminal; a live pipe reproduces
     that, and the timeout turns the hang into a test failure instead of a stuck CI job.
+
+    WHY-NOT `stdin=subprocess.PIPE`: `communicate()` closes a PIPE stdin immediately when
+    given no input, so awk sees EOF at once and a hanging script would still pass. We hand
+    the child a raw pipe read end and keep the write end open in this process, so its stdin
+    never reaches EOF.
+
+    WHY `start_new_session` + `killpg`: on timeout the child is a bash wrapper whose awk
+    grandchild holds the stdout pipe. Killing only the wrapper leaves awk alive and the
+    follow-up `communicate()` never returns, hanging the suite instead of failing it.
     """
     command = command.replace('\\"', '"')
     ticket_script = get_ticket_script(context)
     cmd = command.replace('ticket ', f'{ticket_script} ', 1)
     cwd = getattr(context, 'working_dir', context.test_dir)
 
-    process = subprocess.Popen(
-        cmd,
-        shell=True,
-        cwd=cwd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=os.environ.copy()
-    )
+    read_fd, write_fd = os.pipe()
     try:
-        stdout, stderr = process.communicate(timeout=STDIN_OPEN_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.communicate()
-        raise AssertionError(
-            f"Command blocked on stdin for more than {STDIN_OPEN_TIMEOUT_SECONDS}s: [{cmd}]"
+        process = subprocess.Popen(
+            cmd,
+            shell=True,
+            cwd=cwd,
+            stdin=read_fd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=os.environ.copy(),
+            start_new_session=True
         )
+        os.close(read_fd)
+        read_fd = -1  # Popen duplicated it; only the child holds the read end now.
+        try:
+            stdout, stderr = process.communicate(timeout=STDIN_OPEN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            process.communicate()
+            raise AssertionError(
+                f"Command blocked on stdin for more than {STDIN_OPEN_TIMEOUT_SECONDS}s: [{cmd}]"
+            )
+    finally:
+        if read_fd != -1:
+            os.close(read_fd)
+        os.close(write_fd)
 
     context.result = process
     context.stdout = stdout.strip()

@@ -135,6 +135,11 @@ find -L "$TICKETS_DIR" -mindepth 1 -name '.*' -type d -prune -o -type f -name '*
 
 ### The awk-reads-stdin risk is now locked down
 
+> **Correction (iteration 3): the claim below was wrong as written in iteration 2.** The step used
+> `stdin=subprocess.PIPE` + `communicate()`, which closes the child's stdin immediately, so the
+> scenarios could not observe a hang. Fixed in iteration 3 — see that section for the harness and the
+> mutation proof. The description below is accurate as of iteration 3.
+
 `awk 'prog'` with no file operands reads stdin, so an unguarded empty array means a hang on a
 terminal (or a silent empty success under a redirect). New step `I run "…" with stdin left open`
 runs the command with a **live, never-written stdin pipe** and a 20s timeout, so a hang fails the
@@ -167,3 +172,156 @@ None blocking. Two optional follow-ups worth a ticket if the human agrees:
    newline-delimited). Every other command handles them via the NUL-delimited helper. Fixing it
    would mean reimplementing the mtime sort without `ls`; low value, real complexity — I judged
    it below the 80/20 line and left it.
+
+---
+
+# Iteration 3 — response to the iteration 2 review
+
+Two items were open, neither a product-code blocker. **Both accepted.** `ticket`'s enumeration logic is
+unchanged apart from one help-text wording fix; all product behavior is identical to iteration 2.
+
+| Item | Verdict | Rationale |
+|------|---------|-----------|
+| **B3** stdin scenarios vacuous | **Accepted in full** | The reviewer is right and the diagnosis is exact: `subprocess.Popen(stdin=PIPE)` followed by `communicate()` with no `input` closes the child's stdin at once, so awk saw EOF immediately and the six scenarios passed against code that provably hangs. That is precisely the "test that lies" case CLAUDE.md forbids. Rewrote the step with `os.pipe()` (parent holds the write end open) + `start_new_session=True` + `os.killpg(..., SIGKILL)` on timeout. |
+| **S7** docs overstate hidden-file exclusion | **Accepted** | Verified by hand before changing anything: `_tickets/.draft.md` **is** listed; `_tickets/.trash/keepme/x.md` is **not**. Reworded the three doc sites; **did not** change product behavior. Also added a scenario so the doc claim is now executable rather than prose. |
+
+## B3 — the fix
+
+`features/steps/ticket_steps.py`, step `I run "…" with stdin left open`:
+
+- The child gets the **read end of a raw pipe** as fd 0; this process keeps the **write end** open for
+  the whole call, so the child's stdin never reaches EOF. `communicate()` only auto-closes stdin when
+  stdin *is* `subprocess.PIPE`, which is why the previous form silently defeated the test.
+- `start_new_session=True` + `os.killpg(os.getpgid(pid), SIGKILL)` are **load-bearing, not defensive**.
+  The child is a `bash` wrapper whose `awk` grandchild holds the stdout pipe; `process.kill()` alone
+  reaps the wrapper and leaves awk blocked, so the follow-up `communicate()` never returns and the
+  **suite hangs instead of failing**. Confirmed independently of the reviewer's note.
+- Both WHY / WHY-NOT are recorded in the step docstring so the next maintainer cannot re-introduce the
+  `stdin=PIPE` form by accident.
+
+## B3 — mutation proof (mandatory evidence)
+
+**Mutant**: `.tmp/ticket_noguard` — a copy of `ticket` with **all 9 empty-array guards deleted**
+(7 × `(( ${#TICKET_FILES[@]} )) || return 0`, plus the 2 `if (( … == 0 )); then … fi` blocks in
+`ticket_path()` and `cmd_show()`). Product code itself was never modified.
+
+```
+$ python3 - <<'PY'   # regex-strip the guards into .tmp/ticket_noguard
+  one-line guards removed=[7] if-block guards removed=[2]
+$ bash -n .tmp/ticket_noguard
+  syntax OK
+```
+
+**A note on the reviewer's shell probe.** The suggested one-liner is itself unsound and I did not rely
+on it:
+
+```
+$ ( cd .tmp/hangdir && timeout 8 bash -c 'sleep 300 | .tmp/ticket_noguard ls' ); echo exit=[$?]
+exit=[124]      # mutant
+$ ( cd .tmp/hangdir && timeout 8 bash -c 'sleep 300 | ./ticket        ls' ); echo exit=[$?]
+exit=[124]      # HEAD — SAME RESULT, so the probe proves nothing
+```
+
+`bash` waits for the whole pipeline, including `sleep 300`, so the wrapper times out whether or not
+`ticket` returned. I replaced it with `.tmp/hangprobe.py`, which uses the exact mechanism the fixed
+step uses (os.pipe + start_new_session + killpg) and times only the `ticket` process:
+
+```
+$ python3 .tmp/hangprobe.py
+./ticket              ls             -> completed rc=[0] out=[]
+./ticket              ready          -> completed rc=[0] out=[]
+./ticket              blocked        -> completed rc=[0] out=[]
+./ticket              closed         -> completed rc=[0] out=[]
+./ticket              query          -> completed rc=[0] out=[]
+./ticket              show nest-0001 -> completed rc=[1] err=[Error: ticket 'nest-0001' not found]
+./.tmp/ticket_noguard ls             -> TIMED OUT (hang detected)
+./.tmp/ticket_noguard ready          -> TIMED OUT (hang detected)
+./.tmp/ticket_noguard blocked        -> TIMED OUT (hang detected)
+./.tmp/ticket_noguard closed         -> completed rc=[2] err=[awk: read error (Is a directory)]
+./.tmp/ticket_noguard query          -> TIMED OUT (hang detected)
+./.tmp/ticket_noguard show nest-0001 -> TIMED OUT (hang detected)
+```
+
+**The scenarios themselves, run against the mutant** (iteration 2 harness: 36/36 green — vacuous):
+
+```
+$ TICKET_SCRIPT=$PWD/.tmp/ticket_noguard uv run --with behave behave features/nested_folders.feature
+behave exit=[1]
+  ASSERT FAILED: Command blocked on stdin for more than 20s: [.tmp/ticket_noguard ls]
+  ASSERT FAILED: Command blocked on stdin for more than 20s: [.tmp/ticket_noguard ready]
+  ASSERT FAILED: Command blocked on stdin for more than 20s: [.tmp/ticket_noguard blocked]
+  ASSERT FAILED: Command blocked on stdin for more than 20s: [.tmp/ticket_noguard query]
+  ASSERT FAILED: Command blocked on stdin for more than 20s: [.tmp/ticket_noguard show nest-0001]
+Failing scenarios:
+  features/nested_folders.feature:184  Closed with only empty subfolders produces no output
+  features/nested_folders.feature:257  …never block on stdin… -- @1.1   (ls)
+  features/nested_folders.feature:258  …never block on stdin… -- @1.2   (ready)
+  features/nested_folders.feature:259  …never block on stdin… -- @1.3   (blocked)
+  features/nested_folders.feature:260  …never block on stdin… -- @1.4   (closed)
+  features/nested_folders.feature:261  …never block on stdin… -- @1.5   (query)
+  features/nested_folders.feature:263  Show never blocks on stdin when there are no tickets
+29 scenarios passed, 7 failed, 0 skipped
+```
+
+**All 6 stdin scenarios now fail against the mutant** (previously all 6 passed). Full disclosure on the
+one asymmetry: `closed` (`:260`) fails by **`rc=2 / awk: read error (Is a directory)`**, not by timeout.
+Removing its guard triggers the documented `xargs`/`ls -t`-lists-cwd bug before awk ever reaches stdin,
+so awk dies on a directory instead of blocking. The scenario still fails — it asserts success — so the
+guard is genuinely locked down; it is simply caught by a different symptom. Scenario `:184` (a
+pre-existing iteration-2 scenario) also fails against the mutant, which is further evidence the suite
+is not blind to guard removal.
+
+**Restored and green** — the mutant lives only in `.tmp/` (untracked); `ticket` was never edited for
+this test. Full suite below.
+
+## S7 — docs corrected, behavior untouched
+
+Behavior verified first, so the docs now describe what the code does rather than the reverse:
+
+```
+$ find _tickets -name '*.md' | sort
+_tickets/.draft.md            _tickets/.trash/keepme/x.md            _tickets/real-one.md
+$ ticket ls
+nid_volprfr3ayonqlurhcupop7rl_e [open] - Real one     # .draft.md  -> LISTED (same id, it is a copy)
+nid_volprfr3ayonqlurhcupop7rl_e [open] - Real one     # .trash/... -> NOT listed
+```
+
+Reworded `README.md`, `ORIGINAL_README.md` and the `ticket help` footer: every `.md` file at any depth
+is a ticket **except those inside a hidden directory**; hidden directories are skipped **along with
+their whole subtree** (so a non-hidden folder nested under one is also dropped — the review's
+NICE-TO-HAVE, folded in for one sentence); **hidden files are not skipped**, `_tickets/.draft.md` is a
+ticket. `CHANGELOG.md` needed **no** change — it already said only "Hidden directories … are skipped",
+which is correct.
+
+Went one step beyond the review: added scenario **"A hidden ticket file outside a hidden folder is
+still a ticket"** plus a `I rename the file of ticket "…" to "…"` step. A documented rule with no test
+is the same drift risk that produced S7 in the first place.
+
+## Iteration 3 test results
+
+```
+$ mkdir -p .tmp; make test > .tmp/test3.out 2>&1     # exit=[0]
+12 features passed, 0 failed, 0 skipped
+168 scenarios passed, 0 failed, 0 skipped
+1143 steps passed, 0 failed, 0 skipped
+```
+
+| Point | Features | Scenarios | Steps |
+|-------|----------|-----------|-------|
+| Iteration 2 final | 12 passed, 0 failed | 167 passed, 0 failed | 1137 |
+| **Iteration 3 final** | **12 passed, 0 failed** | **168 passed, 0 failed** | **1143 passed, 0 failed** |
+| Iteration 3 vs. mutant | 1 failed | **7 failed** | 7 failed |
+
+**No pre-existing scenario broke**: 131 pre-existing → 131, still green across all iterations. The
+delta is exactly +1 scenario / +6 steps, all in `features/nested_folders.feature` (36 → 37) from the
+new S7 hidden-file scenario. Log: `.tmp/test3.out`.
+
+## Files changed in iteration 3
+
+- `features/steps/ticket_steps.py` — non-vacuous stdin harness (`import signal`, `os.pipe`,
+  `start_new_session`, `killpg`); new `I rename the file of ticket …` step.
+- `features/nested_folders.feature` — new hidden-file scenario.
+- `README.md`, `ORIGINAL_README.md`, `ticket` (help footer only) — S7 wording.
+
+No new dependencies (`os` and `signal` are stdlib). Ticket left **open** and **no** `change_log` entry,
+per instruction.

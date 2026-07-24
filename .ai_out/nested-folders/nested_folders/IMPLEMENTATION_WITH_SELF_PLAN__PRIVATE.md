@@ -62,6 +62,34 @@ Iteration 2 gotchas:
 10. Verified by hand in .tmp/it2: path ordering, symlinked dir, permission-denied
     diagnostic now visible, missing dir still clean, dot-named root, dangling symlink.
 
+## Iteration 3 — review response (B3 + S7)
+Both accepted, nothing rejected. Product code untouched except the `ticket help` footer wording.
+
+- B3: rewrote `I run "…" with stdin left open` — `os.pipe()` (parent holds write end for the whole
+  call) + `start_new_session=True` + `os.killpg(getpgid(pid), SIGKILL)` on timeout. `import signal`.
+- S7: reworded README.md / ORIGINAL_README.md / `ticket` help footer. CHANGELOG was already correct.
+  Added scenario "A hidden ticket file outside a hidden folder is still a ticket" + step
+  `I rename the file of ticket "…" to "…"` so the doc claim is executable.
+
+Mutation evidence: `.tmp/ticket_noguard` (all 9 guards regex-stripped), `.tmp/hangprobe.py`.
+Against the mutant: **7 scenarios fail** (6 stdin + `:184 closed`), vs 36/36 green under the old
+harness. Restored: `make test` -> 12 features, **168 scenarios passed, 0 failed, 1143 steps**
+(`.tmp/test3.out`). Pre-existing 131 still unbroken.
+
+Iteration 3 gotchas:
+11. `subprocess.Popen(stdin=PIPE)` + `communicate()` with no `input` CLOSES the child's stdin
+    immediately. Any "does it block on stdin" test written that way is vacuous.
+12. `process.kill()` is NOT enough: killing the bash wrapper leaves the blocked awk holding the
+    stdout pipe, so the follow-up `communicate()` never returns -> the SUITE hangs. Need killpg.
+13. The reviewer's own shell probe (`timeout 8 bash -c 'sleep 300 | ticket ls'`) is UNSOUND —
+    bash waits for the whole pipeline incl. `sleep 300`, so HEAD exits 124 too. Verified; used a
+    python probe instead. Do not trust that one-liner.
+14. Stripping the `closed` guard does NOT produce a hang — it hits the `ls -t` lists-cwd bug first
+    (`awk: read error (Is a directory)`, rc=2). Scenario still fails (asserts success), different
+    symptom. Called out explicitly in PUBLIC.
+15. `.tmp/` is not in `.gitignore` (no such file) but IS excluded via git global/info exclude —
+    `git add -A` does not pick it up. Verified before committing.
+
 ## Gotchas learned (rehydrate a clone with these)
 1. `xargs -0 ls -t` with EMPTY input still runs `ls -t` (GNU), which lists the cwd ->
    awk then reads a directory -> exit 2. The ticket's literal plan for cmd_closed hit

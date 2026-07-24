@@ -1556,8 +1556,10 @@ Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
 Tickets may be organized into nested subfolders (e.g. _tickets/backend/api/foo.md)
 by simply moving the files; all commands search every nesting level.
-Every non-hidden .md file at any depth is a ticket; hidden directories
-(.trash, .obsidian, ...) are ignored. ls/query list in path order.
+Every .md file at any depth is a ticket, except those inside a hidden
+directory (.trash, .obsidian, ...) - such folders are skipped whole.
+Hidden files are NOT skipped (_tickets/.draft.md is a ticket).
+ls/query list in path order.
 New tickets are always created at the top level of _tickets/.
 EOF
 }

@@ -10,8 +10,11 @@ by simply moving the files. Every command searches all nesting levels; identity 
 the `id` in the frontmatter, not the path. New tickets are always created at the top
 level of `_tickets/`.
 
-Every non-hidden `.md` file at any depth under `_tickets/` is a ticket. Hidden
-directories (`.trash`, `.obsidian`, ...) are skipped, symlinked ticket files and a
-symlinked `_tickets/` are followed, and `ls`/`query` list tickets in path order.
+Every `.md` file at any depth under `_tickets/` is a ticket, except those inside a
+hidden directory. Hidden directories (`.trash`, `.obsidian`, ...) are skipped along
+with their entire subtree, including non-hidden folders nested under them. Hidden
+*files* are not skipped: `_tickets/.draft.md` is listed like any other ticket.
+Symlinked ticket files and a symlinked `_tickets/` are followed, and `ls`/`query`
+list tickets in path order.
 
 
