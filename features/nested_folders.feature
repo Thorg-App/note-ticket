@@ -78,7 +78,7 @@ Feature: Nested Folders Under _tickets
     Then the command should succeed
     And the output should contain "nest-0001"
 
-  Scenario: Blocked reports a root ticket blocked by a nested dependency
+  Scenario: Blocked names the nested dependency as the blocker
     Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
     And a ticket exists with ID "nest-0002" and title "Dependent ticket"
     And ticket "nest-0002" depends on "nest-0001"
@@ -86,15 +86,37 @@ Feature: Nested Folders Under _tickets
     When I run "ticket blocked"
     Then the command should succeed
     And the output should contain "nest-0002"
+    And the output should contain "<- [nest-0001]"
 
-  Scenario: Ready excludes a nested ticket blocked by a root dependency
+  Scenario: Blocked drops the ticket once its nested dependency closes
+    Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
+    And a ticket exists with ID "nest-0002" and title "Dependent ticket"
+    And ticket "nest-0002" depends on "nest-0001"
+    And I move ticket "nest-0001" to subfolder "backend"
+    When I run "ticket close nest-0001"
+    And I run "ticket blocked"
+    Then the command should succeed
+    And the output should not contain "nest-0002"
+
+  Scenario: Ready lists the root dependency but not the blocked nested ticket
     Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
     And a ticket exists with ID "nest-0002" and title "Dependent ticket"
     And ticket "nest-0002" depends on "nest-0001"
     And I move ticket "nest-0002" to subfolder "backend"
     When I run "ticket ready"
     Then the command should succeed
+    And the output should contain "nest-0001"
     And the output should not contain "nest-0002"
+
+  Scenario: Ready includes the nested ticket once its root dependency closes
+    Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
+    And a ticket exists with ID "nest-0002" and title "Dependent ticket"
+    And ticket "nest-0002" depends on "nest-0001"
+    And I move ticket "nest-0002" to subfolder "backend"
+    When I run "ticket close nest-0001"
+    And I run "ticket ready"
+    Then the command should succeed
+    And the output should contain "nest-0002"
 
   Scenario: Dep tree renders a nested dependency
     Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
@@ -170,3 +192,76 @@ Feature: Nested Folders Under _tickets
     When I run "ticket query"
     Then the command should succeed
     And the output should be empty
+
+  Scenario: Listing works when the tickets directory itself is a symlink
+    Given a ticket exists with ID "nest-0001" and title "Root ticket"
+    And a ticket exists with ID "nest-0002" and title "Nested ticket"
+    And I move ticket "nest-0002" to subfolder "backend"
+    And the tickets directory is replaced by a symlink to "vault_tickets"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "nest-0001"
+    And the output should contain "nest-0002"
+
+  Scenario: Show resolves a ticket through a symlinked tickets directory
+    Given a ticket exists with ID "nest-0001" and title "Root ticket"
+    And the tickets directory is replaced by a symlink to "vault_tickets"
+    When I run "ticket show nest-0001"
+    Then the command should succeed
+    And the output should contain "id: nest-0001"
+
+  Scenario: A ticket file that is a symlink is still listed
+    Given a ticket exists with ID "nest-0001" and title "External ticket"
+    And ticket "nest-0001" is moved out of the tickets directory and symlinked back
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "nest-0001"
+
+  Scenario: Listing order is deterministic by path across root and nested tickets
+    Given a ticket exists with ID "nest-0003" and title "Zebra ticket"
+    And a ticket exists with ID "nest-0001" and title "Alpha ticket"
+    And a ticket exists with ID "nest-0002" and title "Mango ticket"
+    And I move ticket "nest-0003" to subfolder "backend"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should have "nest-0001" before "nest-0003"
+    And the output should have "nest-0003" before "nest-0002"
+
+  Scenario: Query order is deterministic by path across root and nested tickets
+    Given a ticket exists with ID "nest-0003" and title "Zebra ticket"
+    And a ticket exists with ID "nest-0001" and title "Alpha ticket"
+    And a ticket exists with ID "nest-0002" and title "Mango ticket"
+    And I move ticket "nest-0003" to subfolder "backend"
+    When I run "ticket query"
+    Then the command should succeed
+    And the output should have "nest-0001" before "nest-0003"
+    And the output should have "nest-0003" before "nest-0002"
+
+  Scenario: Tickets inside hidden subfolders are ignored
+    Given a ticket exists with ID "nest-0001" and title "Root ticket"
+    And a ticket exists with ID "nest-0002" and title "Trashed ticket"
+    And I move ticket "nest-0002" to subfolder ".trash"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "nest-0001"
+    And the output should not contain "nest-0002"
+
+  Scenario Outline: Listing commands never block on stdin when there are no tickets
+    Given an empty subfolder "backend/api" exists under the tickets directory
+    When I run "ticket <command>" with stdin left open
+    Then the command should succeed
+    And the output should be empty
+
+    Examples: commands that enumerate ticket files
+      | command |
+      | ls      |
+      | ready   |
+      | blocked |
+      | closed  |
+      | query   |
+
+  Scenario: Show never blocks on stdin when there are no tickets
+    Given an empty subfolder "backend/api" exists under the tickets directory
+    When I run "ticket show nest-0001" with stdin left open
+    Then the command should fail
+    And the output should contain "not found"

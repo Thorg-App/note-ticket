@@ -190,6 +190,30 @@ def step_empty_subfolder_exists(context, subfolder):
     (Path(context.test_dir) / '_tickets' / subfolder).mkdir(parents=True, exist_ok=True)
 
 
+@given(r'the tickets directory is replaced by a symlink to "(?P<real_dir>[^"]+)"')
+def step_tickets_dir_is_symlink(context, real_dir):
+    """Move _tickets/ aside and put a symlink in its place, as a notes-vault setup would."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
+    target_dir = Path(context.test_dir) / real_dir
+    tickets_dir.rename(target_dir)
+    tickets_dir.symlink_to(target_dir)
+    # Re-point tracked paths at the moved files so later assertions still resolve.
+    for ticket_id, path in getattr(context, 'tickets', {}).items():
+        context.tickets[ticket_id] = target_dir / path.relative_to(target_dir.parent / '_tickets')
+
+
+@given(r'ticket "(?P<ticket_id>[^"]+)" is moved out of the tickets directory and symlinked back')
+def step_ticket_file_is_symlink(context, ticket_id):
+    """Replace a ticket file with a symlink pointing outside _tickets/."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    external_dir = Path(context.test_dir) / 'external'
+    external_dir.mkdir(parents=True, exist_ok=True)
+    external_path = external_dir / ticket_path.name
+    ticket_path.rename(external_path)
+    ticket_path.symlink_to(external_path)
+    context.tickets[ticket_id] = ticket_path
+
+
 @given(r'ticket "(?P<ticket_id>[^"]+)" has status "(?P<status>[^"]+)"')
 def step_ticket_has_status(context, ticket_id, status):
     """Set ticket status."""
@@ -412,6 +436,48 @@ def step_run_command_with_env(context, command, tickets_dir):
     context.stdout = result.stdout.strip()
     context.stderr = result.stderr.strip()
     context.returncode = result.returncode
+    context.last_command = command
+
+
+STDIN_OPEN_TIMEOUT_SECONDS = 20
+
+
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with stdin left open')
+def step_run_command_stdin_left_open(context, command):
+    """Run a command with an open, never-written stdin pipe.
+
+    WHY: `awk 'prog'` with no file operands reads stdin. If a command ever passes an
+    empty file list to awk it would block forever on a terminal; a live pipe reproduces
+    that, and the timeout turns the hang into a test failure instead of a stuck CI job.
+    """
+    command = command.replace('\\"', '"')
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+    cwd = getattr(context, 'working_dir', context.test_dir)
+
+    process = subprocess.Popen(
+        cmd,
+        shell=True,
+        cwd=cwd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=os.environ.copy()
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=STDIN_OPEN_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        raise AssertionError(
+            f"Command blocked on stdin for more than {STDIN_OPEN_TIMEOUT_SECONDS}s: [{cmd}]"
+        )
+
+    context.result = process
+    context.stdout = stdout.strip()
+    context.stderr = stderr.strip()
+    context.returncode = process.returncode
     context.last_command = command
 
 
@@ -784,6 +850,18 @@ def step_dep_tree_order(context, first_id, second_id):
     assert second_line != -1, f"'{second_id}' not found in output:\n{output}"
     assert first_line < second_line, \
         f"Expected '{first_id}' (line {first_line + 1}) before '{second_id}' (line {second_line + 1})\nOutput:\n{output}"
+
+
+@then(r'the output should have "(?P<first>[^"]+)" before "(?P<second>[^"]+)"')
+def step_output_order(context, first, second):
+    """Assert first text appears before second text in the output."""
+    output = context.stdout
+    first_pos = output.find(first)
+    second_pos = output.find(second)
+    assert first_pos != -1, f"'{first}' not found in output:\n{output}"
+    assert second_pos != -1, f"'{second}' not found in output:\n{output}"
+    assert first_pos < second_pos, \
+        f"Expected '{first}' before '{second}'\nOutput:\n{output}"
 
 
 @then(r'every JSONL line should have field "(?P<field>[^"]+)"')

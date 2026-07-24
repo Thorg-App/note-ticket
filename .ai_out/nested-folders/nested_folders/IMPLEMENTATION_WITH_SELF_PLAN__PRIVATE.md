@@ -35,6 +35,20 @@ Implement `_tickets/support-nested-folders-under-tickets-for-ticket-organization
 Final: 12 features, 153 scenarios passed, 0 failed, 1040 steps.
 Ticket deliberately left OPEN; no change_log entry (top-level agent owns both).
 
+## Iteration 2 — review response plan
+Review: `.ai_out/nested-folders/nested_folders/IMPLEMENTATION_REVIEW__PUBLIC.md` (2 BLOCKING, 6 SHOULD-FIX).
+TOP_LEVEL decision: alphabetical/path ordering IS contractual -> restore with `LC_ALL=C sort -z`.
+
+Verdicts: B1 accept (`find -L`), B2 accept (`sort -z`), S1 accept (subsumed by -L),
+S2 accept (guard + error, not silent 0), S3 accept (guard), S4 accept (strengthen 2 scenarios),
+S5 accept-modified (`[[ -d ]]` precheck, drop `2>/dev/null`), S6 accept (prune hidden dirs, -mindepth 1
+so a dot-named TICKETS_DIR root is not pruned), NTH `local f` accept (both loops).
+
+Milestones:
+- [x] M4 RED: new scenarios (symlink dir, symlink file, ls/query ordering, hidden dir, stdin-open) + steps
+- [x] M5 GREEN: `_collect_ticket_files` rewrite + guards
+- [x] M6 docs (CHANGELOG ordering/symlink/hidden-dir rules, README) + PUBLIC/PRIVATE
+
 ## Gotchas learned (rehydrate a clone with these)
 1. `xargs -0 ls -t` with EMPTY input still runs `ls -t` (GNU), which lists the cwd ->
    awk then reads a directory -> exit 2. The ticket's literal plan for cmd_closed hit
