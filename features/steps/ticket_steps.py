@@ -91,7 +91,8 @@ def find_ticket_file(context, ticket_id):
     if not tickets_dir.exists():
         raise FileNotFoundError(f"Tickets directory not found at {tickets_dir}")
 
-    for md_file in tickets_dir.glob('*.md'):
+    # rglob: ticket files may live in nested subfolders under _tickets/
+    for md_file in tickets_dir.rglob('*.md'):
         content = md_file.read_text()
         if re.search(rf'^id:\s*{re.escape(ticket_id)}\s*$', content, re.MULTILINE):
             return md_file
@@ -170,6 +171,23 @@ def step_ticket_exists(context, ticket_id, title):
     """Create a ticket with given ID and title (basic, no extra params)."""
     # This is the most generic form - the more specific ones should be defined first
     create_ticket(context, ticket_id, title)
+
+
+@given(r'I move ticket "(?P<ticket_id>[^"]+)" to subfolder "(?P<subfolder>[^"]+)"')
+def step_move_ticket_to_subfolder(context, ticket_id, subfolder):
+    """Move a ticket file into a (possibly deep) subfolder under _tickets/."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    target_dir = Path(context.test_dir) / '_tickets' / subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / ticket_path.name
+    ticket_path.rename(target_path)
+    context.tickets[ticket_id] = target_path
+
+
+@given(r'an empty subfolder "(?P<subfolder>[^"]+)" exists under the tickets directory')
+def step_empty_subfolder_exists(context, subfolder):
+    """Create an empty (ticket-free) subfolder under _tickets/."""
+    (Path(context.test_dir) / '_tickets' / subfolder).mkdir(parents=True, exist_ok=True)
 
 
 @given(r'ticket "(?P<ticket_id>[^"]+)" has status "(?P<status>[^"]+)"')
@@ -807,3 +825,12 @@ def step_file_named_exists_in_tickets(context, filename):
     file_path = tickets_dir / filename
     assert file_path.exists(), \
         f"File {filename} does not exist in _tickets/\nFiles present: {[f.name for f in tickets_dir.glob('*.md')]}"
+
+
+@then(r'ticket "(?P<ticket_id>[^"]+)" should be located in subfolder "(?P<subfolder>[^"]+)"')
+def step_ticket_located_in_subfolder(context, ticket_id, subfolder):
+    """Assert the ticket file still lives in the given subfolder under _tickets/."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    expected_dir = Path(context.test_dir) / '_tickets' / subfolder
+    assert ticket_path.parent == expected_dir, \
+        f"Expected ticket '{ticket_id}' in {expected_dir} but found it in {ticket_path.parent}"
