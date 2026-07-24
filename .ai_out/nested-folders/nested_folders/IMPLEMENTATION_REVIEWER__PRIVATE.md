@@ -50,8 +50,27 @@ the expression so GNU emits no global-option warning.
 - Did NOT re-flag: double `find` in `show`, `closed` newline limitation (now commented), macOS CI gap
   (suggested as a follow-up ticket).
 
-## If there is a round 3
+## Round 3 (HEAD `bf82b29`) — FINAL, signed off
 
-Only two things to check: (1) the stdin step really holds the write fd + killpg — re-run
-`TICKET_SCRIPT=.tmp/ticket_noguard behave features/nested_folders.feature` and expect **failures**;
-(2) README/ORIGINAL_README/`ticket help` wording on hidden `.md` files. Everything else is signed off.
+- `make test` → 12 features / **168** scenarios / **1143** steps, 0 failed (`.tmp/review3-test.out`).
+- Rebuilt my **own** mutant from HEAD (regex strip: 7 one-line guards + 2 if-blocks; `bash -n` OK;
+  1600→1585 lines). `TICKET_SCRIPT=$PWD/.tmp/ticket_noguard behave features/nested_folders.feature`
+  → exit 1, **30 passed / 7 failed**: `:264-:268` + `:270` (all 6 stdin scenarios) + `:184`.
+  Iteration 2 same mutation was 36/36 green. **B3 genuinely closed.**
+  `closed` fails via `awk: read error (Is a directory)` not timeout — implementer disclosed it; still a
+  real failure since the scenario asserts success.
+- **I was wrong on my probe.** `timeout 8 bash -c 'sleep 300 | ./ticket ls'` → exit 124 against
+  **HEAD** too. bash waits for the whole pipeline incl. `sleep 300`; it cannot discriminate. My
+  round-2 conclusion was right, my instrument was not. Adjudicated in the implementer's favour, in
+  writing, in the public review.
+- S7 verified behaviorally in a scratch repo: `.draft.md` LISTED, `.trash/keepme/x.md` NOT listed.
+  README + ORIGINAL_README + `ticket help` footer all reworded consistently; CHANGELOG correctly
+  untouched. New executable scenario added for the hidden-file rule — better than I asked for.
+- Product code delta this iteration: help-text only. Enumeration logic unchanged from iteration 2.
+
+**Verdict: READY-TO-MERGE = yes, 0 BLOCKING, 0 SHOULD-FIX.** Carried forward as non-gating:
+macOS CI coverage (follow-up ticket), double `find` in `show`, newline-in-filename in `closed`.
+
+### Lesson for me
+Before calling a mutation-test harness sound, run the probe against BOTH the mutant and the fixed
+script. A probe that fails on both proves nothing — I nearly shipped that as reviewer evidence.

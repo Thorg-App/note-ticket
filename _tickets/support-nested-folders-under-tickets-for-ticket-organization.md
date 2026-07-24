@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-24T20:01:17Z
 id: nid_pfbidnyf7mnhnzv9k5dtpdhc0_e
 title: "Support nested folders under _tickets for ticket organization"
-status: open
+status: closed
 deps: []
 links: []
 created_iso: 2026-07-24T18:53:49Z
-status_updated_iso: 2026-07-24T18:53:49Z
+status_updated_iso: 2026-07-24T20:01:17Z
 type: feature
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -95,3 +96,9 @@ fd adds an install burden + existence check for zero capability gain; `find` is 
 - README.md / ORIGINAL_README.md usage and `ticket help` mention nested folder support
 - CHANGELOG.md updated under ## [Unreleased] / ### Added
 
+
+## Notes
+
+**2026-07-24T20:01:17Z**
+
+Implemented on branch nested_folders. _collect_ticket_files (find -L + LC_ALL=C sort -z) replaces all 9 non-recursive globs; deterministic ordering preserved; hidden dirs pruned. Two latent bugs fixed (exit 2 on empty tree; word-split paths in closed). 168 BDD scenarios green, stdin-hang guards mutation-proven. Reviewer signed off READY-TO-MERGE.
