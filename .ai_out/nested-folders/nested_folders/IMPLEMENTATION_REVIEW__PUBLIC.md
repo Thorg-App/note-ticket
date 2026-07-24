@@ -1,194 +1,176 @@
-# IMPLEMENTATION REVIEW — nested folders under `_tickets`
+# IMPLEMENTATION REVIEW — Iteration 2 (nested folders under `_tickets`)
 
-Reviewed: `git diff 9f8ebdb..HEAD` (commits `9ae83b2`, `0d25158`, `ca810fe`), branch `nested_folders`.
-Verification done independently: `make test` re-run by me (12 features / **153 scenarios / 0 failed**,
-log at `/home/nickolaykondratyev/git_repos/note-ticket/.tmp/review-test.out`), plus hands-on probing in
-throwaway git repos under `.tmp/`, plus running the NEW feature file against the OLD script
-(`TICKET_SCRIPT=.tmp/ticket_old behave features/nested_folders.feature`).
+Reviewed: `git diff ab99cfa..HEAD` (commits `5ec302f` test-red, `2ae226a` fix), branch `nested_folders`.
+Independent verification: my own `make test` (`.tmp/review2-test.out`), the new feature file run against
+the **iteration-1** script (`.tmp/ticket_it1`), a **mutation test** against a deliberately guard-stripped
+script (`.tmp/ticket_noguard`), hands-on probes in 10 scratch git repos (`.tmp/probe2.sh` →
+`.tmp/probe2.out`), and macOS/BSD man-page evidence for the new `find`/`sort` flags.
 
-**Verdict: 2 BLOCKING regressions** — both are silent, both are caused by the single `find` invocation,
-both are one-line fixes. The rest of the change is well-executed and the tests are genuine.
+**Verdict: the product change is correct and all 8 of my iteration-1 items are genuinely fixed.**
+One BLOCKING issue remains and it is **test-only**: the 6 new "never blocks on stdin" scenarios cannot
+fail — they pass against code that provably hangs. Four-line fix, given below.
 
 ---
 
 ## BLOCKING
 
-### B1. Symlinked `_tickets` (or symlinked `TICKETS_DIR`) now finds ZERO tickets — silently
-`/home/nickolaykondratyev/git_repos/note-ticket/ticket:121`
+### B3. The 6 new stdin-hang scenarios are vacuous — they pass against code that hangs
+`/home/nickolaykondratyev/git_repos/note-ticket/features/steps/ticket_steps.py:442-479`
 
-```bash
-done < <(find "$TICKETS_DIR" -type f -name '*.md' -print0 2>/dev/null)
-```
+The step's docstring claims it "runs the command with a **live, never-written stdin pipe**". It does not.
+`subprocess.Popen(..., stdin=subprocess.PIPE)` followed by `process.communicate(timeout=…)` with **no
+input argument closes the child's stdin immediately**. `awk` therefore gets EOF instantly, and the
+scenario passes whether or not the guard exists.
 
-`find` without `-L`/`-H` does **not** descend into a symlinked directory given as the starting point.
-The old glob `"$TICKETS_DIR"/*.md` resolved through the symlink fine.
-
-Reproduced (`.tmp/symtest/repo`, `_tickets -> ../real_tickets` holding 4 tickets):
+Proven by mutation, not argued:
 
 ```
---- new ---            (no output)   exit=0
---- old ---            4 tickets listed  exit=0
+# .tmp/ticket_noguard = HEAD's script with the cmd_ls guard and the recent_files guard deleted
+$ timeout 8 bash -c 'sleep 300 | ../ticket_noguard ls'   # genuinely open stdin
+exit=124                                                  # <- hangs, as predicted
+
+$ python3 -c "...Popen(stdin=PIPE); p.communicate(timeout=8)"
+completed rc= 0 out= ''                                   # <- harness sees no hang
+
+$ TICKET_SCRIPT=.tmp/ticket_noguard behave features/nested_folders.feature
+1 feature passed, 36 scenarios passed, 0 failed            # <- ALL GREEN on hanging code
 ```
 
-Every listing command returns empty with exit 0 and `show <id>` reports "not found" — the user's whole
-ticket set appears to have vanished, with no diagnostic. `_tickets` symlinked into a notes vault /
-shared directory is a plausible real setup, and the failure mode is indistinguishable from data loss.
+So the S2/S3 guards are locked down by nothing. Per CLAUDE.md a test that cannot fail is worse than no
+test, because a future maintainer will delete a guard and see green. Either fix the harness or delete
+the scenarios and say plainly that the guards are inspection-only.
 
-**Fix:** `find -L "$TICKETS_DIR" -type f -name '*.md' -print0` (`-L` is POSIX-ish and supported by both
-GNU and BSD/macOS find). This simultaneously fixes S1 below. Add a BDD scenario: `_tickets` is a symlink
-to another directory → `ls` finds the ticket.
+**Fix** — hold the write end open in the test process so stdin never sees EOF (`communicate()` only
+auto-closes stdin when stdin *is* `subprocess.PIPE`), and kill the whole process **group** on timeout:
 
-### B2. `ls` / `query` output order regressed from stable alphabetical to filesystem order
-`/home/nickolaykondratyev/git_repos/note-ticket/ticket:121` (consumed at `ticket:816` `cmd_ls`, `ticket:1471` `cmd_query`)
+```python
+read_fd, write_fd = os.pipe()          # parent keeps write_fd open => child's stdin never EOFs
+try:
+    process = subprocess.Popen(cmd, shell=True, cwd=cwd, stdin=read_fd,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, env=os.environ.copy(),
+                               start_new_session=True)   # own process group
+    os.close(read_fd)                  # only the child holds the read end now
+    try:
+        stdout, stderr = process.communicate(timeout=STDIN_OPEN_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        process.communicate()
+        raise AssertionError(...)
+finally:
+    os.close(write_fd)
+```
 
-`cmd_ls` and `_file_to_jsonl` emit strictly in file-argument order and do no sorting (unlike `ready`/
-`blocked`, which sort by priority+id in awk — those are unaffected). Bash glob expansion was sorted;
-`find` traversal order is directory order, i.e. arbitrary and unstable as files are added/removed.
-
-Reproduced with 5 tickets created as zebra, alpha, mango, beta, kiwi:
+`start_new_session` + `killpg` are load-bearing, not belt-and-braces: I first tried the plain
+`process.kill()` form and **it deadlocked forever** — killing the bash wrapper leaves the blocked `awk`
+holding the stdout pipe, so the follow-up `communicate()` never returns and the suite hangs instead of
+failing. I ran the version above against both scripts (`.tmp/hangprobe.py`):
 
 ```
-new: zebra, alpha, mango, beta, kiwi      (creation/dir order)
-old: alpha, beta, kiwi, mango, zebra      (alphabetical)
+noguard : TIMED OUT (hang detected)      # <- the mutant is now caught
+HEAD    : completed rc=0 out=''          # <- current code still passes
 ```
 
-This is a user-visible behavior change that was not requested, is not documented in CHANGELOG/README,
-and has **no test coverage in either direction** — nothing would catch a further shuffle. It also makes
-`ticket ls`/`ticket query` output non-reproducible run-to-run on hashed-directory filesystems, which
-breaks diffing and any downstream script that assumed deterministic ordering.
-
-**Fix:** `find -L "$TICKETS_DIR" -type f -name '*.md' -print0 | LC_ALL=C sort -z` in
-`_collect_ticket_files` (one place, keeps DRY). Add a scenario asserting `ls` order across a root ticket
-and a nested one.
-
-`#QUESTION_FOR_HUMAN:` was alphabetical `ls`/`query` ordering ever contractual, or is any stable order
-acceptable? (Sorting full paths puts `_tickets/backend/x.md` before `_tickets/zebra.md` — path order,
-not title order. If title/creation order is wanted instead, that is a separate, larger change.)
+Also correct the claim in `IMPLEMENTATION_WITH_SELF_PLAN__PUBLIC.md` ("live, never-written stdin pipe")
+once the harness actually does that.
 
 ---
 
 ## SHOULD-FIX
 
-### S1. `-type f` drops ticket files that are symlinks
-`ticket:121` — verified: a `_tickets/kiwi-link.md -> …/external/kiwi-title.md` is listed by the old
-script and invisible to the new one. Subsumed by the `-L` fix in B1 (with `-L`, `-type f` matches the
-symlink's target type).
+### S7. Docs say "non-hidden `.md` file" but hidden `.md` **files** are still listed
+`README.md:13`, `ORIGINAL_README.md:11`, `ticket:1559`
 
-### S2. `cmd_show` has no empty-array guard → `awk` can block on stdin
-`ticket:1263-1266` and `ticket:1399`
-
-```bash
-_collect_ticket_files          # no `(( ${#TICKET_FILES[@]} )) || return 0`
-...
-' "${TICKET_FILES[@]}"
-```
-
-The comment asserts "Non-empty because `ticket_path()` succeeded", but that is a TOCTOU assumption
-(file removed between the two `find` runs) and it is flat-out wrong in the B1 symlink case. `awk` with a
-program but **no file operands reads stdin** — so `ticket show <id>` hangs on an interactive terminal
-rather than erroring. On bash < 4.4 (macOS 3.2) with `set -u`, `"${TICKET_FILES[@]}"` on an empty array
-raises "unbound variable" instead. Add the same one-line guard used at the other 8 sites.
-
-### S3. `cmd_closed`: `recent_files` can be empty → same awk-stdin hang
-`ticket:931-936, 964`
-
-`recent_files` is populated from `ls -t "${TICKET_FILES[@]}"` with stderr suppressed. If `ls` fails
-(ARG_MAX exceeded on a very large ticket set, permission error, files removed mid-run) the array is
-empty and `awk … "${recent_files[@]}"` falls back to stdin. Add
-`(( ${#recent_files[@]} )) || return 0`.
-
-### S4. Two of the 22 new scenarios do not discriminate old code from new
-`features/nested_folders.feature:81` (blocked) and `features/nested_folders.feature:90` (ready excludes)
-
-Running the new feature file against the pre-change script gives **19 failed / 3 passed**. The three
-green-on-old scenarios are `:81`, `:90`, and `:143` (`:143` "empty subfolder does not break listing" is
-a legitimate regression guard, no issue).
-
-- `:90` is effectively vacuous: it asserts `ready` output does **not** contain `nest-0002` after moving
-  `nest-0002` into a subfolder. Under the old code the nested ticket was invisible entirely, so the
-  assertion passes for the wrong reason. Strengthen: also assert `ready` contains `nest-0001`, then
-  `close nest-0001` and assert `ready` now **does** contain `nest-0002`.
-- `:81` asserts only that the root dependent appears in `blocked` — true regardless of whether the
-  nested dependency file was read. Strengthen: assert the blocker is rendered (`<- [nest-0001]`) and
-  that after closing the nested dep, `blocked` no longer lists `nest-0002`.
-
-These are not silent-fallback/self-passing tests (no swallowed exceptions, no try/except, no weakened
-assertions found anywhere in the new steps) — they are simply not tied to the behavior under change.
-
-### S5. `find … 2>/dev/null` swallows real errors
-`ticket:121` — a permission-denied subdirectory now silently omits its tickets from every listing.
-Combined with B1 this is the "everything silently disappears" family. Consider letting `find` stderr
-through (a genuinely missing `_tickets` is already handled by callers) or explicitly checking
-`[[ -d $TICKETS_DIR ]]` first and reporting anything else.
-
-### S6. Hidden subdirectories are now traversed
-Verified: `_tickets/.trash/zebra-title.md` becomes a listed ticket (`ls` count 4 → 5). Editor/sync
-sidecars (`.obsidian`, `.trash`, backup dirs) under `_tickets` will now surface as tickets. Either
-exclude dot-directories (`-name '.*' -prune -o …`) or state the rule explicitly in README ("every `.md`
-at any depth under `_tickets` is a ticket").
+Only hidden **directories** are pruned. Verified (`.tmp/probe2.out` section E): `_tickets/.draft.md` is
+listed by `ticket ls` exactly like a normal ticket. The three doc sites all say "Every non-hidden `.md`
+file at any depth under `_tickets/` is a ticket", which a reader will take to mean `.draft.md` is
+excluded. Either reword to "every `.md` file at any depth, except those inside hidden directories", or
+extend the prune to hidden files. I'd reword — the current behavior is the less surprising of the two
+(a dot-file the user explicitly created inside `_tickets` is plausibly a real ticket), and it is what the
+CHANGELOG already says ("Hidden directories … are skipped").
 
 ---
 
 ## NICE-TO-HAVE
 
-- `ticket:118-122`: `_collect_ticket_files` leaks its loop variable `f` into the global namespace — add
-  `local f`. The same NUL/line read-loop shape is duplicated at `ticket:933`; a tiny
-  `_read_lines_into <array>` helper is probably not worth it, but `local f` is free.
-- `ticket:1263`: `show` traverses the tree twice (once inside `ticket_path`'s command substitution,
-  once here). Fine at current scale; the WHY comment is good. If `show` ever gets slow, have
-  `ticket_path` write to a temp file or return the path plus have `_show_output` reuse it.
-- Newline-in-filename remains unsupported by `closed` (line-delimited `ls -t`), as the implementer
-  documented. Agreed 80/20 call; worth one line in the helper comment so the asymmetry with the
-  NUL-safe helper is discoverable.
-- bash 3.2 / macOS could not be exercised here (sandbox has bash 5.2 only). `${#arr[@]}` on an empty
-  array under `set -u` and `find -L … -print0` are believed fine on BSD, but a macOS CI job (or a
-  one-off manual check) would retire this assumption for good.
+- Pruning a hidden directory also removes any **non-hidden** subtree under it — verified
+  (`_tickets/.trash/keepme/x.md` is dropped, probe C). That is the right semantic (`-prune` is what makes
+  `.obsidian`/`.git` cheap), but one clause in `README.md` would prevent a "where did my folder go" bug
+  report.
+- Symlink loop under `_tickets` (`_tickets/self -> _tickets`): with the `2>/dev/null` gone, GNU find now
+  prints `File system loop detected` to stderr on every command; output is still correct and exit is 0
+  (probe H). Acceptable, and better than silence, but it will be permanent noise for anyone who does it.
+- `show` still traverses the tree twice — unchanged from iteration 1, still fine at current scale.
+- `cmd_closed` newline-in-filename limitation is now documented at the `ls -t` loop (`ticket:948-949`).
+  Agreed 80/20; nothing further needed.
+- macOS is still not exercised in CI. The flags are now documented-safe (below), but a `macos-latest`
+  job in `.github/workflows` would retire the whole class of assumption for a Homebrew-shipped tool.
+  Worth a follow-up ticket.
 
 ---
 
 ## VERIFIED-GOOD
 
-- **All 9 call sites swapped, none missed.** `grep -n 'TICKETS_DIR"/\*\.md'` over `ticket` returns
-  nothing; the only remaining enumeration primitives are `find` at `ticket:121` and `ls -t` at
-  `ticket:935`. `title_to_filename()`'s root-only collision check (`ticket:89-98`) is correctly left
-  alone, per the ticket.
-- **`make test` green on my own run**: 12 features / 153 scenarios / 1040 steps, 0 failed. The stale
-  "9 plugin tests fail due to /dev/shm noexec" note in the ticket is indeed obsolete (plugins removed in
-  `1d31fa0`); no such failures occurred. Pre-existing scenario count 131 unchanged.
-- **The new scenarios are real red-then-green tests**: 19 of 22 fail against `9f8ebdb`'s script. No
-  hidden-failure patterns; `find_ticket_file()`'s `glob → rglob` change
-  (`features/steps/ticket_steps.py:94`) is required for the fixture to locate moved files and does not
-  weaken any assertion.
-- **Bug fix 1 (exit 2 on empty tree) is real and correctly scoped.** Confirmed against the old script in
-  a repo containing only `_tickets/sub/`: `ls`, `ready`, `blocked`, `closed`, `query` all exited **2**;
-  new code exits **0** with empty output. Covered by 4 scenarios (`:150`, `:156`, `:162`, `:168`), each
-  of which fails on old code.
-- **Bug fix 2 (word-splitting in `closed`) is real.** The old `echo "$files" | xargs awk …` split on
-  whitespace; folder names are user-chosen, so this became reachable with this feature. The new
-  array-based read is correct. Covered by `:135` ("my archive/old stuff").
-- **Deviation 1 (`cmd_closed` not using `xargs -0 ls -t`) is justified and does not regress behavior.**
-  GNU `xargs` really does run the command on empty input. The replacement preserves both properties:
-  with 110 closed tickets I verified mtime-**descending** order (bulk 110, 109, 108 …) and identical
-  output to the old script for `closed --limit 200`; the 100-file cap survives as
-  `ls -t … | head -n 100`. Bonus: moving the `| head` into a process substitution removes the old
-  `pipefail`+SIGPIPE exposure that the command-substitution form had.
-- **Deviation 2 (dep-cycle scenario correction) is legitimate.** `cmd_dep_cycle` has always exited 0 and
-  printed `Cycle N: …`; asserting exit-0 + `Cycle 1:` + both IDs matches real behavior and still fails
-  against the old script (`:108` is in the failing list). No product behavior was changed to make a test
-  pass.
-- **Acceptance criteria**: covered for `ls`, `ready`, `blocked`, `closed`, `show`, `query`, `dep tree`,
-  `dep cycle`, `close`, `link`, `add-note`, deep (3-level) nesting, partial-ID resolution and ambiguity
-  detection across levels, and empty-subfolder handling. `status`/`start`/`unlink` are uncovered but
-  route through the same `ticket_path()`; acceptable under 80/20.
-- **No new dependencies**; `fd` correctly not introduced.
-- **Docs are accurate** for what was implemented: `ticket help` footer (`ticket:1529-1531`),
-  `README.md`, `ORIGINAL_README.md`, and CHANGELOG `Added`+`Fixed` entries all match observed behavior.
-  They should gain a line on ordering and (if B1/S6 are fixed as recommended) on symlink/dot-dir rules.
+### Portability of the new enumeration line — adjudicated, NOT blocking
+
+`find -L "$TICKETS_DIR" -mindepth 1 -name '.*' -type d -prune -o -type f -name '*.md' -print0 | LC_ALL=C sort -z`
+
+- **`sort -z` IS available on macOS.** macOS ships BSD sort (Apple `text_cmds`, the FreeBSD/Kovesdan
+  rewrite), whose man page documents verbatim: *"**-z, --zero-terminated** Use NUL as record separator.
+  By default, records in the files are supposed to be separated by the newline characters. With this
+  option, NUL ('\0') is used as a record separator character."* Present in the macOS man page dated
+  **March 19, 2015** (i.e. every macOS release Homebrew still supports) and identically in current
+  FreeBSD sort(1). GNU coreutils has it too. **Not a portability blocker.**
+- **`find -L`, `-mindepth`, `-prune`, `-print0`, `-name` are all documented in macOS `find(1)`**, with
+  `-mindepth` as *"Always true; do not apply any tests or actions at levels less than n"* and `-L`
+  making `-type f` report the **target's** type — which is precisely what S1 relies on. `-mindepth`
+  appears first in the expression, so GNU's "global option" warning is also avoided.
+- **The prune expression cannot drop legitimate tickets.** Precedence is
+  `(-mindepth 1 -a -name '.*' -a -type d -a -prune) -o (-type f -a -name '*.md' -a -print0)`;
+  `-mindepth 1` is "always true" so it does not break the left conjunction, and it is what stops a
+  dot-named `TICKETS_DIR` from pruning itself. Verified by hand: `TICKETS_DIR=<repo>/.tickets` lists its
+  tickets correctly (probe D). The only subtree lost is one under a hidden ancestor, which is the
+  intended rule (see NICE-TO-HAVE).
+
+### Every iteration-1 item genuinely resolved
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| **B1** symlinked `_tickets` → 0 tickets | **Fixed** | probe A: both root and nested tickets listed through a `_tickets -> vault` symlink, exit 0. Scenario `:196`/`:206` fail against `ca810fe`. |
+| **B2** `ls`/`query` order regression | **Fixed** | probe B: `alpha, backend/zebra, beta, kiwi, mango` — byte-wise **path** order, byte-identical across repeated runs (md5 match). Scenarios `:220`/`:230` fail against `ca810fe`. Ordering is now stated in CHANGELOG/README/help. |
+| **S1** symlinked ticket file dropped | **Fixed** | subsumed by `-L`; scenario `:213` fails against `ca810fe`. |
+| **S2** `cmd_show` unguarded array | **Fixed** | `ticket:1289-1293`; errors (`not found`, exit 1) instead of silently succeeding — the right call. All **10** `"${TICKET_FILES[@]}"` sites are now guarded; I grepped, none missed. |
+| **S3** `recent_files` unguarded | **Fixed** | `ticket:956-958`. |
+| **S4** non-discriminating scenarios | **Fixed properly** | `:81` now asserts the rendered blocker `<- [nest-0001]`; `:90` asserts the root dep IS listed; two new transition scenarios (close the dep → `blocked` drops it / `ready` gains it). Not weakened assertions — strengthened ones. |
+| **S5** `find … 2>/dev/null` swallowing errors | **Fixed, well-judged** | probe G: `find: '…/secret': Permission denied` now reaches stderr while the remaining tickets still list and exit stays 0. The `[[ -d "$TICKETS_DIR" ]] || return 0` pre-check keeps "no tickets dir yet" from becoming noise; dangling `_tickets` symlink still gets the clean `does not exist` message (probe I). |
+| **S6** hidden dirs traversed | **Fixed (prune)** | probe C: `.trash/` contents excluded. Scenario `:240` fails against `ca810fe`. Prune (not doc-only) was the right choice. |
+| **NTH** `local f` | **Fixed** | both loops. |
+
+### Other verified facts
+
+- **`make test` on my own run: 12 features / 167 scenarios / 1137 steps, 0 failed.** Pre-existing 131
+  scenarios all still present and green — no behavior-capturing test was removed or weakened anywhere in
+  this diff. Implementer's numbers are accurate.
+- **Red-then-green is real for the 6 substantive scenarios**: run against `ca810fe`, exactly
+  `:196 :206 :213 :220 :230 :240` fail. (The 6 stdin scenarios pass there too — see B3; the implementer
+  did *not* claim otherwise in the results table, only in the prose.)
+- **Filename robustness survives the new pipeline**: a ticket whose filename contains a literal newline
+  is still listed correctly through `find -print0 | sort -z` (probe F).
+- **The fix stayed in one place.** All of B1/B2/S1/S5/S6 are the single `_collect_ticket_files` line —
+  no per-call-site patching. The WHY comment block above it (`ticket:114-128`) explains each flag,
+  including why `-mindepth 1` is load-bearing. This is the DRY payoff the iteration-1 design promised.
+- **Docs updated coherently**: `ticket help` footer, `README.md`, `ORIGINAL_README.md`, CHANGELOG
+  `[Unreleased] / Added` all now state the ordering, hidden-dir and symlink rules (modulo S7's wording).
 
 ## Documentation Updates Needed
 
-- CHANGELOG: once B2 is fixed, note the ordering guarantee explicitly (`ls`/`query` sorted by path) —
-  users currently on this commit would otherwise see a silent shuffle.
-- README/ORIGINAL_README: state the "every `.md` at any depth is a ticket" rule, including whether
-  dot-directories are excluded, once S6 is decided.
+- The S7 wording fix in `README.md`, `ORIGINAL_README.md`, and the `ticket help` footer.
 - No CLAUDE.md change required.
+
+---
+
+## READY-TO-MERGE: **no** — 1 blocking item (test-only, ~4 lines) + 1 doc wording fix.
+
+To be explicit: **no product-code blocker remains**, and I would sign off on `ticket` as it stands. The
+block is B3 — six scenarios that assert a safety property they cannot actually observe. Fix the harness
+(or delete them and say the guards are inspection-only), reword S7, and this merges.
