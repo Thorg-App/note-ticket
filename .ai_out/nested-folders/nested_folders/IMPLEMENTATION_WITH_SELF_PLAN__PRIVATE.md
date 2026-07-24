@@ -49,6 +49,19 @@ Milestones:
 - [x] M5 GREEN: `_collect_ticket_files` rewrite + guards
 - [x] M6 docs (CHANGELOG ordering/symlink/hidden-dir rules, README) + PUBLIC/PRIVATE
 
+Iteration 2 result: 12 features, 167 scenarios passed, 0 failed, 1137 steps (`.tmp/test2.out`).
+RED commit `5ec302f` (6 failing), fix+docs commit follows. Ticket still OPEN, no change_log entry.
+
+Iteration 2 gotchas:
+7. `-mindepth 1` is REQUIRED with the `-name '.*' -type d -prune` rule, else a dot-named
+   TICKETS_DIR (TICKETS_DIR=.tickets) prunes its own starting point -> zero tickets.
+8. Behave's "re" matcher anchors patterns (^...$), so `I run "X" with stdin left open`
+   does not collide with the generic `I run "X"` step.
+9. Existing when-steps use stdin=DEVNULL, which MASKS an awk-reads-stdin hang (EOF right
+   away). Only a live Popen stdin=PIPE + communicate(timeout) reproduces it.
+10. Verified by hand in .tmp/it2: path ordering, symlinked dir, permission-denied
+    diagnostic now visible, missing dir still clean, dot-named root, dangling symlink.
+
 ## Gotchas learned (rehydrate a clone with these)
 1. `xargs -0 ls -t` with EMPTY input still runs `ls -t` (GNU), which lists the cwd ->
    awk then reads a directory -> exit 2. The ticket's literal plan for cmd_closed hit

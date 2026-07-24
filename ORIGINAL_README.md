@@ -8,6 +8,8 @@ Ticket filenames are derived from the title (e.g., `add-sse-connection-managemen
 
 Because identity lives in the frontmatter rather than the path, you can organize tickets into nested subfolders (e.g. `_tickets/backend/api/add-sse-connection-management.md`) by simply `mv`-ing the files. Every command — `ls`, `ready`, `blocked`, `closed`, `show`, `query`, `dep tree`, `dep cycle`, and all status/link/note edits — searches every nesting level. New tickets are always created at the top level of `_tickets/`.
 
+The rule is: every non-hidden `.md` file at any depth under `_tickets/` is a ticket. Hidden directories (`.trash`, `.obsidian`, editor/sync sidecars) are skipped, symlinked ticket files and a symlinked `_tickets/` directory are followed, and `ls`/`query` list tickets in byte-wise path order so output is deterministic.
+
 ## Install
 
 **Homebrew (macOS/Linux):**

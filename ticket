@@ -112,13 +112,29 @@ ensure_dir() {
 }
 
 # Recursively collect every ticket file under TICKETS_DIR into the TICKET_FILES global array.
-# Single source of truth for "what is a ticket file" — tickets may be organized in nested subfolders.
+# Single source of truth for "what is a ticket file": every non-hidden .md at any depth.
 # NUL-delimited read: robust to any filename; works on bash 3.2 (macOS) which lacks mapfile -d.
+#
+# find flags, all load-bearing:
+#   -L            follow symlinks, so a symlinked _tickets (notes vault) and symlinked
+#                 ticket files are seen; the pre-recursion glob resolved them too.
+#   -mindepth 1   never test the starting point itself, so a dot-named TICKETS_DIR
+#                 (e.g. ~/.tickets) is not pruned by the hidden-directory rule below.
+#   -name '.*' -type d -prune
+#                 skip editor/sync sidecars (.obsidian, .trash, .git) — their .md files
+#                 are not tickets.
+#   LC_ALL=C sort -z
+#                 byte-wise path order, so ls/query output is deterministic and
+#                 reproducible; find's raw traversal order is filesystem-dependent.
 _collect_ticket_files() {
+    local f
     TICKET_FILES=()
+    # A missing tickets dir is a normal state (nothing created yet); anything else find
+    # reports (permission denied, dangling symlink) is surfaced rather than swallowed.
+    [[ -d "$TICKETS_DIR" ]] || return 0
     while IFS= read -r -d '' f; do
         TICKET_FILES+=("$f")
-    done < <(find "$TICKETS_DIR" -type f -name '*.md' -print0 2>/dev/null)
+    done < <(find -L "$TICKETS_DIR" -mindepth 1 -name '.*' -type d -prune -o -type f -name '*.md' -print0 | LC_ALL=C sort -z)
 }
 
 # Get ticket file path by searching frontmatter id: fields (supports partial ID matching)
@@ -928,11 +944,17 @@ cmd_closed() {
     # Keep only the 100 most recently modified files; `ls -t` does the mtime sort.
     # WHY-NOT find -printf '%T@': not portable to BSD/macOS find.
     # Read line-by-line into an array so paths containing spaces survive.
+    # WHY-NOT NUL-delimited: `ls -t` output is line-delimited, so filenames containing
+    # newlines are unsupported here (unlike every other command). Deliberate 80/20.
+    local f
     local recent_files
     recent_files=()
     while IFS= read -r f; do
         recent_files+=("$f")
     done < <(ls -t "${TICKET_FILES[@]}" 2>/dev/null | head -n 100)
+    # `ls` can fail (ARG_MAX, permissions, files removed mid-run); an empty array would
+    # make awk read stdin.
+    (( ${#recent_files[@]} )) || return 0
 
     awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
     BEGIN { FS=": "; in_front=0 }
@@ -1261,8 +1283,14 @@ cmd_show() {
     target_id=$(id_from_file "$file")
 
     # Re-collect: ticket_path() ran in a command substitution subshell, so its
-    # TICKET_FILES did not propagate here. Non-empty because ticket_path() succeeded.
+    # TICKET_FILES did not propagate here. Normally non-empty (ticket_path() just
+    # succeeded), but guard anyway: the file could vanish between the two scans, and
+    # awk with no file operands would silently read stdin instead of erroring.
     _collect_ticket_files
+    if (( ${#TICKET_FILES[@]} == 0 )); then
+        echo "Error: ticket '$1' not found" >&2
+        return 1
+    fi
 
     _show_output() {
         awk -v target="$target_id" -v target_file="$file" '
@@ -1528,6 +1556,8 @@ Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
 Tickets may be organized into nested subfolders (e.g. _tickets/backend/api/foo.md)
 by simply moving the files; all commands search every nesting level.
+Every non-hidden .md file at any depth is a ticket; hidden directories
+(.trash, .obsidian, ...) are ignored. ls/query list in path order.
 New tickets are always created at the top level of _tickets/.
 EOF
 }
