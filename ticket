@@ -1526,6 +1526,9 @@ Commands:
 Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var).
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
+Tickets may be organized into nested subfolders (e.g. _tickets/backend/api/foo.md)
+by simply moving the files; all commands search every nesting level.
+New tickets are always created at the top level of _tickets/.
 EOF
 }
 
