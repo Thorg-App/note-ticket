@@ -6,6 +6,10 @@ Tickets are markdown files with YAML frontmatter in `_tickets/`. This allows AI 
 
 Ticket filenames are derived from the title (e.g., `add-sse-connection-management.md`) while a random 25-character ID in the YAML frontmatter serves as the stable identifier for dependencies, links, and lookups.
 
+Because identity lives in the frontmatter rather than the path, you can organize tickets into nested subfolders (e.g. `_tickets/backend/api/add-sse-connection-management.md`) by simply `mv`-ing the files. Every command — `ls`, `ready`, `blocked`, `closed`, `show`, `query`, `dep tree`, `dep cycle`, and all status/link/note edits — searches every nesting level. New tickets are always created at the top level of `_tickets/`.
+
+The rule is: every `.md` file at any depth under `_tickets/` is a ticket, except those inside a hidden directory. Hidden directories (`.trash`, `.obsidian`, editor/sync sidecars) are skipped along with their entire subtree; hidden *files* are not skipped, so `_tickets/.draft.md` is listed like any other ticket. Symlinked ticket files and a symlinked `_tickets/` directory are followed, and `ls`/`query` list tickets in byte-wise path order so output is deterministic.
+
 ## Install
 
 **Homebrew (macOS/Linux):**

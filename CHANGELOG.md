@@ -7,8 +7,12 @@
 - `closed_iso` field automatically set when ticket is closed, removed when reopened
 - Ticket IDs now use `nid_` prefix and `_e` suffix (e.g. `nid_7f209dtd2styppry2w3uqlg8c_e`). Existing tickets are not affected.
 
+- Nested subfolders under `_tickets/` are now supported for organizing tickets (e.g. `_tickets/backend/api/foo.md`). Move ticket files with `mv`; every command searches all nesting levels. New tickets are still created at the top level of `_tickets/`. Hidden directories (`.trash`, `.obsidian`, ...) are skipped; `ls` and `query` list tickets in byte-wise path order.
+
 ### Fixed
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
+- `ls`, `ready`, `blocked`, `closed`, `query`, `dep tree`, and `dep cycle` exited with code 2 and an awk error when no ticket files existed; they now exit 0 with no output
+- `closed` no longer mangles paths containing spaces
 
 ### Removed
 - Removed `migrate-beads` command

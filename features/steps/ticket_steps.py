@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import signal
 import subprocess
 from pathlib import Path
 
@@ -91,7 +92,8 @@ def find_ticket_file(context, ticket_id):
     if not tickets_dir.exists():
         raise FileNotFoundError(f"Tickets directory not found at {tickets_dir}")
 
-    for md_file in tickets_dir.glob('*.md'):
+    # rglob: ticket files may live in nested subfolders under _tickets/
+    for md_file in tickets_dir.rglob('*.md'):
         content = md_file.read_text()
         if re.search(rf'^id:\s*{re.escape(ticket_id)}\s*$', content, re.MULTILINE):
             return md_file
@@ -170,6 +172,56 @@ def step_ticket_exists(context, ticket_id, title):
     """Create a ticket with given ID and title (basic, no extra params)."""
     # This is the most generic form - the more specific ones should be defined first
     create_ticket(context, ticket_id, title)
+
+
+@given(r'I move ticket "(?P<ticket_id>[^"]+)" to subfolder "(?P<subfolder>[^"]+)"')
+def step_move_ticket_to_subfolder(context, ticket_id, subfolder):
+    """Move a ticket file into a (possibly deep) subfolder under _tickets/."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    target_dir = Path(context.test_dir) / '_tickets' / subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / ticket_path.name
+    ticket_path.rename(target_path)
+    context.tickets[ticket_id] = target_path
+
+
+@given(r'I rename the file of ticket "(?P<ticket_id>[^"]+)" to "(?P<filename>[^"]+)"')
+def step_rename_ticket_file(context, ticket_id, filename):
+    """Rename a ticket file in place, keeping it in the same directory."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    target_path = ticket_path.parent / filename
+    ticket_path.rename(target_path)
+    context.tickets[ticket_id] = target_path
+
+
+@given(r'an empty subfolder "(?P<subfolder>[^"]+)" exists under the tickets directory')
+def step_empty_subfolder_exists(context, subfolder):
+    """Create an empty (ticket-free) subfolder under _tickets/."""
+    (Path(context.test_dir) / '_tickets' / subfolder).mkdir(parents=True, exist_ok=True)
+
+
+@given(r'the tickets directory is replaced by a symlink to "(?P<real_dir>[^"]+)"')
+def step_tickets_dir_is_symlink(context, real_dir):
+    """Move _tickets/ aside and put a symlink in its place, as a notes-vault setup would."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
+    target_dir = Path(context.test_dir) / real_dir
+    tickets_dir.rename(target_dir)
+    tickets_dir.symlink_to(target_dir)
+    # Re-point tracked paths at the moved files so later assertions still resolve.
+    for ticket_id, path in getattr(context, 'tickets', {}).items():
+        context.tickets[ticket_id] = target_dir / path.relative_to(target_dir.parent / '_tickets')
+
+
+@given(r'ticket "(?P<ticket_id>[^"]+)" is moved out of the tickets directory and symlinked back')
+def step_ticket_file_is_symlink(context, ticket_id):
+    """Replace a ticket file with a symlink pointing outside _tickets/."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    external_dir = Path(context.test_dir) / 'external'
+    external_dir.mkdir(parents=True, exist_ok=True)
+    external_path = external_dir / ticket_path.name
+    ticket_path.rename(external_path)
+    ticket_path.symlink_to(external_path)
+    context.tickets[ticket_id] = ticket_path
 
 
 @given(r'ticket "(?P<ticket_id>[^"]+)" has status "(?P<status>[^"]+)"')
@@ -394,6 +446,66 @@ def step_run_command_with_env(context, command, tickets_dir):
     context.stdout = result.stdout.strip()
     context.stderr = result.stderr.strip()
     context.returncode = result.returncode
+    context.last_command = command
+
+
+STDIN_OPEN_TIMEOUT_SECONDS = 20
+
+
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with stdin left open')
+def step_run_command_stdin_left_open(context, command):
+    """Run a command with an open, never-written stdin pipe.
+
+    WHY: `awk 'prog'` with no file operands reads stdin. If a command ever passes an
+    empty file list to awk it would block forever on a terminal; a live pipe reproduces
+    that, and the timeout turns the hang into a test failure instead of a stuck CI job.
+
+    WHY-NOT `stdin=subprocess.PIPE`: `communicate()` closes a PIPE stdin immediately when
+    given no input, so awk sees EOF at once and a hanging script would still pass. We hand
+    the child a raw pipe read end and keep the write end open in this process, so its stdin
+    never reaches EOF.
+
+    WHY `start_new_session` + `killpg`: on timeout the child is a bash wrapper whose awk
+    grandchild holds the stdout pipe. Killing only the wrapper leaves awk alive and the
+    follow-up `communicate()` never returns, hanging the suite instead of failing it.
+    """
+    command = command.replace('\\"', '"')
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+    cwd = getattr(context, 'working_dir', context.test_dir)
+
+    read_fd, write_fd = os.pipe()
+    try:
+        process = subprocess.Popen(
+            cmd,
+            shell=True,
+            cwd=cwd,
+            stdin=read_fd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=os.environ.copy(),
+            start_new_session=True
+        )
+        os.close(read_fd)
+        read_fd = -1  # Popen duplicated it; only the child holds the read end now.
+        try:
+            stdout, stderr = process.communicate(timeout=STDIN_OPEN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            process.communicate()
+            raise AssertionError(
+                f"Command blocked on stdin for more than {STDIN_OPEN_TIMEOUT_SECONDS}s: [{cmd}]"
+            )
+    finally:
+        if read_fd != -1:
+            os.close(read_fd)
+        os.close(write_fd)
+
+    context.result = process
+    context.stdout = stdout.strip()
+    context.stderr = stderr.strip()
+    context.returncode = process.returncode
     context.last_command = command
 
 
@@ -768,6 +880,18 @@ def step_dep_tree_order(context, first_id, second_id):
         f"Expected '{first_id}' (line {first_line + 1}) before '{second_id}' (line {second_line + 1})\nOutput:\n{output}"
 
 
+@then(r'the output should have "(?P<first>[^"]+)" before "(?P<second>[^"]+)"')
+def step_output_order(context, first, second):
+    """Assert first text appears before second text in the output."""
+    output = context.stdout
+    first_pos = output.find(first)
+    second_pos = output.find(second)
+    assert first_pos != -1, f"'{first}' not found in output:\n{output}"
+    assert second_pos != -1, f"'{second}' not found in output:\n{output}"
+    assert first_pos < second_pos, \
+        f"Expected '{first}' before '{second}'\nOutput:\n{output}"
+
+
 @then(r'every JSONL line should have field "(?P<field>[^"]+)"')
 def step_every_jsonl_line_has_field(context, field):
     """Assert every JSONL line has a specific field."""
@@ -807,3 +931,12 @@ def step_file_named_exists_in_tickets(context, filename):
     file_path = tickets_dir / filename
     assert file_path.exists(), \
         f"File {filename} does not exist in _tickets/\nFiles present: {[f.name for f in tickets_dir.glob('*.md')]}"
+
+
+@then(r'ticket "(?P<ticket_id>[^"]+)" should be located in subfolder "(?P<subfolder>[^"]+)"')
+def step_ticket_located_in_subfolder(context, ticket_id, subfolder):
+    """Assert the ticket file still lives in the given subfolder under _tickets/."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    expected_dir = Path(context.test_dir) / '_tickets' / subfolder
+    assert ticket_path.parent == expected_dir, \
+        f"Expected ticket '{ticket_id}' in {expected_dir} but found it in {ticket_path.parent}"

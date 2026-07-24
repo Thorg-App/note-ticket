@@ -111,6 +111,32 @@ ensure_dir() {
     mkdir -p "$TICKETS_DIR"
 }
 
+# Recursively collect every ticket file under TICKETS_DIR into the TICKET_FILES global array.
+# Single source of truth for "what is a ticket file": every non-hidden .md at any depth.
+# NUL-delimited read: robust to any filename; works on bash 3.2 (macOS) which lacks mapfile -d.
+#
+# find flags, all load-bearing:
+#   -L            follow symlinks, so a symlinked _tickets (notes vault) and symlinked
+#                 ticket files are seen; the pre-recursion glob resolved them too.
+#   -mindepth 1   never test the starting point itself, so a dot-named TICKETS_DIR
+#                 (e.g. ~/.tickets) is not pruned by the hidden-directory rule below.
+#   -name '.*' -type d -prune
+#                 skip editor/sync sidecars (.obsidian, .trash, .git) — their .md files
+#                 are not tickets.
+#   LC_ALL=C sort -z
+#                 byte-wise path order, so ls/query output is deterministic and
+#                 reproducible; find's raw traversal order is filesystem-dependent.
+_collect_ticket_files() {
+    local f
+    TICKET_FILES=()
+    # A missing tickets dir is a normal state (nothing created yet); anything else find
+    # reports (permission denied, dangling symlink) is surfaced rather than swallowed.
+    [[ -d "$TICKETS_DIR" ]] || return 0
+    while IFS= read -r -d '' f; do
+        TICKET_FILES+=("$f")
+    done < <(find -L "$TICKETS_DIR" -mindepth 1 -name '.*' -type d -prune -o -type f -name '*.md' -print0 | LC_ALL=C sort -z)
+}
+
 # Get ticket file path by searching frontmatter id: fields (supports partial ID matching)
 ticket_path() {
     local search="$1"
@@ -118,9 +144,8 @@ ticket_path() {
     read -r search <<< "$search"
 
     # Guard: no .md files means no tickets
-    local md_files
-    md_files=("$TICKETS_DIR"/*.md)
-    if [[ ! -f "${md_files[0]}" ]]; then
+    _collect_ticket_files
+    if (( ${#TICKET_FILES[@]} == 0 )); then
         echo "Error: ticket '$search' not found" >&2
         return 1
     fi
@@ -148,7 +173,7 @@ ticket_path() {
         if (partial_count > 1) { printf "Error: ambiguous ID \x27%s\x27 matches multiple tickets\n", search > "/dev/stderr"; exit 1 }
         printf "Error: ticket \x27%s\x27 not found\n", search > "/dev/stderr"; exit 1
     }
-    ' "${md_files[@]}")
+    ' "${TICKET_FILES[@]}")
 
     local rc=$?
     if [[ $rc -ne 0 ]]; then
@@ -405,6 +430,9 @@ cmd_dep_tree() {
         return 1
     fi
 
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
+
     awk -v root_pattern="$root_id" -v full_mode="$full_mode" '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
@@ -585,10 +613,13 @@ cmd_dep_tree() {
             print_stack_path[print_sp] = path
         }
     }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null
+    ' "${TICKET_FILES[@]}"
 }
 
 cmd_dep_cycle() {
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
+
     awk '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
@@ -696,7 +727,7 @@ cmd_dep_cycle() {
             }
         }
     }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null
+    ' "${TICKET_FILES[@]}"
 }
 
 cmd_dep() {
@@ -764,6 +795,9 @@ cmd_ls() {
         esac
     done
 
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
+
     awk -v status_filter="$status_filter" -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
@@ -795,7 +829,7 @@ cmd_ls() {
             printf "%-8s [%s] - %s%s\n", id, status, title, dep_str
         }
     }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null
+    ' "${TICKET_FILES[@]}"
 }
 
 cmd_ready() {
@@ -809,6 +843,9 @@ cmd_ready() {
             *) shift ;;
         esac
     done
+
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
 
     awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
     BEGIN { FS=": "; in_front=0 }
@@ -885,7 +922,7 @@ cmd_ready() {
             printf "%-8s [P%s][%s] - %s\n", f[2], f[1], f[3], f[4]
         }
     }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null
+    ' "${TICKET_FILES[@]}"
 }
 
 cmd_closed() {
@@ -901,11 +938,25 @@ cmd_closed() {
         esac
     done
 
-    # List files by mtime (most recent first), filter closed, limit output
-    local files
-    files=$(ls -t "$TICKETS_DIR"/*.md 2>/dev/null | head -n 100)
-    [[ -z "$files" ]] && return 0
-    echo "$files" | xargs awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
+
+    # Keep only the 100 most recently modified files; `ls -t` does the mtime sort.
+    # WHY-NOT find -printf '%T@': not portable to BSD/macOS find.
+    # Read line-by-line into an array so paths containing spaces survive.
+    # WHY-NOT NUL-delimited: `ls -t` output is line-delimited, so filenames containing
+    # newlines are unsupported here (unlike every other command). Deliberate 80/20.
+    local f
+    local recent_files
+    recent_files=()
+    while IFS= read -r f; do
+        recent_files+=("$f")
+    done < <(ls -t "${TICKET_FILES[@]}" 2>/dev/null | head -n 100)
+    # `ls` can fail (ARG_MAX, permissions, files removed mid-run); an empty array would
+    # make awk read stdin.
+    (( ${#recent_files[@]} )) || return 0
+
+    awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) emit()
@@ -932,7 +983,7 @@ cmd_closed() {
         if (prev_file) emit()
         for (i = 1; i <= count; i++) print output[i]
     }
-    ' | head -n "$limit"
+    ' "${recent_files[@]}" | head -n "$limit"
 }
 
 cmd_blocked() {
@@ -946,6 +997,9 @@ cmd_blocked() {
             *) shift ;;
         esac
     done
+
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
 
     awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
     BEGIN { FS=": "; in_front=0 }
@@ -1031,7 +1085,7 @@ cmd_blocked() {
             printf "%-8s [P%s][%s] - %s <- %s\n", f[2], f[1], f[3], f[4], f[5]
         }
     }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null
+    ' "${TICKET_FILES[@]}"
 }
 
 cmd_undep() {
@@ -1228,6 +1282,16 @@ cmd_show() {
     local target_id
     target_id=$(id_from_file "$file")
 
+    # Re-collect: ticket_path() ran in a command substitution subshell, so its
+    # TICKET_FILES did not propagate here. Normally non-empty (ticket_path() just
+    # succeeded), but guard anyway: the file could vanish between the two scans, and
+    # awk with no file operands would silently read stdin instead of erroring.
+    _collect_ticket_files
+    if (( ${#TICKET_FILES[@]} == 0 )); then
+        echo "Error: ticket '$1' not found" >&2
+        return 1
+    fi
+
     _show_output() {
         awk -v target="$target_id" -v target_file="$file" '
     BEGIN { FS=": "; in_front=0 }
@@ -1360,7 +1424,7 @@ cmd_show() {
             }
         }
     }
-    ' "$TICKETS_DIR"/*.md 2>/dev/null
+    ' "${TICKET_FILES[@]}"
     }
 
     if [[ -t 1 && -n "$TICKET_PAGER" ]]; then
@@ -1427,9 +1491,12 @@ cmd_query() {
         esac
     done
 
+    _collect_ticket_files
+    (( ${#TICKET_FILES[@]} )) || return 0
+
     # Generate all JSON using shared _file_to_jsonl (always includes full_path)
     local json_output
-    json_output=$(_file_to_jsonl "$TICKETS_DIR"/*.md 2>/dev/null)
+    json_output=$(_file_to_jsonl "${TICKET_FILES[@]}")
 
     if [[ -n "$filter" ]]; then
         echo "$json_output" | jq -c "select($filter)"
@@ -1487,6 +1554,13 @@ Commands:
 Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var).
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
+Tickets may be organized into nested subfolders (e.g. _tickets/backend/api/foo.md)
+by simply moving the files; all commands search every nesting level.
+Every .md file at any depth is a ticket, except those inside a hidden
+directory (.trash, .obsidian, ...) - such folders are skipped whole.
+Hidden files are NOT skipped (_tickets/.draft.md is a ticket).
+ls/query list in path order.
+New tickets are always created at the top level of _tickets/.
 EOF
 }
 
