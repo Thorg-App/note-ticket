@@ -107,6 +107,30 @@ Feature: Ticket Creation
     Then the command should succeed
     And a file named "my-test-ticket.md" should exist in tickets directory
 
+  Scenario Outline: Filesystem-problematic characters are stripped from filename
+    When I run "ticket create '<title>'"
+    Then the command should succeed
+    And a file named "<filename>" should exist in tickets directory
+
+    Examples: problematic characters
+      | title                   | filename                |
+      | Fix [urgent] bug        | fix-urgent-bug.md       |
+      | Wildcards * and ? here  | wildcards-and-here.md   |
+      | Path a/b sep            | path-ab-sep.md          |
+      | Colon x:y and amp a&b   | colon-xy-and-amp-ab.md  |
+      | Angle <a> and semi c;d  | angle-a-and-semi-cd.md  |
+      | Dollar $HOME expansion  | dollar-home-expansion.md |
+
+  Scenario: Title made only of problematic characters falls back to untitled
+    When I run "ticket create '[[]]'"
+    Then the command should succeed
+    And a file named "untitled.md" should exist in tickets directory
+
+  Scenario: Stripped characters are still preserved in the title frontmatter
+    When I run "ticket create 'Fix [urgent] bug'"
+    Then the command should succeed
+    And the created ticket should have field "title" with value "Fix [urgent] bug"
+
   Scenario: Duplicate title creates suffixed filename
     When I run "ticket create 'Duplicate'"
     And I run "ticket create 'Duplicate'"
