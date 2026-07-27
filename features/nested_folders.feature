@@ -98,6 +98,35 @@ Feature: Nested Folders Under _tickets
     Then the command should succeed
     And the output should not contain "nest-0002"
 
+  Scenario: Ready excludes a ticket whose open dependency lives in a subfolder
+    Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
+    And a ticket exists with ID "nest-0002" and title "Dependent ticket"
+    And ticket "nest-0002" depends on "nest-0001"
+    And I move ticket "nest-0001" to subfolder "backend"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should not contain "nest-0002"
+
+  Scenario: Ready excludes a nested ticket whose open dependency is nested elsewhere
+    Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
+    And a ticket exists with ID "nest-0002" and title "Dependent ticket"
+    And ticket "nest-0002" depends on "nest-0001"
+    And I move ticket "nest-0001" to subfolder "backend/api"
+    And I move ticket "nest-0002" to subfolder "frontend"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should not contain "nest-0002"
+
+  Scenario: Ready includes a ticket once its nested dependency closes
+    Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
+    And a ticket exists with ID "nest-0002" and title "Dependent ticket"
+    And ticket "nest-0002" depends on "nest-0001"
+    And I move ticket "nest-0001" to subfolder "backend"
+    When I run "ticket close nest-0001"
+    And I run "ticket ready"
+    Then the command should succeed
+    And the output should contain "nest-0002"
+
   Scenario: Ready lists the root dependency but not the blocked nested ticket
     Given a ticket exists with ID "nest-0001" and title "Dependency ticket"
     And a ticket exists with ID "nest-0002" and title "Dependent ticket"
