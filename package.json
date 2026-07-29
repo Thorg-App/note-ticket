@@ -1,0 +1,16 @@
+{
+  "name": "note-ticket",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript implementation of the ticket CLI (strangler-fig port of ./ticket)",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/ticket.mjs --banner:js=\"#!/usr/bin/env node\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

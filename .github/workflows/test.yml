@@ -13,5 +13,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # `make test` builds dist/ticket.mjs first (bash `ticket` delegates TS_COMMANDS to it)
       - name: Run tests
         run: make test
