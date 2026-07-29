@@ -1,17 +1,17 @@
 ---
 id: nid_604l3jerigu3ikyq68958lxy7_e
-title: "TS port 1: scaffold TS project + hybrid bash dispatcher"
-status: open
+title: 'TS port 1: scaffold TS project + hybrid bash dispatcher'
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-07-29T21:57:24Z
-status_updated_iso: 2026-07-29T21:57:24Z
+created_iso: '2026-07-29T21:57:24Z'
+status_updated_iso: '2026-07-29T22:00:26Z'
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 Read docs-internal/migration-to-ts-high-level.md first (the migration plan; strangler-fig strategy).
 
 Scope:
@@ -22,4 +22,3 @@ Scope:
 - CI (.github/workflows): install Node, build the bundle, run the BDD suite.
 
 Acceptance: make test fully green with help present in TS_COMMANDS. Removing a name from TS_COMMANDS must instantly roll a command back to bash.
-
