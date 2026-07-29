@@ -2,7 +2,7 @@
 id: nid_2ziai8ka9l0yak2lxnwlu9lk2_e
 title: "TS port 5: write commands (create, status, dep/undep, link/unlink, add-note, edit)"
 status: open
-deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_8cislepljqvv88ayndtjlw34k_e]
+deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_8cislepljqvv88ayndtjlw34k_e, nid_5g3eta9cf7yi6iukmscxma6wc_e]
 links: []
 created_iso: 2026-07-29T21:57:25Z
 status_updated_iso: 2026-07-29T21:57:25Z

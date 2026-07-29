@@ -189,3 +189,143 @@ No `#QUESTION_FOR_HUMAN` from me on the `dep cycle` divergence — I reproduced 
 independently and it is a clear bug with zero BDD blast radius. The one item a human may want to
 confirm is SF-3.1 (empty-ID resolution now failing where bash could succeed), which is the same
 category of intentional error-path change the implementer already flagged as divergence 6.
+
+---
+
+# Round 1 re-review — commit `38ea6b0` (sign-off pass)
+
+Both gating findings are genuinely fixed, not papered over. I re-ran everything and
+re-measured the two behaviors I originally caught. **READY.**
+
+## Test results (I re-ran these; they match the implementer's claim exactly)
+
+| Command | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0, clean |
+| `npm test` / `make unit-test` | **167 tests, 24 suites, 167 pass, 0 fail, 0 skipped** (was 154) |
+| `make test` | **12 features, 180 scenarios, 1205 steps, 0 failed**, exit 0 |
+
+## Nothing regressed elsewhere
+
+`git diff --stat cd5b657..38ea6b0 -- ticket features/ CHANGELOG.md` → **empty**.
+`TS_COMMANDS="help --help -h"` unchanged (`ticket:1572`). The diff touches only
+`src/core/{frontmatter,id,ticket-store}.ts`, the three matching test files, `_tickets/*` and
+`.ai_out/*`. No new files, no new dependencies, no build/make changes.
+
+## SF-1 (atomic save) — VERIFIED FIXED
+
+`save()` writes `${ticket.path}.tmp.${process.pid}` then `renameSync`. Checked each thing
+you asked about:
+
+- **Scratch naming**: same construction as bash `${file}.tmp.$$` (`ticket:61`) and it does
+  **not** end in `.md`, so a crash between write and rename leaves a file `collectFiles`
+  will not report as a ticket. A named constant plus a doc comment state exactly that, and
+  the test mirrors the suffix.
+- **Failure path**: `catch { discardScratch(tempPath); throw error; }` — the ORIGINAL error
+  propagates. `discardScratch`'s own `catch {}` cannot mask it, and the doc comment says so.
+- **Test strength**: the failure-injection test squats a *directory* on the scratch path, so
+  the write really fails, then asserts the previous content is still readable and no extra
+  `.md` appeared. That fails against the old truncating `writeFileSync`.
+- Symlinked ticket files behave as bash does (both replace the link with a regular file).
+
+Non-blocking observation: `rmSync(path, { force: true, recursive: true })` — `recursive` is
+broader than a scratch *file* needs and would delete a directory `save` did not create. The
+test still passes without it. Worth dropping next time the file is touched; not worth a
+round trip now.
+
+## SF-2 (unterminated frontmatter) — VERIFIED FIXED, and preserve is the right choice
+
+I re-measured with my own harness rather than trusting the tests. Byte-exact round trip now
+holds for **all** shapes, including one the tests do not cover (prologue + unterminated):
+
+```
+"---\nid: x\nstatus: open"            -> identical
+"---\nid: x\nstatus: open\n"          -> identical   (no more injected blank line + ---)
+"prologue\n---\nid: x\nstatus: open"  -> identical
+"---\nid: x\n---\nbody\n"             -> identical
+"no frontmatter\n"                    -> identical
+```
+
+Field edit on an unterminated block → `"---\nid: x\nstatus: closed\n"`, i.e. no
+restructuring. **Preserve-not-repair is correct**: bash's `sed` rewrites one line and never
+adds a terminator, so preserving is the parity-faithful option *and* the least surprising —
+a tool asked to change one field should not rewrite the file's structure. The `BlockShape`
+union makes the three cases explicit at the type level, which is better than the boolean it
+replaced. The new tests pin the exact two inputs I originally measured, so reverting the fix
+fails them.
+
+Non-blocking, T5-relevant: `withBodyAppended` routes through `TicketDocument.of`, which
+hardcodes `"terminated"`, so appending to an unterminated doc still restructures it —
+`"---\nid: x\nstatus: open\n\n---\n\n## Note\n"`, where bash `add-note` would append with no
+injected `---`. That slightly overreaches the new class-doc claim ("a malformed file is
+edited, never silently repaired"). Only reachable once T5 ports `add-note`; flagging so T5
+either preserves the shape or lists it as divergence 11.
+
+## SF-3 (divergence list, now 10) — spot-checks accurate
+
+I re-verified two entries I had not personally surfaced in round 0:
+
+- **Divergence 4** (`deps: [a, , b]`): real `_file_to_jsonl` emits `{"deps":["a",,"b"]}` —
+  invalid JSON; core emits `["a","b"]`. **Listed accurately.**
+- **Divergence 3** (`id:foo`, no space): `substr($0,5)` of `id:foo` is `oo` in `ticket_path`,
+  while the separate `_file_to_jsonl` path yields the key `"id:foo"` (divergence 2). The two
+  bash code paths are correctly listed as two separate entries. **Listed accurately.**
+
+Divergences 8 and 9 are the ones I surfaced; both now carry code docs and tests. Deleting
+`TicketId.isWellFormed` and replacing its test with `assert.match(/^nid_[a-z0-9]{25}_e$/)`
+plus an alphabet-coverage test keeps the shape pinned without dead API — a better outcome
+than what I asked for.
+
+I also note, in the implementer's favour, that the disposition table self-corrects its own
+round-0 error (it had claimed the empty-search guard "matched bash"; `awk index(s,"")` is 1,
+not 0) and labels it plainly instead of quietly editing it. That materially raises my
+confidence in the rest of the write-up.
+
+## Empty-ID: deferring to a human at cutover is the RIGHT call
+
+Keeping the TS behavior and raising `decide` ticket `nid_5g3eta9cf7yi6iukmscxma6wc_e` is
+correct, and the ticket is well built (both id-resolution divergences, the live evidence, a
+per-decision acceptance criterion, `decide` tag, `priority: 1`, and the ticket ID is named
+in the `src/core/id.ts` comment). Deferring is right because **nothing user-visible has
+changed**: no command is flipped, so there is no behavior to decide about until T3/T4/T5.
+Settling it now would mean blocking a zero-user-impact library commit on a human round trip.
+I also agree with the recommendation itself — bash letting `tk close "$UNSET_VAR"` mutate the
+sole ticket in a repo is a bug, not a contract worth porting.
+
+**One follow-through (not a gate on T2):** the decide ticket is not in the `deps` of T3/T4/T5
+(T3=[T2], T4=[T2, harness], T5=[T2, T4]), so the "confirm before flipping" gate exists in
+prose but not in structure — exactly the weakness the implementer correctly *fixed* for S-7
+by making the harness dependency structural. Adding `nid_5g3eta9cf7yi6iukmscxma6wc_e` to T4
+and T5 `deps` is a one-line frontmatter edit and would close the loop.
+
+## The two rejections — both ACCEPTED on the merits
+
+- **S-5 (recursion → explicit stack machine): accept the rejection.** Recursion depth is
+  bounded by dependency-chain length; a chain deep enough to exhaust the JS stack is not a
+  real ticket graph, and converting three readable recursions into bash-shaped stack
+  machines would spend exactly the readability this port exists to buy. I flagged it as
+  "not worth fixing now" and stand by that.
+- **S-6 (`Number()` accepts strnum forms awk does not, e.g. `0x1F`): accept the rejection.**
+  Unreachable — priority is 0–4 and written by `create`. Hand-rolling a numeric parser for
+  an input no user produces is anti-KISS. I marked it "no action" in round 0.
+
+Both rejections represent my round-0 position accurately. **No disagreement; nothing to
+escalate.**
+
+## Verdict
+
+**READY.** No BLOCKING and no SHOULD-FIX items remain. Both gating findings are fixed with
+regression tests that genuinely fail against the old code, verified independently by me;
+tsc clean; 167/167 unit; 180 scenarios / 1205 steps green; `ticket`, `features/`,
+`CHANGELOG.md` and `TS_COMMANDS` untouched. Sign-off granted.
+
+Carry-forwards for the coordinator (none block this ticket):
+1. Add `nid_5g3eta9cf7yi6iukmscxma6wc_e` to T4 and T5 `deps` so the human ID-resolution
+   decision structurally gates the cutover.
+2. T5: `withBodyAppended` restructures an unterminated block — preserve the shape or list it
+   as divergence 11.
+3. Whenever `ticket-store.ts` is next touched: drop `recursive: true` from `discardScratch`.
+
+No `#QUESTION_FOR_HUMAN` from me. The one human decision this ticket produces
+(ID-resolution error paths, divergences 6 and 10) is correctly captured as a `decide`-tagged
+ticket rather than blocking T2.

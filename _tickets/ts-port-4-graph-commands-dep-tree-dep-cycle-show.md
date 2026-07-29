@@ -2,7 +2,7 @@
 id: nid_8cislepljqvv88ayndtjlw34k_e
 title: "TS port 4: graph commands (dep tree, dep cycle, show)"
 status: open
-deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_mgfn04pyn3byxj72xxq0mggw5_e]
+deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_mgfn04pyn3byxj72xxq0mggw5_e, nid_5g3eta9cf7yi6iukmscxma6wc_e]
 links: []
 created_iso: 2026-07-29T21:57:25Z
 status_updated_iso: 2026-07-29T21:57:25Z
