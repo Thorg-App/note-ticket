@@ -1,17 +1,17 @@
 ---
 id: nid_ropjwdm792a5qqyu2u0zeuna1_e
-title: "TS port 2: core data-model library (shared with future visualization)"
-status: open
+title: 'TS port 2: core data-model library (shared with future visualization)'
+status: in_progress
 deps: [nid_604l3jerigu3ikyq68958lxy7_e]
 links: []
-created_iso: 2026-07-29T21:57:24Z
-status_updated_iso: 2026-07-29T21:57:24Z
+created_iso: '2026-07-29T21:57:24Z'
+status_updated_iso: '2026-07-29T22:22:40Z'
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 Read docs-internal/migration-to-ts-high-level.md first. Reference implementation is the bash script ./ticket.
 
 Build src/core/ - the data-model layer that both the CLI and the future graph visualization will import. HARD RULE: core has zero CLI knowledge (no process.argv, no output formatting).
@@ -24,4 +24,3 @@ Modules:
 - src/core/dep-graph.ts - graph build from tickets; ready/blocked computation (unknown dep ids count as NOT closed, i.e. blocking); cycle detection; dependency tree layout primitives.
 
 Unit tests for all of the above (vitest or node:test - pick one, keep it simple). BDD suite untouched and green (no delegation flips in this ticket).
-
