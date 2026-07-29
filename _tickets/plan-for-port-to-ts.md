@@ -1,16 +1,16 @@
 ---
 id: nid_5nqmwj9ni9mquf1uf8hodswqw_e
-title: "plan for port to TS"
-status: open
+title: plan for port to TS
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-07-29T19:46:11Z
-status_updated_iso: 2026-07-29T19:46:11Z
+created_iso: '2026-07-29T19:46:11Z'
+status_updated_iso: '2026-07-29T19:46:46Z'
 type: task
 priority: 3
 assignee: nickolaykondratyev
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 GOAL create plan and tickets for PORT of /home/nickolaykondratyev/git_repos/note-ticket/ticket from bash to Typescript.
 
 The end goal is still easy to use CLI that retains the same interface, but instead of running it in bash it would use Node.
