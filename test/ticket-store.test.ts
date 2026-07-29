@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, describe, it } from "node:test";
 
 import { TicketsDirectory, TicketStore } from "../src/core/ticket-store.js";
+
+/** Mirrors the scratch name `TicketStore.save` uses; deliberately not a `.md`. */
+const SCRATCH_SUFFIX = `.tmp.${process.pid}`;
 
 /** Builds a throwaway tickets tree and returns paths relative to its root. */
 class TicketsTree {
@@ -156,8 +160,18 @@ describe("TicketStore symlink handling", () => {
         );
     });
 
-    it("terminates on a symlink loop", () => {
-        assert.ok(new TicketStore(tree.root).collectFiles().length > 0);
+    /**
+     * The loop guard is an ANCESTOR set, not a global visited set: `linked-dir` and
+     * `real` are the same real directory and must BOTH be listed, while `real/loop`
+     * (a link back to the root) must be cut. Asserting the exact list makes a
+     * "simplification" to a global visited set fail here.
+     */
+    it("lists every reachable path exactly once and cuts the loop", () => {
+        assert.deepEqual(tree.relativeNames(new TicketStore(tree.root).collectFiles()), [
+            "linked-dir/inner.md",
+            "linked.md",
+            "real/inner.md",
+        ]);
     });
 });
 
@@ -177,6 +191,43 @@ describe("TicketStore writes", () => {
         const store = new TicketStore(tree.root);
         store.save(store.load(path).withField("status", "closed"));
         assert.equal(store.load(path).status, "closed");
+    });
+
+    it("leaves no scratch file behind after a save", () => {
+        const path = tree.ticket("atomic.md", "nid_atomic");
+        const store = new TicketStore(tree.root);
+        store.save(store.load(path).withField("status", "closed"));
+        assert.deepEqual(
+            readdirSync(tree.root).filter((name) => name.startsWith("atomic")),
+            ["atomic.md"],
+        );
+    });
+
+    /**
+     * The durability property bash gets from `sed > tmp && mv`: a failed write must
+     * leave the old ticket intact, and must not leave anything `collectFiles` would
+     * report as a ticket. A directory squatting on the scratch path makes the write
+     * fail while the original file is still in place.
+     */
+    describe("when the write fails", () => {
+        const path = tree.ticket("survivor.md", "nid_survivor");
+        const store = new TicketStore(tree.root);
+
+        before(() => {
+            mkdirSync(`${path}${SCRATCH_SUFFIX}`);
+            assert.throws(() => store.save(store.load(path).withField("status", "closed")));
+        });
+
+        it("keeps the previous content readable", () => {
+            assert.equal(store.load(path).status, "open");
+        });
+
+        it("adds no extra ticket file", () => {
+            assert.deepEqual(
+                readdirSync(tree.root).filter((name) => name.startsWith("survivor") && name.endsWith(".md")),
+                ["survivor.md"],
+            );
+        });
     });
 
     it("places a new ticket at the top level", () => {
@@ -203,7 +254,21 @@ describe("TicketsDirectory.resolve", () => {
         assert.equal(resolution.kind === "resolved" && resolution.path.endsWith("/_tickets"), true);
     });
 
-    it("reports no git repo outside one", () => {
-        assert.deepEqual(TicketsDirectory.resolve({}, tmpdir()), { kind: "no-git-repo" });
+    it("reports no git repo outside one", (t) => {
+        const outside = mkdtempSync(join(tmpdir(), "ticket-no-repo-"));
+        try {
+            // Guard the premise instead of assuming: if the temp root happens to sit
+            // inside someone's repo, the assertion below would be meaningless.
+            try {
+                execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: outside, stdio: "ignore" });
+                t.skip(`[${outside}] is inside a git repository`);
+                return;
+            } catch {
+                /* not a repo: exactly the precondition this test needs */
+            }
+            assert.deepEqual(TicketsDirectory.resolve({}, outside), { kind: "no-git-repo" });
+        } finally {
+            rmSync(outside, { recursive: true, force: true });
+        }
     });
 });

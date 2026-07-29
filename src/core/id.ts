@@ -28,10 +28,6 @@ export class TicketId {
         }
         return `${ID_PREFIX}${random}${ID_SUFFIX}`;
     }
-
-    static isWellFormed(id: string): boolean {
-        return new RegExp(`^${ID_PREFIX}[a-z0-9]{${ID_RANDOM_LENGTH}}${ID_SUFFIX}$`).test(id);
-    }
 }
 
 /** One candidate the resolver searches. */
@@ -69,7 +65,15 @@ export class IdResolver {
         return { kind: "resolved", candidate: first };
     }
 
-    /** WHY guarded: an empty search would substring-match every ticket. */
+    /**
+     * An empty search matches NOTHING.
+     *
+     * DIVERGENCE (deliberate): awk `index(s, "")` is 1, so bash resolves `""` to the
+     * only ticket in a single-ticket repo and calls it "ambiguous" otherwise. That makes
+     * `tk close "$UNSET_VAR"` mutate an arbitrary ticket, so it is treated as a bug, not
+     * a contract. Needs human confirmation before the write commands are flipped —
+     * ticket nid_5g3eta9cf7yi6iukmscxma6wc_e.
+     */
     private partialMatches(search: string): readonly IdCandidate[] {
         if (search === "") {
             return [];

@@ -103,13 +103,56 @@ leak an `i`); only SPACE (0x20) becomes a hyphen.
 - `query_check.py` — JSONL byte-for-byte. `slug_check.py` — title→filename.
 - Follow-up ticket to promote it into the repo: `nid_mgfn04pyn3byxj72xxq0mggw5_e`.
 
-## Final status
-- `npx tsc --noEmit` clean; `npm test` 154/154; `make test` 12 features / 180 scenarios /
-  1205 steps, 0 failed.
+## ROUND 1 REVIEW — what changed (read this before touching the files again)
+
+Review: `IMPLEMENTATION_REVIEW__PUBLIC.md`. It was accurate on every finding. Disposition
+table lives in PUBLIC; the durable facts:
+
+1. **`TicketStore.save` is now write-scratch + `renameSync`** (SF-1). Scratch name
+   `<path>.tmp.<pid>` — MUST NOT end in `.md` or a crash leaves a file `collectFiles`
+   reports as a ticket. `discardScratch` swallows its own failure ON PURPOSE so the
+   original write error is what the caller sees.
+2. **`TicketDocument` now carries `BlockShape = none | unterminated | terminated`** (SF-2).
+   `text()` was appending a closing `---` (plus a stray blank line when the file ended in
+   `\n`) for unterminated frontmatter, which contradicted its own doc comment. Chose
+   PRESERVE over REPAIR: byte-exact for all three shapes, and closer to bash (`sed` edits a
+   line, it never restructures). `withFrontmatter` promotes `none`→`terminated` only.
+3. **CORRECTION to my round-0 finding on empty-ID resolution.** PRIVATE previously said
+   "empty search → not found; My guard matches ✓". **That was WRONG.** Verified on this
+   machine: `awk 'BEGIN{print index("abc","")}'` → **1**, and with exactly one ticket
+   `./ticket show ""` **succeeds**; with two it says "ambiguous". I had asserted a parity
+   claim without checking it — the exact failure mode the empirical rule exists to prevent.
+   Decision: KEEP the TS guard (bash's behavior lets `tk close "$UNSET"` mutate an
+   arbitrary ticket), documented as divergence 10 + `decide` ticket
+   `nid_5g3eta9cf7yi6iukmscxma6wc_e`.
+4. Divergence list grew 7 → 10 (added colon-less letter-initial line; duplicate key
+   first-occurrence semantics; empty-ID).
+5. `TicketId.isWellFormed` DELETED (no named consumer); `generate()` shape is pinned by a
+   regex assertion + an alphabet-coverage test instead.
+6. Test hardening: symlink-loop test now asserts the exact 3-file list (protects the
+   ancestor-set-not-global-visited-set invariant); the no-git-repo test uses an owned
+   `mkdtempSync` root and skips-with-reason if that root is unexpectedly inside a repo.
+
+**Rejected, with rationale** (do not silently "fix" these later without revisiting):
+- Recursion → explicit stacks in `dep-graph.ts`: depth is bounded by chain length; a graph
+  deep enough to exhaust the JS stack is not a real ticket set, and stack machines would
+  cost the readability this whole port exists to buy. Reviewer agreed it is not worth doing.
+- `TicketOrder.comparePriority` using `Number()` (accepts `0x1F`): unreachable, priority is
+  0–4 written by `create`. Reviewer marked "no action".
+- CHANGELOG's duplicated `### Changed` heading: real, but an unrelated edit in a file the
+  coordinator owns at release time. Flagged in PUBLIC, not changed.
+
+## Final status (after round 1) — READY signalled
+- `npx tsc --noEmit` exit 0; `npm test` **167/167, 0 skipped**; `make test` 12 features /
+  180 scenarios / 1205 steps, 0 failed.
+- Harness re-run after the serialization change: `query` JSONL byte-identical; over 68
+  graphs only `dep cycle` mismatches (the accepted divergence).
 - `ticket` NOT modified (TS_COMMANDS still `help --help -h`); `features/` NOT modified;
   CHANGELOG.md NOT modified (nothing user-facing changed).
 - Tickets created: `nid_fba92yfczp71jjcprn4ufmory_e` (cycle-bug BDD, deps T4),
-  `nid_mgfn04pyn3byxj72xxq0mggw5_e` (harness, deps T2).
+  `nid_mgfn04pyn3byxj72xxq0mggw5_e` (harness, deps T2),
+  `nid_5g3eta9cf7yi6iukmscxma6wc_e` (`decide`: ID-resolution error paths, deps T2).
+- Dep added: T4 `nid_8cislepljqvv88ayndtjlw34k_e` → harness ticket.
 
 ## Open threads for T3/T4/T5
 - T4 must decide to use `IdResolver` for the `dep tree` root (bash has no exact tier).

@@ -106,6 +106,27 @@ describe("Frontmatter", () => {
         );
     });
 
+    // DIVERGENCE: bash turns the whole line into a JSON key with an empty value.
+    it("ignores a letter-initial line with no colon", () => {
+        const parsed = TicketDocument.parse(["---", "id: x", "colonless line here", "---", ""].join("\n"));
+        assert.deepEqual(
+            parsed.frontmatter.entries().map((entry) => entry.key),
+            ["id"],
+        );
+    });
+
+    // DIVERGENCE: bash emits both keys; here every lookup addresses the FIRST occurrence.
+    it("reads the first occurrence of a duplicated key", () => {
+        const parsed = TicketDocument.parse(["---", "status: open", "status: closed", "---", ""].join("\n"));
+        assert.equal(parsed.frontmatter.getString("status"), "open");
+    });
+
+    it("updates only the first occurrence of a duplicated key", () => {
+        const parsed = TicketDocument.parse(["---", "status: open", "status: closed", "---", ""].join("\n"));
+        const updated = parsed.frontmatter.withField("status", "in_progress");
+        assert.deepEqual(updated.toLines(), ["status: in_progress", "status: closed"]);
+    });
+
     it("replaces an existing field in place, preserving key order", () => {
         const updated = frontmatter.withField("status", "closed");
         assert.deepEqual(
@@ -182,6 +203,37 @@ describe("TicketDocument", () => {
     it("treats an unterminated block as running to EOF, like the bash reader", () => {
         const text = ["---", "id: x", "status: open"].join("\n");
         assert.equal(TicketDocument.parse(text).frontmatter.getString("status"), "open");
+    });
+
+    /**
+     * Regression: `text()` used to append a closing `---` (and, when the file ended in a
+     * newline, a stray blank line inside the block), so editing one field in a
+     * hand-broken ticket restructured the file. bash `sed` rewrites only the field line.
+     */
+    it("round-trips an unterminated block without inventing a closing marker", () => {
+        const text = "---\nid: x\nstatus: open";
+        assert.equal(TicketDocument.parse(text).text(), text);
+    });
+
+    it("round-trips an unterminated block that ends with a newline", () => {
+        const text = "---\nid: x\nstatus: open\n";
+        assert.equal(TicketDocument.parse(text).text(), text);
+    });
+
+    it("edits a field of an unterminated block without restructuring the file", () => {
+        const parsed = TicketDocument.parse("---\nid: x\nstatus: open\n");
+        const updated = parsed.withFrontmatter(parsed.frontmatter.withField("status", "closed"));
+        assert.equal(updated.text(), "---\nid: x\nstatus: closed\n");
+    });
+
+    it("has no body when there is no closing marker", () => {
+        assert.equal(TicketDocument.parse("---\nid: x\n").body(), "");
+    });
+
+    it("gives a file that had no frontmatter a terminated block when fields are added", () => {
+        const parsed = TicketDocument.parse("just a note\n");
+        const updated = parsed.withFrontmatter(parsed.frontmatter.withField("id", "x"));
+        assert.equal(updated.text(), "---\nid: x\n---\njust a note\n");
     });
 
     it("yields no fields for a file without frontmatter", () => {

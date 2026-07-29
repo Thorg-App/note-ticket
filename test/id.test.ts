@@ -14,17 +14,18 @@ const resolver = new IdResolver([
 ]);
 
 describe("TicketId.generate", () => {
-    it("matches the nid_<25>_e shape", () => {
-        assert.equal(TicketId.isWellFormed(TicketId.generate()), true);
+    it("matches the nid_<25 chars of [a-z0-9]>_e shape", () => {
+        assert.match(TicketId.generate(), /^nid_[a-z0-9]{25}_e$/);
+    });
+
+    it("uses the whole alphabet, not a biased subset", () => {
+        const chars = new Set(Array.from({ length: 200 }, () => TicketId.generate()).join("").split(""));
+        assert.equal("abcdefghijklmnopqrstuvwxyz0123456789".split("").every((c) => chars.has(c)), true);
     });
 
     it("does not repeat", () => {
         const ids = new Set(Array.from({ length: 200 }, () => TicketId.generate()));
         assert.equal(ids.size, 200);
-    });
-
-    it("rejects a malformed id", () => {
-        assert.equal(TicketId.isWellFormed("nid_short_e"), false);
     });
 });
 
@@ -75,8 +76,22 @@ describe("IdResolver", () => {
         assert.equal(duplicated.resolve(ALPHA).kind, "ambiguous");
     });
 
+    /**
+     * DIVERGENCE (deliberate, ticket nid_5g3eta9cf7yi6iukmscxma6wc_e): awk
+     * `index(s, "")` is 1, so bash resolves `""` to the sole ticket in a one-ticket repo
+     * and reports "ambiguous" otherwise. Here an empty search never resolves, in a repo
+     * of any size, so `tk close "$UNSET_VAR"` cannot mutate an arbitrary ticket.
+     */
     it("does not match everything on an empty search", () => {
         assert.equal(resolver.resolve("").kind, "not-found");
+    });
+
+    it("does not resolve an empty search even when only one ticket exists", () => {
+        assert.equal(new IdResolver([{ id: ALPHA, path: "/t/a.md" }]).resolve("").kind, "not-found");
+    });
+
+    it("does not resolve a whitespace-only search", () => {
+        assert.equal(resolver.resolve("   ").kind, "not-found");
     });
 
     it("reports not found when there are no tickets", () => {

@@ -3,7 +3,17 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    realpathSync,
+    renameSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import { Ticket } from "./ticket.js";
@@ -12,6 +22,9 @@ const TICKETS_DIR_ENV_VAR = "TICKETS_DIR";
 const TICKETS_DIR_NAME = "_tickets";
 const TICKET_FILE_EXTENSION = ".md";
 const FILE_ENCODING = "utf8";
+
+/** Sibling scratch name used by `save`; deliberately not a `.md` suffix. */
+const TEMP_FILE_SUFFIX = ".tmp";
 
 export type TicketsDirResolution =
     | { readonly kind: "resolved"; readonly path: string }
@@ -98,8 +111,39 @@ export class TicketStore {
         return this.collectFiles().map((path) => this.load(path));
     }
 
+    /**
+     * Write a ticket back, replacing the file atomically.
+     *
+     * WHY write-then-rename: a truncating in-place write loses the ticket if the disk
+     * fills or the process dies mid-write, and lets a concurrent read see a partial
+     * file. Bash gets this right via `_sed_i` (`sed … > tmp && mv tmp file`), so an
+     * in-place write would be a durability REGRESSION on the path every mutation
+     * command takes.
+     * WHY the temp name does not end in `.md`: a leftover temp file from a crash would
+     * otherwise be enumerated as a ticket by `collectFiles`.
+     */
     save(ticket: Ticket): void {
-        writeFileSync(ticket.path, ticket.text(), FILE_ENCODING);
+        const tempPath = `${ticket.path}${TEMP_FILE_SUFFIX}.${process.pid}`;
+        try {
+            writeFileSync(tempPath, ticket.text(), FILE_ENCODING);
+            renameSync(tempPath, ticket.path);
+        } catch (error) {
+            TicketStore.discardScratch(tempPath);
+            throw error;
+        }
+    }
+
+    /**
+     * Best-effort scratch cleanup. WHY the failure is swallowed: the caller must see the
+     * ORIGINAL write error, and a cleanup that cannot run leaves only a stray non-`.md`
+     * file, which nothing else in the system looks at.
+     */
+    private static discardScratch(path: string): void {
+        try {
+            rmSync(path, { force: true, recursive: true });
+        } catch {
+            /* intentionally ignored — see doc comment */
+        }
     }
 
     /** Path a newly created ticket takes: always the top level of the tickets dir. */
