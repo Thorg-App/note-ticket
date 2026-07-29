@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-29T22:06:37Z
 id: nid_604l3jerigu3ikyq68958lxy7_e
 title: 'TS port 1: scaffold TS project + hybrid bash dispatcher'
-status: in_progress
+status: closed
 deps: []
 links: []
 created_iso: '2026-07-29T21:57:24Z'
-status_updated_iso: '2026-07-29T22:00:26Z'
+status_updated_iso: 2026-07-29T22:06:37Z
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
