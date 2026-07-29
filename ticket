@@ -1566,6 +1566,24 @@ EOF
 
 # Main dispatch
 
+# TypeScript delegation (strangler-fig port; see docs-internal/migration-to-ts-high-level.md).
+# Commands listed here are served by the TS bundle. Removing a name from the list
+# instantly rolls that command back to the bash implementation below.
+TS_COMMANDS="help --help -h"
+
+if [[ " $TS_COMMANDS " == *" ${1:-help} "* ]]; then
+    # Script location, NOT $PWD: the bundle sits next to this script.
+    SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+    TS_BUNDLE="$SCRIPT_DIR/dist/ticket.mjs"
+    if [[ ! -f "$TS_BUNDLE" ]]; then
+        echo "Error: TypeScript bundle not built: [$TS_BUNDLE]" >&2
+        echo "Run: make build" >&2
+        exit 1
+    fi
+    # TICKET_INVOKED_AS: node cannot see this script's $0, and usage text interpolates it.
+    TICKET_INVOKED_AS="$0" exec node "$TS_BUNDLE" "$@"
+fi
+
 # Initialize tickets dir for built-in commands (skip for help)
 case "${1:-help}" in
     help|--help|-h) ;;

@@ -1,0 +1,5 @@
+node_modules/
+# Build output: rebuilt by `make build`. Committed only at release tags (see
+# docs-internal/migration-to-ts-high-level.md — Distribution).
+dist/
+.tmp/

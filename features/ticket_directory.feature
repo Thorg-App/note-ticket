@@ -78,6 +78,11 @@ Feature: Ticket Directory Resolution
     Then the command should succeed
     And the output should contain "minimal ticket system"
 
+  Scenario: Help usage line names the invoked script
+    When I run "ticket help"
+    Then the command should succeed
+    And the output should contain "Usage: ticket <command> [args]"
+
   # Nested repository (submodule) boundary scenarios
 
   Scenario: Nested repository does not use parent repo tickets

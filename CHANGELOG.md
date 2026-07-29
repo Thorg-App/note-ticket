@@ -9,6 +9,9 @@
 
 - Nested subfolders under `_tickets/` are now supported for organizing tickets (e.g. `_tickets/backend/api/foo.md`). Move ticket files with `mv`; every command searches all nesting levels. New tickets are still created at the top level of `_tickets/`. Hidden directories (`.trash`, `.obsidian`, ...) are skipped; `ls` and `query` list tickets in byte-wise path order.
 
+### Changed
+- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help` is the first delegated command. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
+
 ### Fixed
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
 - `ls`, `ready`, `blocked`, `closed`, `query`, `dep tree`, and `dep cycle` exited with code 2 and an awk error when no ticket files existed; they now exit 0 with no output

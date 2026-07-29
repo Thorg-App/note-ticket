@@ -8,6 +8,8 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 
 **Core script:** Single-file bash implementation (`ticket`, ~1000 lines). Uses awk for performant bulk operations on large ticket sets.
 
+**TypeScript port (in flight):** Strangler-fig migration to a Node CLI; plan at `docs-internal/migration-to-ts-high-level.md`. Commands named in the `TS_COMMANDS` variable in `ticket` are `exec`'d to `node <script-dir>/dist/ticket.mjs`; everything else stays bash. Sources in `src/` (`src/cli/` dispatch + commands, `src/core/` data model), bundled by esbuild via `make build` (zero runtime npm deps). Porting a command = implement in TS → add to `TS_COMMANDS` → `make test` green. Rollback = remove the name.
+
 Key functions:
 - `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides
 - `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_e` (decoupled from filename)
@@ -25,7 +27,7 @@ Dependencies: bash, git, sed, awk, find. Optional: ripgrep (faster grep).
 
 ## Testing
 
-BDD tests using [Behave](https://behave.readthedocs.io/). Run with `make test` (requires `uv`).
+BDD tests using [Behave](https://behave.readthedocs.io/). Run with `make test` (requires `uv`, `node`/`npm`; builds the TS bundle first).
 
 - Feature files: `features/*.feature` - Gherkin scenarios covering all commands
 - Step definitions: `features/steps/ticket_steps.py`
