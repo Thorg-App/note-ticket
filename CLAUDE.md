@@ -90,6 +90,8 @@ Single package: `ticket-core` — the launcher, the sources, and a bundle built 
 
 **Packages build the bundle in their own build/install phase**, then install `dist/ticket.mjs` alongside the sources and `touch` it last. WHY-NOT letting the launcher build on demand there: the install prefix is root-owned, so esbuild fails with `mkdir dist: permission denied` (verified empirically, both directions). Nothing prebuilt is committed to the repo or attached to a release — the release flow stays "tag it".
 
+**`make package-smoke` (`scripts/package-smoke.sh`, also a CI step) is the guard on all of that.** It replays the install steps both packages share into a read-only scratch prefix and drives `tk` through the installed symlink. WHY it exists separately from `make test`: every other gate drives a WRITABLE checkout, so none of them could catch a formula that installs an incomplete tree — which is how `bin.install "ticket" => "tk"` shipped dead for months. It does NOT run `brew`/`makepkg`; those semantics still need one real run before a release tag.
+
 **CALLED OUT, accepted for now:** building at install time means Homebrew/AUR users need npm and network at `brew install`/`makepkg` time. Fine for a single-user tool. If it ever goes multi-user, the fix is a prebuilt-bundle release artifact — file a ticket, do not smuggle one in.
 
 ### Release Flow
@@ -106,8 +108,8 @@ Single package: `ticket-core` — the launcher, the sources, and a bundle built 
 
 The release workflow (`.github/workflows/release.yml`) automatically:
 1. Creates GitHub release with changelog body
-2. Runs `scripts/publish-homebrew.sh` - updates all formulas in tap
-3. Runs `scripts/publish-aur.sh` - updates all AUR packages
+2. Runs `scripts/publish-homebrew.sh` - updates the `ticket-core` formula in the tap
+3. Runs `scripts/publish-aur.sh` - updates the `ticket-core` AUR package
 
 ### Package Managers
 

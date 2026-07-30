@@ -15,7 +15,8 @@ From a git checkout, `tk` builds its own bundle (`dist/ticket.mjs`) on the first
 again whenever `src/` changes — so a `git pull` needs no build step. That first build
 needs **npm** and network access; everything the launcher prints while building goes to
 stderr, so `tk query | jq` stays clean even then. Installing from Homebrew or the AUR
-builds the bundle at install time instead, and needs nothing but node afterwards.
+builds the bundle at install time instead — so those installs need npm and network *then*,
+and never again; node and git are still required to run the tool.
 
 ```bash
 git clone <repo> && cd note-ticket && ln -s "$PWD/ticket" ~/.local/bin/tk

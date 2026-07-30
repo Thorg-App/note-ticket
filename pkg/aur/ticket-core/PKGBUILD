@@ -34,13 +34,21 @@ package() {
     cd "ticket-$pkgver"
 
     # pkg/install-manifest.txt is the single source of truth for what a complete install
-    # needs; see its header. `cp -a` preserves mtimes, which matters: the launcher rebuilds
-    # when any source file is newer than the bundle, and the bundle is touched last below.
+    # needs; see its header.
+    #
+    # `|| [[ -n "$entry" ]]`: `read` returns non-zero on a final line with no newline, so the
+    # bare form SILENTLY DROPS the last manifest entry if the file ever loses its trailing
+    # newline -- shipping a package with no src/, which only fails at the user's runtime.
+    #
+    # `--no-preserve=ownership`: package() runs under fakeroot and $srcdir is owned by the
+    # build user, so plain `cp -a` would record the builder's uid/gid in the package instead
+    # of root:root. Mode and timestamps are still preserved (the bundle is touched last below
+    # regardless, so the timestamps are not load-bearing -- they are just tidier).
     install -dm755 "$pkgdir/$_installdir"
     local entry
-    while read -r entry; do
+    while read -r entry || [[ -n "$entry" ]]; do
         if [[ -n "$entry" && "$entry" != \#* ]]; then
-            cp -a "$entry" "$pkgdir/$_installdir/"
+            cp -a --no-preserve=ownership "$entry" "$pkgdir/$_installdir/"
         fi
     done < pkg/install-manifest.txt
 

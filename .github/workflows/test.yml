@@ -55,3 +55,10 @@ jobs:
       # `make test` = build + unit tests + the BDD suite, which drives ./ticket itself.
       - name: Run tests
         run: make test
+
+      # The PACKAGED shape: read-only prefix, prebuilt bundle, no node_modules. The smoke
+      # step above and the BDD suite both drive a WRITABLE checkout, so neither would catch
+      # a formula/PKGBUILD that installs an incomplete tree -- which is exactly how the old
+      # `bin.install "ticket"` formula shipped broken. Needs a built dist/, hence after.
+      - name: Smoke-test the packaged install layout
+        run: make package-smoke

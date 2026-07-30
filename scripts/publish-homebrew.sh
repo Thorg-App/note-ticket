@@ -14,13 +14,24 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # pkg/install-manifest.txt -- the single source of truth for what a complete install needs.
 # Interpolated at publish time so the formula itself stays a plain, auditable static file.
 install_list_ruby() {
-    local entry rendered=""
-    while read -r entry; do
+    local entry rendered="" manifest="$REPO_ROOT/pkg/install-manifest.txt"
+    # A failed redirect below does NOT fail this function (the trailing `echo` succeeds), so
+    # an unreadable manifest would publish a formula containing a bare `libexec.install` --
+    # syntactically valid Ruby that installs NOTHING. Refuse instead. (Observed for real
+    # while rendering the formula from a copy of this script outside the repo.)
+    [[ -r "$manifest" ]] || { echo "cannot read $manifest" >&2; exit 1; }
+    # `|| [[ -n "$entry" ]]`: `read` returns non-zero on a final line with no newline, so the
+    # bare form SILENTLY DROPS the last manifest entry if the file ever loses its trailing
+    # newline -- publishing a formula that installs no src/, which only fails at a user's
+    # runtime. `make package-smoke` covers the layout; this covers the parse.
+    while read -r entry || [[ -n "$entry" ]]; do
         if [[ -n "$entry" && "$entry" != \#* ]]; then
             [[ -z "$rendered" ]] || rendered+=", "
             rendered+="\"$entry\""
         fi
-    done < "$REPO_ROOT/pkg/install-manifest.txt"
+    done < "$manifest"
+    # An all-comments/empty manifest would render the same do-nothing install line.
+    [[ -n "$rendered" ]] || { echo "$manifest lists no install entries" >&2; exit 1; }
     echo "$rendered"
 }
 
@@ -72,6 +83,7 @@ class TicketCore < Formula
 
     chmod 0755, libexec/"ticket"
     bin.install_symlink libexec/"ticket" => "tk"
+    prefix.install "LICENSE.md"
   end
 
   test do

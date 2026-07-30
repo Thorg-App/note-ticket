@@ -1,4 +1,4 @@
-.PHONY: test build typecheck unit-test
+.PHONY: test build typecheck unit-test package-smoke
 
 # node_modules is a directory whose mtime is unreliable as a target; the stamp
 # makes `npm install` run only when the manifest changes.
@@ -28,3 +28,9 @@ unit-test: $(NPM_STAMP)
 # dist/ at all before this target ever runs.
 test: build unit-test
 	uv run --with behave behave
+
+# The PACKAGED shape (read-only prefix, prebuilt bundle, no node_modules), which no other
+# target reaches -- `test`'s wrapper scenarios and CI's other smoke step both drive a
+# writable checkout. See the script's header for what it does and does not claim.
+package-smoke: build
+	./scripts/package-smoke.sh
