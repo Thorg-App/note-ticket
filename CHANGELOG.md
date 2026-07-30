@@ -10,8 +10,11 @@
 - Nested subfolders under `_tickets/` are now supported for organizing tickets (e.g. `_tickets/backend/api/foo.md`). Move ticket files with `mv`; every command searches all nesting levels. New tickets are still created at the top level of `_tickets/`. Hidden directories (`.trash`, `.obsidian`, ...) are skipped; `ls` and `query` list tickets in byte-wise path order.
 
 ### Changed
-- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Live for `ls`/`list`, `ready`, `blocked`, `closed` and `query`; the remaining enumerating commands follow as they are delegated to the TypeScript core.
-- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help`, `ls`/`list`, `ready`, `blocked`, `closed` and `query` are delegated so far. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
+- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Live for `ls`/`list`, `ready`, `blocked`, `closed`, `query`, `dep tree`, `dep cycle` and `show`; the remaining enumerating commands follow as they are delegated to the TypeScript core.
+- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help`, `ls`/`list`, `ready`, `blocked`, `closed`, `query` and `show` are delegated so far, plus the `tree` and `cycle` subcommands of `dep` via `TS_DEP_SUBCOMMANDS` (`dep <id> <dep-id>` stays bash). Requires `node` on PATH and `make build` from a source checkout. Removing a name from either list rolls that command back to bash.
+- An empty ticket id no longer resolves to a ticket. `tk show ""` — in practice `tk show "$UNSET_VAR"` — used to print an arbitrary ticket in a one-ticket repo, because awk's `index(s, "")` is 1; it now reports `Error: ticket '' not found` and exits 1.
+- `dep tree <full-id>` now resolves where it used to report `ambiguous ID`. The root goes through the shared id resolver (an exact match beats a partial one, input is trimmed) instead of a substring scan, so a full id contained in another ticket's id is reachable. Partial ids still work.
+- A missing pager binary now reports `Error: <pager>: command not found` (exit 127) instead of the shell's `./ticket: line NNN: ...`.
 - `ls`, `ready` and `blocked` now reject a `-a`/`-T` given without a value (`Error: option '-a' requires a value`) instead of aborting with an internal bash `unbound variable` message. Output formats and filtering are unchanged.
 - `query <filter>` with no `jq` installed now reports `Error: jq: command not found` plus `Install jq, or run 'query' without a filter`, instead of the shell's `./ticket: line NNN: jq: command not found`. The exit code is unchanged (127), and `query` without a filter still needs no jq.
 - `closed` now rejects a `--limit=` that is not a plain count (`Error: --limit must be a whole number of rows, got 'abc'`). The value used to be handed to `head -n`, which silently accepted `--limit=2k` as 2048, `--limit=-1` as "all but the last one", and reported `head: invalid number of lines` for a typo. `--limit=0` now prints nothing and exits 0; it used to exit 141 or 0 depending on a race between `awk` and `head`.
@@ -23,6 +26,8 @@
 - `ls`, `ready`, `blocked`, `closed`, `query`, `dep tree`, and `dep cycle` exited with code 2 and an awk error when no ticket files existed; they now exit 0 with no output
 - `closed` no longer mangles paths containing spaces
 - `closed` orders a symlinked ticket file by the link's own modification time, matching `ls -t` (a listing containing symlinks could come out in the wrong order)
+- `dep cycle` now reports every cycle exactly once. It used to abort its search at the first cycle found, which both printed walks that were not cycles and missed real ones
+- `show` lists a duplicate dependent once under `## Blocking`; a ticket naming the target twice in its `deps` used to be printed once per entry
 
 ### Removed
 - Removed `migrate-beads` command
