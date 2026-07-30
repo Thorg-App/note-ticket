@@ -45,20 +45,28 @@ readonly SOURCE_DIR="$SCRIPT_DIR/src"
 # Rebuild when there is no bundle, or when any source file is newer than it - a `git pull`
 # must not leave a stale bundle serving stale behavior. `-print -quit` stops at the first
 # hit, so the hot path costs exactly one find over src/.
+#
+# KNOWN, ACCEPTED: a source file with a FUTURE mtime (a tarball with skewed mtimes, a clock
+# skew over NFS) is newer than every bundle this can build, so every invocation rebuilds. The
+# fix would be a stamp file recording the newest source mtime already built; not worth the
+# extra state for a single-user tool. `touch src/**` clears it.
 _bundle_is_stale() {
+    # src/ is NOT optional: distribution is build-from-source, so a tree without sources
+    # cannot be kept current. Saying so beats silently serving whatever dist/ happens to
+    # hold, and beats letting `find` fail below.
+    [[ -d "$SOURCE_DIR" ]] ||
+        _fail "no sources at [$SOURCE_DIR]; this is not a complete install of the tool"
     [[ -f "$BUNDLE" ]] || return 0
-    # Installed without sources: the bundle is all there is, so it cannot be stale.
-    [[ -d "$SOURCE_DIR" ]] || return 1
     [[ -n "$(find "$SOURCE_DIR" -newer "$BUNDLE" -print -quit)" ]]
 }
 
 # Concurrent invocations racing on the same build are ACCEPTED (single-user tool): locking
 # would buy nothing here and is real complexity.
 _build_bundle() {
-    [[ -d "$SOURCE_DIR" ]] ||
-        _fail "no bundle at [$BUNDLE] and no sources at [$SOURCE_DIR] to build one from"
     _require_command npm " (install Node.js, which ships npm)"
     _log "building [$BUNDLE]"
+    # `</dev/null`: the build must never consume the caller's stdin, which belongs to the
+    # command being launched (`... | tk add-note <id>` reads its note from there).
     (
         cd "$SCRIPT_DIR"
         # esbuild is a devDependency, so a fresh clone has no node_modules at all.
@@ -66,7 +74,7 @@ _build_bundle() {
             npm install --no-audit --no-fund --silent
         fi
         npm run --silent build
-    ) >&2 ||
+    ) >&2 </dev/null ||
         _fail "failed to build [$BUNDLE]; run 'npm install && npm run build' in [$SCRIPT_DIR] to see why"
     # A build that "succeeded" without producing the bundle must not reach the exec below.
     [[ -f "$BUNDLE" ]] || _fail "build produced no bundle at [$BUNDLE]"

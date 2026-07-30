@@ -39,10 +39,19 @@ jobs:
           # symlink resolved to this checkout, and $0 reached the CLI as the program name.
           head -1 help.out | grep -qx 'tk - minimal ticket system with dependency tracking'
           rm -f help.out
+          # `help` is the one command that needs no tickets directory, so it alone would not
+          # cover git-based resolution on a cold box. These do.
+          mkdir "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
+          git init -q . && git config user.name 'CI Smoke'
+          tk create "Cold smoke ticket" > create.out
+          tk ls > ls.out
+          grep -q 'Cold smoke ticket' ls.out
+          test "$(wc -l < ls.out)" -eq 1
+
+      # The fastest gate, and BEFORE the suites: a BDD failure must not hide type errors.
+      - name: Typecheck
+        run: make typecheck
 
       # `make test` = build + unit tests + the BDD suite, which drives ./ticket itself.
       - name: Run tests
         run: make test
-
-      - name: Typecheck
-        run: make typecheck

@@ -1310,13 +1310,20 @@ def _isolated_tool_copy(context):
     scratch = REPO / '.tmp'
     scratch.mkdir(exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='ticket_tool_', dir=str(scratch)))
+    # Registered BEFORE the copy, so a failure mid-copy is still cleaned up.
+    context.tool_dir = root
+    context.ticket_script_override = str(root / 'ticket')
     project = Path(context.project_dir)
+    # The symlink below is what keeps the copy's build offline -- and it is also a way to
+    # write INTO the developer's node_modules if it does not exist yet, since npm would then
+    # create it through the dangling link. `make test` builds first so this holds; say so
+    # loudly rather than silently mutating the real tree.
+    assert (project / 'node_modules').is_dir(), \
+        f"[{project / 'node_modules'}] is missing; run `make build` before driving behave directly"
     for name in TOOL_COPY_FILES:
         shutil.copy2(project / name, root / name)
     shutil.copytree(project / 'src', root / 'src')
     os.symlink(project / 'node_modules', root / 'node_modules')
-    context.tool_dir = root
-    context.ticket_script_override = str(root / 'ticket')
     return root
 
 
@@ -1353,6 +1360,18 @@ def step_isolated_tool_with_fresh_bundle(context):
     bundle = _write_marker_bundle(root)
     _set_tree_mtime(root / 'src', now - _MTIME_GAP_SECONDS)
     os.utime(bundle, (now, now))
+
+
+@given(r'the isolated copy has a source file that cannot be built')
+def step_isolated_tool_with_broken_source(context):
+    """Make the copy's build fail, without touching anything outside it."""
+    (Path(context.tool_dir) / 'src' / 'cli' / 'main.ts').write_text('this is ( not ( typescript\n')
+
+
+@given(r'the isolated copy has no sources')
+def step_isolated_tool_without_sources(context):
+    """An install shape the tool does not support: nothing to build from, ever."""
+    shutil.rmtree(Path(context.tool_dir) / 'src')
 
 
 @then(r'the isolated copy should have a built bundle')
