@@ -18,6 +18,10 @@ describe("Slug.fromTitle", () => {
         ["UPPER_snake_case", "uppersnakecase"],
         ["a/b\\c", "abc"],
         ["Tabs\there", "tabshere"],
+        // DIVERGENCE #11: bash's sed pipeline is line-oriented, so the LF survived and the
+        // file was literally named `line1<LF>line2.md`. A newline is just another byte
+        // outside [a-z0-9-] here.
+        ["line1\nline2", "line1line2"],
         ["a - b", "a-b"],
         ["v1.2.3 release", "v123-release"],
     ];

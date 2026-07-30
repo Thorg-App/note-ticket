@@ -1,6 +1,6 @@
 /**
  * `query`'s JSONL and its argument handling. Every expected string was captured from bash
- * `./ticket query` unless marked as a divergence; see also `make parity`.
+ * `./ticket query` unless marked as a divergence with the (now deleted) differential parity harness.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -64,7 +64,7 @@ describe("QueryCommand.jsonl", () => {
 
     // DIVERGENCE (deliberate): bash's json_escape handles `\` and `"` only, so a raw tab —
     // reachable via `tk create $'a\tb'` — made its JSONL unparseable and broke bash's own
-    // `query <filter>`. See scripts/parity/README.md.
+    // `query <filter>`. See docs-internal/migration-to-ts-high-level.md.
     it("escapes a control character, unlike bash", () => {
         const ticket = ticketOf('---\nid: a1\ntitle: "tab\there"\n---\n');
         const line = QueryCommand.jsonl([ticket]).split("\n")[0] as string;

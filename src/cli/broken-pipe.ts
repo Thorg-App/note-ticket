@@ -17,7 +17,7 @@ const BROKEN_PIPE_ERROR_CODE = "EPIPE";
  * lands before `head` closes the pipe) and 141 above it, while node writes in one go and
  * only fails past the 64 KB pipe buffer. So the two agree for tiny and for large listings
  * and disagree in between; chasing the buffer boundary would mean reproducing awk's
- * internal chunking, which is not a contract anyone can honour. See scripts/parity/README.md.
+ * internal chunking, which is not a contract anyone can honour. See docs-internal/migration-to-ts-high-level.md.
  */
 export class BrokenPipe {
     /** Report a closed stdout as SIGPIPE death instead of as a crash or a success. */

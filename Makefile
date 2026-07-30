@@ -1,4 +1,4 @@
-.PHONY: test build typecheck unit-test parity
+.PHONY: test build typecheck unit-test
 
 # node_modules is a directory whose mtime is unreliable as a target; the stamp
 # makes `npm install` run only when the manifest changes.
@@ -15,22 +15,16 @@ build: $(NPM_STAMP)
 typecheck: $(NPM_STAMP)
 	npm run --silent typecheck
 
-# node:test unit tests over src/core. BDD stays the acceptance harness; these cover
-# the core algorithms (parser, graph) where bash had no tests.
+# node:test unit tests over src/core + src/cli. BDD stays the acceptance harness; these
+# cover the algorithms and the arms BDD cannot reach (anything gated on a terminal).
 unit-test: $(NPM_STAMP)
 	npm run --silent test
 
-# Differential bash-vs-TS parity harness (scripts/parity/). Migration-only: it is
-# deleted at T6 when bash `ticket` goes away and there is nothing left to diff against.
-# Scale the generated graphs with e.g. `make parity PARITY_ARGS="--random 500"`.
-# Depends on `build`: the checks run the shipped dist/ticket.mjs for every command
-# already flipped into TS_COMMANDS, and a stale bundle would measure the wrong code.
-PARITY_ARGS ?=
-parity: build
-	npm run --silent build:parity
-	python3 scripts/parity/run.py $(PARITY_ARGS)
-
-# The bash `ticket` delegates TS_COMMANDS to dist/ticket.mjs, so the bundle must
-# exist before the BDD suite runs.
+# WHY `build` is still a prerequisite now that ./ticket builds on demand: a broken build
+# must surface HERE, as a build failure, instead of as a puzzling failure inside whichever
+# BDD scenario happens to shell out first. It also keeps the ~200 scenarios off the build
+# path entirely. The on-demand path is not left untested: features/ticket_wrapper.feature
+# exercises it against an isolated copy of the tool, and CI smoke-tests a checkout with no
+# dist/ at all before this target ever runs.
 test: build unit-test
 	uv run --with behave behave

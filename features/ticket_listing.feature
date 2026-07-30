@@ -269,6 +269,12 @@ Feature: Ticket Listing
     Then the command should succeed
     And the output should contain "Ship it | phase 2"
 
+  Scenario: List shows a title containing a pipe in full
+    Given a ticket exists with ID "pipe-0001" and title "Ship it | phase 2"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "Ship it | phase 2"
+
   Scenario: Blocked shows a title containing a pipe in full, blockers last
     Given a ticket exists with ID "pipe-0001" and title "Ship it | phase 2"
     And a ticket exists with ID "pipe-0002" and title "Blocker"
@@ -362,3 +368,16 @@ Feature: Ticket Listing
     When I run "ticket closed --limit=abc"
     Then the command should fail
     And stderr should contain "--limit must be a whole number of rows"
+
+  # Node ignores SIGPIPE, so the CLI turns a failed stdout write into 141 itself. That only
+  # happens once the output is too large for the pipe buffer -- the exit code is a function
+  # of how much was listed, not of the command.
+  Scenario: A large listing into a short reader exits 141
+    Given 3000 tickets exist
+    When I run "ticket ls" piped into "head -1"
+    Then the exit code should be 141
+
+  Scenario: A listing that fits in the pipe buffer exits 0 even into a short reader
+    Given a ticket exists with ID "pipe-0100" and title "Small enough"
+    When I run "ticket ls" piped into "head -1"
+    Then the exit code should be 0

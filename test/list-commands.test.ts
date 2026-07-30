@@ -1,6 +1,6 @@
 /**
  * The listing commands (`ls`, `ready`, `blocked`, `closed`) and the CLI-layer pieces they share.
- * Every expected string here was captured from bash `./ticket`; see also `make parity`.
+ * Every expected string here was captured from bash `./ticket` with the (now deleted) differential parity harness.
  */
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
@@ -291,6 +291,11 @@ describe("RowLimit", () => {
 
     it("rejects head's size suffixes", () => {
         assert.throws(() => RowLimit.parse("2k"), (error: unknown) => error instanceof CliError);
+    });
+
+    // `head -n +5` counted from the START of the stream; a plain count is all this flag means.
+    it("rejects head's leading plus", () => {
+        assert.throws(() => RowLimit.parse("+5"), (error: unknown) => error instanceof CliError);
     });
 });
 

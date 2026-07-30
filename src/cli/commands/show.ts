@@ -85,7 +85,7 @@ export class ShowCommand {
      * associative array, whose order is UNSPECIFIED, and appended one Blocking row per
      * matching `deps` ENTRY — so a ticket listing the target twice was printed twice. These
      * follow enumeration (path) order and list each ticket once. See
-     * `scripts/parity/README.md`.
+     * `docs-internal/migration-to-ts-high-level.md` (divergence #8).
      */
     private static sections(target: Ticket, graph: DepGraph): string {
         const targetId = target.id;

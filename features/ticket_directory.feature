@@ -87,6 +87,20 @@ Feature: Ticket Directory Resolution
     Then the command should succeed
     And the output should contain "minimal ticket system"
 
+  # An unrecognized name is a USAGE problem, not a repository problem, so it is answered
+  # without ever resolving the tickets directory.
+  # BEHAVIOR CHANGE from the bash script (T6): bash's dispatch resolved the directory first,
+  # so `tk bogus` outside a repo answered "tickets directory ... does not exist" and never
+  # mentioned the unknown command. That ordering was an accident of the dispatch, not a
+  # decision. See the PHASE_A notes for the ts-port-6 ticket.
+  Scenario: An unknown command is reported without needing a tickets directory
+    Given the tickets directory does not exist
+    And the test root is not a git repository
+    When I run "ticket bogus"
+    Then the command should fail
+    And stderr should contain "Unknown command: bogus"
+    And the output should not contain "does not exist"
+
   Scenario: Help usage line names the invoked script
     When I run "ticket help"
     Then the command should succeed

@@ -23,7 +23,7 @@ export class Slug {
      * WHY only U+0020 becomes a hyphen: `tr ' ' '-'` sees no other whitespace, so
      * a tab is stripped rather than turned into a separator.
      *
-     * DIVERGENCE (deliberate, #11 in scripts/parity/README.md) for a NEWLINE in the title:
+     * DIVERGENCE (deliberate, #11 in docs-internal/migration-to-ts-high-level.md) for a NEWLINE in the title:
      * bash's `sed` is line-oriented, so the LF survived every substitution and
      * `tk create $'a\nb'` produced a file literally named `a<LF>b.md` (and a JSON line that
      * did not parse). Here the newline is simply not in `[a-z0-9-]` and is dropped like any

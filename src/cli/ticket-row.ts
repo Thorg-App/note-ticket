@@ -21,7 +21,7 @@ const RELATED_IDS_MARKER = " <- ";
  *
  * DIVERGENCE (deliberate): bash `ready`/`blocked` pack their sort key as
  * `prio|id|status|title` and `split()` it back apart, so they truncate any title at its
- * first `|`. These rows print the title whole; see CHANGELOG and `scripts/parity/README.md`.
+ * first `|`. These rows print the title whole; see CHANGELOG and `docs-internal/migration-to-ts-high-level.md` (divergence #3).
  */
 export class TicketRow {
     /** `<id> [<status>] - <title>` — the row `closed` prints and `withDeps` builds on. */

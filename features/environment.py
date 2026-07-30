@@ -31,6 +31,11 @@ def before_scenario(context, scenario):
     context.test_dir = tempfile.mkdtemp(prefix='ticket_test_')
     _git_init(context.test_dir)
 
+    # No isolated copy of the tool unless the scenario asks for one: every other scenario
+    # drives the checkout's own ./ticket.
+    context.tool_dir = None
+    context.ticket_script_override = None
+
     # Initialize tracking
     context.tickets = {}
     context.last_created_id = None
@@ -44,6 +49,10 @@ def after_scenario(context, scenario):
     if hasattr(context, 'test_dir') and os.path.exists(context.test_dir):
         _restore_directory_permissions(context.test_dir)
         shutil.rmtree(context.test_dir)
+    # rmtree unlinks the node_modules SYMLINK without descending into the real one.
+    tool_dir = getattr(context, 'tool_dir', None)
+    if tool_dir and os.path.exists(tool_dir):
+        shutil.rmtree(tool_dir)
 
 
 def _restore_directory_permissions(root):

@@ -230,7 +230,7 @@ export class TicketStore {
     /**
      * "Is this name taken at the top level?" — for ANY kind of entry, not just a regular file.
      *
-     * DIVERGENCE (deliberate, #12 in scripts/parity/README.md): bash asked `[[ -f ]]`, which
+     * DIVERGENCE (deliberate, #12 in docs-internal/migration-to-ts-high-level.md): bash asked `[[ -f ]]`, which
      * is false for a DIRECTORY, so a `_tickets/<slug>.md/` directory made `create` redirect
      * into it and die with `Is a directory` at exit 1. Treating the name as taken picks
      * `<slug>-1.md` and the create succeeds.
