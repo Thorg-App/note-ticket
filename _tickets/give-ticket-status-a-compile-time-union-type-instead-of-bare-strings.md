@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-30T19:29:07Z
 id: nid_em5zmsstl3kz85jp8n70aidbb_e
 title: Give ticket status a compile-time union type instead of bare strings
-status: in_progress
+status: closed
 deps: []
 links: []
 created_iso: '2026-07-30T10:51:49Z'
-status_updated_iso: '2026-07-30T19:21:33Z'
+status_updated_iso: 2026-07-30T19:29:07Z
 type: chore
 priority: 3
 assignee: CC_WITH-nickolaykondratyev
@@ -25,3 +26,29 @@ Do this WITH or AFTER T5 phase C, not before: phases B and C are in flight in th
 ## Acceptance Criteria
 
 No `status: string` parameter remains in src/cli or src/core; `make typecheck`, `make unit-test`, `make test`, `make parity` all green with no test-expectation changes.
+
+## Resolution (2026-07-30)
+
+Done as specified. `VALID_TICKET_STATUSES` is now `as const` and `TicketStatus` is derived from
+it (`(typeof VALID_TICKET_STATUSES)[number]`), so the list and the type cannot drift apart.
+
+- `src/cli/commands/status.ts`: new `TicketStatusArgument.parsed(text): TicketStatus` — the ONE
+  boundary where user text becomes a status; it throws the same `invalid status '<x>'. Must be
+  one of: ...` CliError the old private `validate` did, so `StatusCommand.validate` is gone.
+  `StatusUpdate.applied`, `StatusCommand.apply` and `StatusWrapper.status` are now `TicketStatus`.
+  Bash's order of operations survives: `run` parses BEFORE `apply` resolves the id, so an invalid
+  status still mutates nothing.
+- `src/cli/ticket-filter.ts` / `list-options.ts`: `--status=` is renamed `statusFilter: string` and
+  documented as deliberately NOT a `TicketStatus` — bash never validates it, so `--status=bogus`
+  and `--status=done` must list nothing rather than fail.
+- `src/core/ticket.ts`: `Ticket.status` stays `string` on purpose (disk text is hand-editable and
+  may be `done`, a typo, or absent); the WHY is now in a doc comment. `isClosed`/`isFinished`
+  keep their distinction untouched.
+- `TicketField` was left alone: its members are already inferred as string literals, so a mistyped
+  `TicketField.X` is already a compile error — the 80/20 line.
+
+Verified: the guarantee bites (a temporary `const _x: TicketStatus = "in_progres"` produced
+`error TS2820 ... Did you mean '"in_progress"'?`, then removed). `make typecheck`,
+`make unit-test` (408 pass), `make test` (248 scenarios), `make parity` (graph/query/slug/write,
+0 failures) all green with **zero** test-expectation changes. CLAUDE.md's `ticket.ts` bullet
+records the type and the parse boundary. No CHANGELOG entry: no user-visible behavior change.

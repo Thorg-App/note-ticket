@@ -12,11 +12,21 @@ export const TICKET_STATUS_CLOSED = "closed";
 /** Legacy status found in old files; `create`/`status` never write it. */
 export const TICKET_STATUS_DONE = "done";
 
-export const VALID_TICKET_STATUSES: readonly string[] = [
+export const VALID_TICKET_STATUSES = [
     TICKET_STATUS_OPEN,
     TICKET_STATUS_IN_PROGRESS,
     TICKET_STATUS_CLOSED,
-];
+] as const;
+
+/**
+ * A status this CLI is willing to WRITE, as a compile-time union: a mistyped status literal
+ * anywhere downstream is a type error rather than a runtime `invalid status`.
+ *
+ * WHY it does not describe what is ON DISK: frontmatter is hand-editable, so `Ticket.status`
+ * is arbitrary text (the legacy `done`, or a typo). Text becomes a `TicketStatus` in exactly
+ * one place — the parse at the CLI boundary — and everything past that point is typed.
+ */
+export type TicketStatus = (typeof VALID_TICKET_STATUSES)[number];
 
 /** Priority when the field is absent — 0 is highest, 4 lowest. */
 export const DEFAULT_PRIORITY = "2";
@@ -76,6 +86,11 @@ export class Ticket {
         return this.frontmatter.getString(TicketField.TITLE) ?? "";
     }
 
+    /**
+     * The status text as the file spells it — deliberately NOT a `TicketStatus`: a
+     * hand-edited or legacy file may hold anything (`done`, a typo, nothing at all), and
+     * narrowing it here would be a lie about the bytes on disk.
+     */
     get status(): string {
         return this.frontmatter.getString(TicketField.STATUS) ?? "";
     }
