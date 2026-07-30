@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Dependency-graph parity: `ready`, `blocked`, `dep tree`, `dep tree --full`, `dep cycle`.
+"""Listing + dependency-graph parity: `ls`, `ready`, `blocked`, `dep tree[ --full]`, `dep cycle`.
 
-`ready` / `blocked` / `dep tree[ --full]` are compared byte-for-byte.
+`ls` / `ready` / `blocked` (with every filter flag) and `dep tree[ --full]` are compared
+byte-for-byte. The first three are served by the shipped TS CLI, so both sides get the
+same argv; `dep tree`/`dep cycle` are not ported yet and use the `dump.mjs` fixture.
 
 `dep cycle` is the ONE whitelisted divergence: bash aborts its DFS on the first
 cycle and leaves nodes marked "visiting", so it prints paths that are not cycles
@@ -57,16 +59,42 @@ def _has_cycle(deps):
     return any(visit(node) for node in deps)
 
 
+# Invocations the TS CLI already serves; bash and TS are handed identical argv.
+# The flag values line up with harness.write_scenario's assignee/tags cycling.
+CLI_INVOCATIONS = [
+    ["ls"],
+    ["ls", "--status=open"],
+    ["ls", "--status=closed"],
+    ["ls", "-a", "u0"],
+    ["ls", "--assignee=u1"],
+    ["ls", "-T", "t1"],
+    ["ls", "--tag=common"],
+    ["ls", "--status=open", "-a", "u0", "-T", "common"],
+    ["ready"],
+    ["ready", "-a", "u1"],
+    ["ready", "-T", "t2"],
+    ["ready", "--assignee=u0", "--tag=common"],
+    ["blocked"],
+    ["blocked", "-a", "u0"],
+    ["blocked", "-T", "t0"],
+    ["blocked", "--assignee=u1", "--tag=common"],
+]
+
+
 def _exact_mismatches(repo, scenario):
     """(label, bash, ts) for every command whose output must match byte-for-byte."""
-    comparisons = [("ready", ["ready"], ["ready"]), ("blocked", ["blocked"], ["blocked"])]
+    problems = []
+    for args in CLI_INVOCATIONS:
+        bash_out, ts_out = repo.bash(*args), repo.ts_cli(*args)
+        if bash_out != ts_out:
+            problems.append((" ".join(args), bash_out, ts_out))
+    dump_comparisons = []
     for root in [t[0] for t in scenario]:
-        comparisons.append(("dep tree %s" % root, ["dep", "tree", root], ["tree", root, "dedup"]))
-        comparisons.append(
+        dump_comparisons.append(("dep tree %s" % root, ["dep", "tree", root], ["tree", root, "dedup"]))
+        dump_comparisons.append(
             ("dep tree --full %s" % root, ["dep", "tree", "--full", root], ["tree", root, "full"])
         )
-    problems = []
-    for label, bash_args, ts_args in comparisons:
+    for label, bash_args, ts_args in dump_comparisons:
         bash_out, ts_out = repo.bash(*bash_args), repo.ts(*ts_args)
         if bash_out != ts_out:
             problems.append((label, bash_out, ts_out))

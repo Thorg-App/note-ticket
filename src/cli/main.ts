@@ -1,8 +1,21 @@
 import { basename } from "node:path";
 
+import { MissingTicketIdError } from "../core/id.js";
+import type { TicketStore } from "../core/ticket-store.js";
+import { CliError } from "./cli-error.js";
+import { BlockedCommand } from "./commands/blocked.js";
 import { HelpCommand } from "./commands/help.js";
+import { LsCommand } from "./commands/ls.js";
+import { ReadyCommand } from "./commands/ready.js";
+import { ListOptions } from "./list-options.js";
+import { StoreResolver } from "./store-resolver.js";
 
 const DEFAULT_PROGRAM_NAME = "ticket";
+const EXIT_SUCCESS = 0;
+const EXIT_FAILURE = 1;
+
+/** How a read command turns an open tickets directory into printable output. */
+type ReadCommandBody = (store: TicketStore, options: ListOptions) => string;
 
 /**
  * CLI entrypoint. Mirrors the bash `case` dispatch in ./ticket for the commands
@@ -26,17 +39,65 @@ class Cli {
 
     static run(argv: string[]): number {
         const command = argv[0] ?? "help";
+        const args = argv.slice(1);
+        try {
+            return Cli.dispatch(command, args);
+        } catch (error) {
+            const message = Cli.userFacingMessage(error);
+            if (message === undefined) {
+                throw error;
+            }
+            process.stderr.write(`Error: ${message}\n`);
+            return EXIT_FAILURE;
+        }
+    }
+
+    private static dispatch(command: string, args: readonly string[]): number {
         switch (command) {
             case "help":
             case "--help":
             case "-h":
-                process.stdout.write(HelpCommand.render(this.programName()));
-                return 0;
+                process.stdout.write(HelpCommand.render(Cli.programName()));
+                return EXIT_SUCCESS;
+            case "ls":
+            case "list":
+                return Cli.read(args, (store, options) => LsCommand.render(store.loadAll(), options));
+            case "ready":
+                return Cli.read(args, (store, options) => ReadyCommand.render(store.loadAll(), options));
+            case "blocked":
+                return Cli.read(args, (store, options) => BlockedCommand.render(store.loadAll(), options));
             default:
                 process.stderr.write(`Unknown command: ${command}\n`);
-                process.stderr.write(HelpCommand.render(this.programName()));
-                return 1;
+                process.stderr.write(HelpCommand.render(Cli.programName()));
+                return EXIT_FAILURE;
         }
+    }
+
+    /**
+     * The shape every read command shares: open an EXISTING tickets directory, then print
+     * what the command renders. An existing-but-empty directory prints nothing and succeeds.
+     */
+    private static read(args: readonly string[], body: ReadCommandBody): number {
+        const resolution = StoreResolver.forReadCommand();
+        if (resolution.kind === "error") {
+            for (const message of resolution.messages) {
+                process.stderr.write(`${message}\n`);
+            }
+            return EXIT_FAILURE;
+        }
+        process.stdout.write(body(resolution.store, ListOptions.parse(args)));
+        return EXIT_SUCCESS;
+    }
+
+    /**
+     * Message to print as `Error: …`, or undefined for a defect, which must keep its
+     * stack trace instead of masquerading as a usage error.
+     */
+    private static userFacingMessage(error: unknown): string | undefined {
+        if (error instanceof CliError || error instanceof MissingTicketIdError) {
+            return error.message;
+        }
+        return undefined;
     }
 }
 
