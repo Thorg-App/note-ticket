@@ -268,3 +268,149 @@ claims is covered), four should-fixes, six suggestions. Everything else — the 
 deletion, the mutation evidence, the wrapper BDD isolation — holds up under adversarial
 checking, and the `#QUESTION_FOR_HUMAN` was raised correctly and should be answered "yes,
 drop it" with an approval id recorded.
+
+---
+---
+
+# ROUND 2 — convergence verification (`0ef05a5`)
+
+Same discipline as round 1: every claim below was re-derived by running it, not read off the
+report. All mutations reverted; the only working-tree change I leave behind is this review
+file itself.
+
+Baseline re-run at `0ef05a5`: `make test` **261 scenarios / 1729 steps, 0 failed**; `npm test`
+**429 unit tests, 0 failed**; `make typecheck` clean. The claimed numbers are real.
+
+## 1. B1 — VERIFIED FIXED, and the new pin is uniquely discriminating
+
+`features/ticket_query.feature:145` "A large filtered query into a short reader adopts jq's
+signal death". I mutated `ChildExit.codeOf` to drop the signal branch entirely:
+
+```ts
+    static codeOf(outcome: ChildOutcome): number | undefined {
+        if (outcome.status !== null) { return outcome.status; }
+-       if (outcome.signal !== null) { return ExitCode.forSignal(outcome.signal); }
+        return undefined;
+    }
+```
+
+rebuilt, and ran the **whole** BDD suite (not just the one feature) to check for a second
+killer or a vacuous pass:
+
+```
+Failing scenarios:
+  features/ticket_query.feature:145  A large filtered query into a short reader adopts jq's signal death
+260 scenarios passed, 1 failed
+```
+
+Exactly one scenario in 261 catches it. That is the strongest possible outcome: it proves both
+that the new scenario is non-vacuous **and** that nothing else was covering this path, i.e.
+the gap I reported was real and is now the only thing standing in it. B1 is closed.
+
+The folding table was also genuinely corrected, not just claimed: rows **7a** (`BrokenPipe`'s
+EPIPE listener) and **7b** (`ChildExit.codeOf`, "a different code path", annotated "missed in
+the first pass; found by review") now exist as separate rows, and the "nothing unpinned"
+sentence is rewritten in place rather than quietly deleted.
+
+## 2. I2 / #13 scalar sub-case — VERIFIED, and the implementer found more than I asked for
+
+I asked for the read side; it added the read **and** the write side. Mutation: make
+`FrontmatterValue.parseArray` return `[]` for a non-array value (the plausible wrong
+implementation) —
+
+```
+✖ reads a scalar value as a single-element relation
+✖ re-serializes a scalar value as an array when adding to it
+```
+
+— those two and no others, out of 429. Both non-vacuous. The report also corrected row 13 of
+the folding table from "already pinned" to naming the gap and who found it, which is the
+honest bookkeeping this project's CLAUDE.md asks for.
+
+## 3. Wrapper failure arms — three of three verified by mutation
+
+I spot-checked all three rather than the one requested, since they are cheap:
+
+| Mutation | Result |
+|---|---|
+| build failure falls through instead of `_fail`ing (`) >&2 </dev/null \|\| true`) | RED, ONLY `ticket_wrapper.feature:47 A failed build is reported and the stale bundle is not run` |
+| `_require_command npm` removed from `_build_bundle` | RED, ONLY `ticket_wrapper.feature:38 A missing npm is reported when a build is needed` |
+| `src/`-absent arm back to the silent `return 1` | RED, ONLY `ticket_wrapper.feature:57 A copy without sources is reported, not silently served` |
+
+Each killed by exactly one scenario. I1 is closed. Note the build-failure scenario is doing
+double duty well: because the fixture is a *stale marker bundle*, asserting empty stdout is
+what proves the launcher did not silently fall back to the bundle it had just judged stale —
+a stronger property than "it printed an error".
+
+## 4. S2 rejection — the implementer is right; I withdraw the suggestion
+
+My S2 offered two options and led with the wrong one. Deleting the `[[ -d "$SOURCE_DIR" ]]`
+guard would send `find` at a nonexistent directory; I confirmed what that does:
+
+```
+$ find /definitely/not/here -newer /etc/hostname -print -quit
+find: '/definitely/not/here': No such file or directory
+find rc=1
+```
+
+Under `[[ -n "$(find …)" ]]` that is the worst of both worlds — a raw `find:` diagnostic
+sprayed at the user's stderr **and** a "not stale" answer, i.e. the silent degradation I was
+objecting to, with noise added. Converting the arm to a loud `_fail` keeps the guard where the
+`find` needs it, states the real problem in the user's terms ("this is not a complete install
+of the tool"), and turns an unreachable branch into a reachable, tested one. That is a better
+answer than either option I gave. Dropped, not re-litigated.
+
+Same for S1: leaving the future-mtime rebuild loop as a documented, named trade with the real
+fix (a newest-mtime stamp) written down is exactly the 80/20 call I signalled.
+
+## 5. PHASE_B hand-off — concrete enough to act on
+
+Both deferred items pass the "can PHASE_B execute this without guessing?" test.
+
+- **I3 (doc spec, "PHASE_B must pick up" item 2)** names the target file, the exact recovery
+  command (`git show 42ccf92^:scripts/parity/README.md`, section "Whitelisted divergences"),
+  the required section name, the constraint that the **numbering must be preserved** because
+  comments cite `#3/#4/#8/#9/#11/#12/#13` by number, the preamble re-pointing each entry's
+  now-dead "pinned by `check_*`" clause at §2 of the implementation report, the new **#20**,
+  and the Distribution-section rewrite. It is also correctly labelled "the one blocking doc
+  dependency". Nothing to guess.
+- **S5 (install manifest, item 4)** names both artifacts (`TOOL_COPY_FILES` + `src/` vs
+  `pkg/`), states the failure mode (drift), and offers two concrete resolutions with a
+  preference. Deferring it was the right call — pre-solving packaging inside a test file would
+  have been the wrong direction, exactly as the report says.
+
+The residual risk on I3 is unchanged and is a scheduling risk, not a defect: until PHASE_B
+lands, 14 code comments cite a document that does not yet carry the text. It is recorded in
+two places now (the report and this review), which is as much as PHASE_A can do.
+
+## 6. Anything new introduced by round 2?
+
+I looked specifically for regressions in the round-2 diff and found none.
+
+- `_bundle_is_stale` now calls `_fail` (which `exit`s) from inside an `if` condition. `exit`
+  is not suppressed by the `if` context the way `set -e` is, so this terminates the script as
+  intended — confirmed by the scenario (fails, message on stderr, stdout empty).
+- The `assert (project / 'node_modules').is_dir()` added to `_isolated_tool_copy` closes S4's
+  write-through hazard and names `make build` in its message; `context.tool_dir` is now
+  registered before the copy, so a mid-copy failure is still cleaned up.
+- CI: `Typecheck` moved ahead of `Run tests`. I said `!cancelled()` **or** reorder; reordering
+  is the better of the two (fastest gate first, no second failing step to scroll past). The
+  smoke step now also `git init`s a scratch repo and runs `create` + `ls` with a one-row
+  assertion, covering the git-based resolution S6 asked for.
+- `</dev/null` on the build subshell (S3) matches what I verified by hand in round 1 and
+  removes the class rather than relying on npm's current behavior.
+
+## ROUND 2 VERDICT: **CONVERGED**
+
+The one blocking item is fixed and the fix is proven non-vacuous by a mutation that exactly
+one scenario in the whole suite catches. All four should-fixes are incorporated. Five of six
+suggestions taken; the one rejection (S2) is better-reasoned than my suggestion was and I
+withdraw it. The report's bookkeeping was corrected honestly, including a gap the implementer
+found on its own (#13's scalar sub-case) rather than closing only what I named.
+
+**Nothing blocks PHASE_A.** Carry forward to PHASE_B, unchanged from round 1:
+
+1. `docs-internal/migration-to-ts-high-level.md` must gain the #1–#19 whitelist (plus #20)
+   with numbering preserved — 14 live code comments depend on it.
+2. Record the owner's approval id for the unknown-command behavior change, per the whitelist's
+   own convention of one approval ticket per changed behavior.
