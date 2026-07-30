@@ -26,9 +26,29 @@ Flow: IMPLEMENTATION_WITH_SELF_PLAN → IMPLEMENTATION_REVIEW → IMPLEMENTATION
       duplicate `deps`.
 - [x] IMPLEMENTATION_ITERATION round 2 (`2176db8`) — guard restored, 2 unit tests + 2 parity
       fixtures added, both mutation-verified red. Gates: unit 291, parity graph 71 scenarios.
-- [ ] Confirmation pass 2 — spawned. Focus: the flagged judgement call (`check_graph.py` now
-      compares `show` section rows as a SET to coexist with divergence #8 — does that weaken it?)
+- [x] Confirmation pass 2 — **NOT READY**: the set comparison was too broad. Row multiplicity went
+      unguarded for ALL four headings while #8 covers `## Blocking` only. Proved a concrete
+      regression ships green (`[...new Set(ids)]` in `show.ts` → unit AND parity both rc=0).
+- [x] IMPLEMENTATION_ITERATION round 3 (`865ab35`) — dedup narrowed to `## Blocking`; other
+      headings back to a multiset. Plus 2 unit tests. Both mutation directions measured.
+- [x] Confirmation pass 3 (final) — **READY**, zero blocking. `git diff 2176db8 865ab35 -- src/`
+      empty (no shipped-behaviour drift). Gates: build 0, unit 293/293, BDD 214 scenarios/0 failed,
+      parity graph 71 scenarios/0 failures.
 - [x] CHANGELOG entry (`860e72a`, top-level only — 6 user-visible changes)
 - [x] `decide` ticket `nid_qxt3z5unr9k220aqttbw84a6a_e` filed: divergence #8's duplicate-row
       removal is shipped but NOT human-approved (the closed decision ticket covers #9 only).
-- [ ] Close ticket
+- [x] Close ticket
+
+## Outcome
+
+Converged in 3 iteration rounds (limit 4). Both roles signal READY.
+
+The two confirmation passes each caught a real defect that all four green gates missed — both of
+the same shape: **a guard weakened by argument instead of by measurement.** Round 1 deleted a
+`TreeLayout` re-check as "unreachable" (it was reachable via duplicate `deps` entries, and the
+parity generator emitted none); round 2's harness fix for that then dropped multiplicity checking
+across all four `show` headings. Worth remembering: in this repo a green `make parity` only proves
+the *generated fixtures* agree, so a fix must extend the generator, not just the comparator.
+
+Left open deliberately: `nid_qxt3z5unr9k220aqttbw84a6a_e` (`decide`) — divergence #8's duplicate-row
+removal is shipped but not human-approved.

@@ -233,3 +233,56 @@ Blocking list (1 item, harness-only):
    to `## Blocking`; keep the multiset (`sorted`) comparison for `## Blockers`,
    `## Children`, `## Linked`. Update the adjacent comment and `scripts/parity/README.md`
    divergence #8 wording to match. Fix verified above in both directions.
+
+---
+
+## Confirmation pass 3 (final) — IMPLEMENTATION_REVIEWER, commit `865ab35`
+
+Scope was deliberately narrow: the `_show_mismatches` fix, `src/` byte-identity, the two new
+unit tests, and the four gates. Nothing else re-opened.
+
+### 1. The fix is right and complete
+
+`scripts/parity/check_graph.py::_show_mismatches` now compares `## Blocking` as a sorted SET
+(divergence #8's sanctioned count difference) and every other section as a sorted MULTISET.
+
+Verified by mutation in a throwaway `git archive HEAD` copy at `$PWD/.tmp/c3mut` (the real tree
+was clean before and after). Mutation: `src/cli/commands/show.ts:109` →
+`const rows = [...new Set(ids)].map(...)`.
+
+- `make parity` under the mutation: **rc=2**, `graph FAIL scenarios=71 failures=2` —
+  `MISMATCH scenario=[duplicate-dep] check=[show a (## Blockers rows)]` and
+  `scenario=[duplicate-dep-with-subtree]`. The regression that shipped green in pass 2 is now
+  caught.
+- Clean sources: `make parity` **rc=0, failures=0** — no false positive from divergence #8.
+
+The failure message still prints the raw `sorted(bash_rows)` / `sorted(ts_rows)`, so a
+multiplicity mismatch is legible. `## Children` cannot contain duplicates on either side, so
+tightening it costs nothing. README, module docstring and
+`_check_show_duplicate_blocking`'s docstring were all re-worded to match — no stale "compared
+as sets" claim left anywhere.
+
+### 2. `src/` byte-identical to the reviewed commit `2176db8` — CONFIRMED
+
+`git diff 2176db8 865ab35 -- src/` is **empty**. `865ab35` touches only
+`scripts/parity/{README.md,check_graph.py}`, `test/graph-commands.test.ts` and four `.ai_out/`
+files. The implementer's experimental mutation was fully reverted; no shipped behaviour drifted.
+
+### 3. The two new unit tests are NON-VACUOUS — mutation-verified, not taken on report
+
+Under the same mutation, `make unit-test` is **rc=2**, tests 293 / pass 291 / **fail 2**, and
+the two red tests are exactly *"repeats a dependency listed twice under Blockers"* and
+*"repeats a link listed twice under Linked"*. No collateral failures.
+
+### 4. Gates, measured on the untouched tree (HEAD `865ab35`, `git status` clean)
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | **0** | `dist/ticket.mjs` 61.5kb |
+| `make unit-test` | **0** | tests 293 / pass 293 / fail 0 |
+| `make test` | **0** | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | **0** | graph OK scenarios=71 failures=0 (19 whitelisted bash bogus cycles), query OK, slug OK titles=13 |
+
+Log: `$PWD/.tmp/c3_gates.log` (chained `&&`, `GATES_RC=0`). Matches the implementer's report.
+
+### Verdict: **READY** — zero blocking items.

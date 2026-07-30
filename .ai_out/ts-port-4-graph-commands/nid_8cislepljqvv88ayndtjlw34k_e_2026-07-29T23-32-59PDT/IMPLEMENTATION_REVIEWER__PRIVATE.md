@@ -241,3 +241,53 @@ bite; the broad dedup is what throws that coverage away. Same failure shape as t
 regression: a guard weakened by argument instead of measured.
 
 ## Verdict: NOT READY — 1 blocking (harness-only, one line + a README wording tweak).
+
+---
+
+# CONFIRMATION PASS 3 (FINAL, fresh instance, commit `865ab35`)
+
+Narrow by instruction: (1) the `_show_mismatches` fix, (2) `src/` byte-identity vs `2176db8`,
+(3) non-vacuity of the two new unit tests, (4) the four gates. No new fronts opened.
+
+## 2. `src/` is byte-identical to the reviewed commit — CONFIRMED
+
+`git diff 2176db8 865ab35 -- src/` prints NOTHING. `git show --stat 865ab35` touches only
+`scripts/parity/{README.md,check_graph.py}`, `test/graph-commands.test.ts` and four `.ai_out/`
+files. The implementer's `[...new Set(ids)]` mutation was fully reverted; `show.ts:109` is back
+to `ids.map(...)`. No shipped behaviour drift.
+
+## 4. Gates on the untouched tree (`git status` clean, HEAD `865ab35`)
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | **0** | `dist/ticket.mjs` 61.5kb |
+| `make unit-test` | **0** | tests 293 / pass 293 / fail 0 |
+| `make test` | **0** | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | **0** | graph OK scenarios=71 failures=0 (19 whitelisted), query OK, slug OK titles=13 |
+
+Single log `.tmp/c3_gates.log`, rc in `.tmp/c3_gates_rc.txt` (chained `&&`, GATES_RC=0).
+Matches the implementer's round-4 report exactly.
+
+## 1 + 3. Mutation, run MYSELF in a throwaway `git archive HEAD` copy at `.tmp/c3mut`
+
+Real tree never touched (verified clean before and after). Mutation = the one I prescribed:
+`src/cli/commands/show.ts:109` → `const rows = [...new Set(ids)].map(...)`.
+
+- `make unit-test` ⇒ **rc=2**, tests 293 / pass 291 / **fail 2**, and the two red are exactly
+  *"repeats a dependency listed twice under Blockers"* and *"repeats a link listed twice under
+  Linked"* — the two tests added by this commit. NON-VACUOUS, no collateral failures.
+- `make parity` ⇒ **rc=2**, `graph FAIL scenarios=71 failures=2`:
+  `MISMATCH scenario=[duplicate-dep] check=[show a (## Blockers rows)]` and
+  `scenario=[duplicate-dep-with-subtree]`. Exactly the hole I reported is now closed.
+- Clean sources ⇒ parity rc=0, failures=0. **No false positive** from divergence #8, i.e. the
+  `## Blocking` set comparison still absorbs the sanctioned count difference.
+
+Read the comparator as well: `dedupe = (lambda rows: sorted(set(rows))) if heading ==
+BLOCKING_HEADING else sorted` — narrow, and the problem tuple still REPORTS the raw
+`sorted(bash_rows)`/`sorted(ts_rows)`, so a multiplicity failure is legible. `## Children` can
+never contain duplicates on either side (one row per ticket whose `parent` matches), so the
+multiset comparison there costs nothing. README + module docstring +
+`_check_show_duplicate_blocking` docstring all re-worded consistently ("sorted MULTISET except
+`## Blocking`") — no stale claim left behind.
+
+## Verdict: READY. Zero blocking items.
