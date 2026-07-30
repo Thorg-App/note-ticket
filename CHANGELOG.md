@@ -10,6 +10,7 @@
 - Nested subfolders under `_tickets/` are now supported for organizing tickets (e.g. `_tickets/backend/api/foo.md`). Move ticket files with `mv`; every command searches all nesting levels. New tickets are still created at the top level of `_tickets/`. Hidden directories (`.trash`, `.obsidian`, ...) are skipped; `ls` and `query` list tickets in byte-wise path order.
 
 ### Changed
+- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Implemented in the TypeScript core; becomes user-visible as each enumerating command is delegated to it.
 - TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help` is the first delegated command. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
 
 ### Fixed

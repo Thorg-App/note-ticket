@@ -23,3 +23,9 @@ Parity notes (contractual even where BDD is thin):
 
 Acceptance: all five commands served by TS via TS_COMMANDS, full BDD suite green.
 
+
+## Notes
+
+**2026-07-30T00:06:31Z**
+
+BDD scenario to ship with this ticket (from nid_n6eavbm0h77twvna8k9nnpu2g_e, now DONE in TS core): a `_tickets/*.md` file with no `id` frontmatter field must make the flipped enumerating command fail with stderr `Error: <path> has no 'id' frontmatter field` and a non-zero exit. Core throws `MissingTicketIdError` (src/core/id.ts) from `TicketStore.load`; the CLI adds the `Error: ` prefix. Cover missing key, empty value, and no-frontmatter-at-all.

@@ -47,7 +47,10 @@ export class Ticket {
         return this.document.frontmatter;
     }
 
-    /** Stable identity. Empty when the file carries no `id` — such files are not tickets. */
+    /**
+     * Stable identity. Empty only for a corrupt file: `TicketStore.load` rejects such a
+     * file with `MissingTicketIdError`, so a ticket obtained from the store always has one.
+     */
     get id(): string {
         return this.frontmatter.getString(FIELD_ID) ?? "";
     }

@@ -30,6 +30,26 @@ export class TicketId {
     }
 }
 
+/**
+ * A `.md` file under the tickets dir that carries no usable `id`.
+ *
+ * WHY a hard error rather than skip-with-warning (human decision, 2026-07-29, ticket
+ * nid_5g3eta9cf7yi6iukmscxma6wc_e): every file under `_tickets/` is EXPECTED to have an
+ * `id`, so a file without one is a corrupt repo. Bash silently never matches such a
+ * file, which makes a hand-edit that drops the `id` look like the ticket ceased to
+ * exist — no signal at all.
+ *
+ * ACCEPTED TRADE-OFF: one malformed file therefore fails EVERY enumerating command,
+ * `ls` included. The message names the path and the missing field so the fix is obvious.
+ * The `Error: ` prefix is the CLI's to add, matching every other bash error line.
+ */
+export class MissingTicketIdError extends Error {
+    constructor(readonly path: string) {
+        super(`${path} has no 'id' frontmatter field`);
+        this.name = "MissingTicketIdError";
+    }
+}
+
 /** One candidate the resolver searches. */
 export interface IdCandidate {
     readonly id: string;

@@ -17,4 +17,9 @@ with their entire subtree, including non-hidden folders nested under them. Hidde
 Symlinked ticket files and a symlinked `_tickets/` are followed, and `ls`/`query`
 list tickets in path order.
 
+Every ticket MUST carry an `id` frontmatter field. A `.md` file under `_tickets/`
+without one is a corrupt repo: commands fail with
+`Error: <path> has no 'id' frontmatter field` instead of silently omitting that
+ticket from every listing. Restore the `id`, or move the file out of `_tickets/`.
+
 
