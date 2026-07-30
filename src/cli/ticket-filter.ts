@@ -8,7 +8,12 @@ import type { Ticket } from "../core/ticket.js";
  */
 export class TicketFilter {
     constructor(
-        private readonly status: string,
+        /**
+         * Literal text compared against the status ON DISK — deliberately NOT a
+         * `TicketStatus`. Bash never validates `--status=`, so `--status=bogus` (and
+         * `--status=done`, which no command writes) must list nothing rather than fail.
+         */
+        private readonly statusFilter: string,
         private readonly assignee: string,
         private readonly tag: string,
     ) {}
@@ -29,7 +34,7 @@ export class TicketFilter {
     }
 
     private statusMatches(ticket: Ticket): boolean {
-        return this.status === "" || ticket.status === this.status;
+        return this.statusFilter === "" || ticket.status === this.statusFilter;
     }
 
     private assigneeMatches(ticket: Ticket): boolean {

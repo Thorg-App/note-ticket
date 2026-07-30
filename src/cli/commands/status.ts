@@ -4,6 +4,7 @@ import {
     TICKET_STATUS_OPEN,
     type Ticket,
     TicketField,
+    type TicketStatus,
     VALID_TICKET_STATUSES,
 } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
@@ -24,7 +25,22 @@ const STATUS_LIST = VALID_TICKET_STATUSES.join(" ");
  */
 export interface StatusWrapper {
     readonly command: string;
-    readonly status: string;
+    readonly status: TicketStatus;
+}
+
+/**
+ * The ONE place user-typed text becomes a `TicketStatus`. Past this boundary the status is
+ * a union member, so no downstream signature has to re-check it.
+ */
+export class TicketStatusArgument {
+    /** @throws CliError naming the accepted statuses, as bash `validate_status` does. */
+    static parsed(text: string): TicketStatus {
+        const status = VALID_TICKET_STATUSES.find((valid) => valid === text);
+        if (status === undefined) {
+            throw new CliError(`invalid status '${text}'. Must be one of: ${STATUS_LIST}`);
+        }
+        return status;
+    }
 }
 
 export const STATUS_WRAPPERS = {
@@ -46,7 +62,7 @@ export class StatusUpdate {
      * A field the file does not have yet is inserted as the FIRST frontmatter entry
      * (`Frontmatter.withField`), which is where bash's `sed` insert lands it.
      */
-    static applied(ticket: Ticket, status: string, now: string): Ticket {
+    static applied(ticket: Ticket, status: TicketStatus, now: string): Ticket {
         const updated = ticket
             .withField(TicketField.STATUS, status)
             .withField(TicketField.STATUS_UPDATED_ISO, now);
@@ -68,7 +84,12 @@ export class StatusCommand {
                 `Valid statuses: ${STATUS_LIST}`,
             ]);
         }
-        return StatusCommand.apply(store, args[0] as string, args[1] as string, environment);
+        return StatusCommand.apply(
+            store,
+            args[0] as string,
+            TicketStatusArgument.parsed(args[1] as string),
+            environment,
+        );
     }
 
     static runWrapper(
@@ -85,7 +106,8 @@ export class StatusCommand {
 
     /**
      * Bash's order of operations, which decides what a failure leaves behind: the status is
-     * validated BEFORE the id is resolved, and the id is resolved before anything is written.
+     * validated BEFORE the id is resolved (the caller's `TicketStatusArgument.parsed` is
+     * that check), and the id is resolved before anything is written.
      * An unresolvable id therefore mutates NOTHING — including the empty id an unset shell
      * variable expands to (`tk close "$UNSET_VAR"`), which matches no ticket at all.
      *
@@ -96,20 +118,12 @@ export class StatusCommand {
     private static apply(
         store: TicketStore,
         search: string,
-        status: string,
+        status: TicketStatus,
         environment: CommandEnvironment,
     ): number {
-        StatusCommand.validate(status);
         const ticket = TicketLookup.byId(store.loadAll(), search);
         store.save(StatusUpdate.applied(ticket, status, environment.clock.nowIso()));
         process.stdout.write(`Updated ${ticket.id} -> ${status}${LINE_SEPARATOR}`);
         return ExitCode.SUCCESS;
-    }
-
-    /** @throws CliError naming the accepted statuses, as bash `validate_status` does. */
-    private static validate(status: string): void {
-        if (!VALID_TICKET_STATUSES.includes(status)) {
-            throw new CliError(`invalid status '${status}'. Must be one of: ${STATUS_LIST}`);
-        }
     }
 }

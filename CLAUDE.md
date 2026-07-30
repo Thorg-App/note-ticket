@@ -17,7 +17,7 @@ Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a deleg
 `src/core/` is the shared data-model layer (CLI **and** the planned graph visualization import it) and has **zero CLI knowledge** — no argv, no output formatting, no console:
 
 - `frontmatter.ts` — `Frontmatter` (key-order-preserving block, raw values) + `TicketDocument` (block + body, byte-exact round trip)
-- `ticket.ts` — `Ticket` entity: typed field accessors, immutable `withField`/`withoutField`, `toJsonRecord()` (the `query` payload), `TicketField` (the on-disk key names, one place)
+- `ticket.ts` — `Ticket` entity: typed field accessors, immutable `withField`/`withoutField`, `toJsonRecord()` (the `query` payload), `TicketField` (the on-disk key names, one place), `TicketStatus` (the union of statuses this CLI WRITES — `Ticket.status` stays `string` because disk text is arbitrary; text becomes a `TicketStatus` only via `TicketStatusArgument.parsed`)
 - `ticket-store.ts` — `TicketsDirectory.resolve()` and `TicketStore` (discovery/load/save); `collectFiles()` is the single source of truth for "what is a ticket file"
 - `id.ts` — `TicketId.generate()`, `IdResolver` (exact beats partial, ambiguity is an error)
 - `ticket-file-error.ts` — `CorruptTicketFileError` and its two cases: `MissingTicketIdError` (a block that parsed, no `id`) and `MissingFrontmatterBlockError` (no block at all — and CRLF, which is unsupported and named as the cause instead of the `id`)

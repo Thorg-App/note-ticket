@@ -47,14 +47,14 @@ export class ListOptions {
     }
 
     static parse(args: readonly string[]): ListOptions {
-        let status = "";
+        let statusFilter = "";
         let assignee = "";
         let tag = "";
         let limit: string | undefined;
         for (let index = 0; index < args.length; index++) {
             const arg = args[index] as string;
             if (arg.startsWith(OPTION_STATUS)) {
-                status = ListOptions.inlineValue(arg, OPTION_STATUS);
+                statusFilter = ListOptions.inlineValue(arg, OPTION_STATUS);
             } else if (arg.startsWith(OPTION_ASSIGNEE)) {
                 assignee = ListOptions.inlineValue(arg, OPTION_ASSIGNEE);
             } else if (arg.startsWith(OPTION_TAG)) {
@@ -68,7 +68,7 @@ export class ListOptions {
             }
             // Unrecognised arguments are skipped, as in bash.
         }
-        return new ListOptions(new TicketFilter(status, assignee, tag), limit);
+        return new ListOptions(new TicketFilter(statusFilter, assignee, tag), limit);
     }
 
     private static inlineValue(arg: string, prefix: string): string {
