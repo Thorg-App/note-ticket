@@ -1,4 +1,4 @@
-.PHONY: test build typecheck
+.PHONY: test build typecheck unit-test
 
 # node_modules is a directory whose mtime is unreliable as a target; the stamp
 # makes `npm install` run only when the manifest changes.
@@ -15,7 +15,12 @@ build: $(NPM_STAMP)
 typecheck: $(NPM_STAMP)
 	npm run --silent typecheck
 
+# node:test unit tests over src/core. BDD stays the acceptance harness; these cover
+# the core algorithms (parser, graph) where bash had no tests.
+unit-test: $(NPM_STAMP)
+	npm run --silent test
+
 # The bash `ticket` delegates TS_COMMANDS to dist/ticket.mjs, so the bundle must
 # exist before the BDD suite runs.
-test: build
+test: build unit-test
 	uv run --with behave behave

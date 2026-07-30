@@ -2,7 +2,7 @@
 id: nid_2ziai8ka9l0yak2lxnwlu9lk2_e
 title: "TS port 5: write commands (create, status, dep/undep, link/unlink, add-note, edit)"
 status: open
-deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_8cislepljqvv88ayndtjlw34k_e]
+deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_8cislepljqvv88ayndtjlw34k_e, nid_5g3eta9cf7yi6iukmscxma6wc_e]
 links: []
 created_iso: 2026-07-29T21:57:25Z
 status_updated_iso: 2026-07-29T21:57:25Z
@@ -25,3 +25,13 @@ Parity notes:
 
 Acceptance: every remaining command served by TS; bash ./ticket reduced to a pure delegating shim; full BDD suite green.
 
+
+## Notes
+
+**2026-07-30T00:00:13Z**
+
+### Carry-over from the closed ID-resolution decision ticket (nid_5g3eta9cf7yi6iukmscxma6wc_e)
+
+Human confirmed the empty-id change; this ticket owns pinning it on the **write** path, which is where it actually bites:
+- Add a BDD scenario: a write command given an empty id (e.g. `tk close ""`, as an unset shell var expands to) fails as not-found and mutates NOTHING. Under bash, in a one-ticket repo, it silently closes that ticket.
+- Partial-ID matching is **retained** — exact match wins over it. Do not remove the partial tier.

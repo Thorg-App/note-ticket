@@ -10,6 +10,17 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 
 **TypeScript port (in flight):** Strangler-fig migration to a Node CLI; plan at `docs-internal/migration-to-ts-high-level.md`. Commands named in the `TS_COMMANDS` variable in `ticket` are `exec`'d to `node <script-dir>/dist/ticket.mjs`; everything else stays bash. Sources in `src/` (`src/cli/` dispatch + commands, `src/core/` data model), bundled by esbuild via `make build` (zero runtime npm deps). Porting a command = implement in TS → add to `TS_COMMANDS` → `make test` green. Rollback = remove the name.
 
+`src/core/` is the shared data-model layer (CLI **and** the planned graph visualization import it) and has **zero CLI knowledge** — no argv, no output formatting, no console:
+
+- `frontmatter.ts` — `Frontmatter` (key-order-preserving block, raw values) + `TicketDocument` (block + body, byte-exact round trip)
+- `ticket.ts` — `Ticket` entity: typed field accessors, immutable `withField`/`withoutField`, `toJsonRecord()` (the `query` payload)
+- `ticket-store.ts` — `TicketsDirectory.resolve()` and `TicketStore` (discovery/load/save); `collectFiles()` is the single source of truth for "what is a ticket file"
+- `id.ts` — `TicketId.generate()`, `IdResolver` (exact beats partial, ambiguity is an error)
+- `slug.ts` — title → filename, collision suffixes
+- `dep-graph.ts` — `DepGraph`: ready/blocked, cycles, dependency-tree layout rows
+
+Bash behavior is the contract; parity is verified empirically against `./ticket`, not guessed. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `dep tree` sibling ordering.
+
 Key functions:
 - `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides
 - `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_e` (decoupled from filename)
@@ -27,7 +38,9 @@ Dependencies: bash, git, sed, awk, find. Optional: ripgrep (faster grep).
 
 ## Testing
 
-BDD tests using [Behave](https://behave.readthedocs.io/). Run with `make test` (requires `uv`, `node`/`npm`; builds the TS bundle first).
+BDD tests using [Behave](https://behave.readthedocs.io/). Run with `make test` (requires `uv`, `node`/`npm`; builds the TS bundle and runs the unit tests first).
+
+`make unit-test` (= `npm test`) runs the `src/core/` unit tests: `node:test`, sources in `test/*.test.ts`, transpiled by esbuild into `dist-test/` (WHY-NOT running `.ts` through node directly: node's TS support does not cover parameter properties and its flags vary by version). No test framework dependency — do NOT add vitest.
 
 - Feature files: `features/*.feature` - Gherkin scenarios covering all commands
 - Step definitions: `features/steps/ticket_steps.py`

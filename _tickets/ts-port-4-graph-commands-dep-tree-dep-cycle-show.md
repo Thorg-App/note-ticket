@@ -2,7 +2,7 @@
 id: nid_8cislepljqvv88ayndtjlw34k_e
 title: "TS port 4: graph commands (dep tree, dep cycle, show)"
 status: open
-deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e]
+deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_mgfn04pyn3byxj72xxq0mggw5_e, nid_5g3eta9cf7yi6iukmscxma6wc_e]
 links: []
 created_iso: 2026-07-29T21:57:25Z
 status_updated_iso: 2026-07-29T21:57:25Z
@@ -23,3 +23,14 @@ Scope:
 
 Acceptance: dep tree, dep cycle, show served by TS; full BDD suite green.
 
+
+## Notes
+
+**2026-07-30T00:00:13Z**
+
+### Carry-over from the closed ID-resolution decision ticket (nid_5g3eta9cf7yi6iukmscxma6wc_e)
+
+Human confirmed both ID-resolution changes; this ticket owns pinning them:
+- Add a BDD scenario: `dep tree <full-id>` resolves when that full id is a **substring of another** ticket's id (bash errors "ambiguous" here; TS is correct). Use `IdResolver` for the dep-tree root — do NOT reimplement the substring scan.
+- Add a BDD scenario: an **empty** id resolves to not-found (bash succeeds in a one-ticket repo).
+- Partial-ID matching is **retained** — exact match simply wins over it. Do not remove the partial tier.
