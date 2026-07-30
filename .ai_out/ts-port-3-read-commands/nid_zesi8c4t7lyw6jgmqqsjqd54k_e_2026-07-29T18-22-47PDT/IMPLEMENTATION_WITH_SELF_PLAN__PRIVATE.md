@@ -201,3 +201,72 @@ Phase B / T4 / T5: throw `CliError`, never print `Error:` yourself.
 5. Extend the parity harness: `closed` invocations (with fixed mtimes), `query` via the real CLI,
    delete `dump.ts`'s `query` mode, pin the new divergences.
 6. Unit + BDD tests, mutation-test the guards, docs.
+
+## Bash contract for `closed` / `query`, as verified empirically (probes in `.tmp/probe_*.py`)
+
+Baseline before Phase B: `make test` 192 scenarios / 0 failed, `make unit-test` 207, `make parity` green.
+
+### `cmd_closed` (ticket:928)
+- Args: `--limit=*`, `-a X`, `--assignee=*`, `-T X`, `--tag=*`; `*) shift`. **No `--status` arm**, so
+  `closed --status=open` IGNORES it (verified) — same as `ready`/`blocked`, hence `filterIgnoringStatus`.
+- `ls -t "${TICKET_FILES[@]}" | head -n 100` → mtime desc, **cap on FILES, before filtering**. Verified
+  with 120 files whose 3 closed ones were oldest: bash prints NOTHING. `--limit` cannot bring them back.
+- Row: `printf "%-8s [%s] - %s"` = `TicketRow.withStatus`. No priority (the ticket text's "missing
+  priority defaults to 2" does not apply — `closed` never prints a priority). No dedup by id.
+- Status set is `closed || done`. `ready`'s dep resolution compares `!= "closed"` only, so `done`
+  BLOCKS. Two different notions ⇒ `Ticket.isFinished` next to `Ticket.isClosed`.
+- `title` is read as `substr($0, 8)`, not awk `$2`, so `|` and `": "` in a title are safe here.
+- Equal mtimes: `ls -t` falls back to the file NAME (`cmp_name`, `strcoll`). Verified `Zed < aaa < bbb`.
+  ⇒ nanosecond mtime (`statSync(p, {bigint:true}).mtimeNs`; `mtimeMs` is too coarse) + byte-wise path tie-break.
+- `--limit` is `head -n "$limit"`, hence: `0` ⇒ **rc 0 OR 141, RACY** (measured flipping on identical
+  input: `head` exits without reading, and under `pipefail` bash reports awk's SIGPIPE only if awk's
+  write loses the race; the 100-row cap keeps output under the pipe buffer so limit>0 never races);
+  `-1` ⇒ all but the last; `2k` ⇒ 2048; `abc`/`` ⇒ rc 1 `head: invalid number of lines`.
+  With an EMPTY tickets dir bash returns before `head` runs, so a typo'd limit exits 0 there.
+
+### `cmd_query` (ticket:1486) and `_file_to_jsonl` (ticket:219)
+- `filter="$1"` for EVERY arg ⇒ **last arg wins**, nothing is a flag. `query --x .id` filters on `.id`.
+- Empty tickets dir ⇒ `return 0` BEFORE jq, so even `query 'syntax((('` exits 0. Reproduced in TS.
+- `jq -c "select($filter)"`: syntax error rc 3, unmatched filter rc 0 + no output, missing jq rc 127.
+- Serializer divergences (bash vs `JSON.stringify(toJsonRecord())`), all with TS the correct side:
+  1. **control chars emitted raw** ⇒ invalid JSON; `tk create $'tab\there'` reaches it and bash's own
+     `query .id` then dies with jq rc 4 `Invalid string: control characters ... must be escaped`. PINNED.
+  2. duplicate key ⇒ bash emits both pairs, TS collapses (hand-edit only).
+  3. letter-initial line with no colon ⇒ bash key with `""`, TS skips.
+  4. `deps: [x, , y]` ⇒ bash `["x",,"y"]` (invalid JSON), TS drops the empty item.
+  5. `foo:bar` (no space) ⇒ bash key `foo:bar`; `status:` ⇒ bash key `status:`. TS splits at the colon.
+  Byte-identical on: trailing spaces, `"a: b"`, quoted array items, backslashes, blank/indented lines.
+
+## Divergences declared this phase (each pinned in code + parity + CHANGELOG)
+
+5. `closed --limit=` takes a plain decimal count only; bash inherited `head -n`'s syntax and its racy
+   exit code for 0, and ignored a typo entirely when the tickets dir was empty. `RowLimit`.
+6. `query` escapes control characters (valid JSON), bash did not. `Ticket.toJsonText`.
+7. Missing `jq`: exit 127 kept, message replaced (bash printed the shell's `line NNN: jq: command not
+   found`). `Jq.unusable`. NOT covered by an automated test — see "deliberately not done".
+
+## Mutation testing: three of seven mutations SURVIVED the first run
+
+Method: patch `dist/ticket.mjs`, run `scripts/parity/run.py`, restore (`.tmp/mutate.py`).
+Caught first time: path-order-instead-of-mtime (22 byte failures), limit-applied-before-filter (115),
+closed-honours-`--status` (39), control-chars-emitted-raw (query check).
+**Survived, i.e. real vacuity holes I then closed:**
+- `SCANNED_FILE_LIMIT = 1e9` — no fixture had >100 files. Added `_check_closed_scan_cap` (120 files,
+  the closed ones oldest, and it FAILS if bash starts printing rows, so the fixture cannot go stale).
+- `isFinished` reduced to `isClosed` — no fixture had `status: done`. Added the `legacy-done`
+  FIXED_SCENARIO (a `done` ticket that also blocks a dependent, so it pins both notions at once).
+- tie-break `return 0` — V8's sort is stable and `collectFiles` is already byte-ordered, so REMOVING
+  the tie-break is unobservable. Kept the explicit comparator anyway (relying on sort stability plus an
+  upstream ordering for a contractual output order is exactly the hidden coupling that breaks later)
+  and proved it observable with a WRONG tie-break (`-PathOrder.compare`) instead: caught.
+All three re-mutations now fail the harness.
+
+## Deliberately not done
+
+- No unit test for `Jq` — it would have to spawn or fake the binary, and BDD already exercises the
+  real jq path (filter, syntax error). The missing-`jq` branch (exit 127) is therefore covered by
+  reading only; bash's behavior was measured by patching the script to call a nonexistent binary.
+- `check_query`'s missing-id whitelist entry stays: `query` now hard-fails on a file with no `id`, so
+  Phase A's note "query will flip the last of the parity whitelist" was wrong — the entry is still
+  needed, it is just now about the shipped CLI rather than `dump.mjs`.
+- The ticket is left OPEN for the orchestrator to close (git history shows the flow does that).
