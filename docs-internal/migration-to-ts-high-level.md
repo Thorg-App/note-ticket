@@ -76,6 +76,10 @@ Design rules:
 
 ## Behavioral parity checklist (beyond what BDD pins)
 
+`make parity` (see `scripts/parity/README.md`) diffs bash `./ticket` against the TS
+core over generated ticket graphs and covers the graph/JSONL/slug items below
+empirically. Run it while porting; delete it at T6 with bash.
+
 Verify these while porting — they are contractual even where scenarios are thin:
 
 - Tickets dir: `TICKETS_DIR` env override, else `git rev-parse --show-toplevel` +

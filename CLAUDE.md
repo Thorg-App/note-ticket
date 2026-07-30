@@ -19,7 +19,7 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 - `slug.ts` — title → filename, collision suffixes
 - `dep-graph.ts` — `DepGraph`: ready/blocked, cycles, dependency-tree layout rows
 
-Bash behavior is the contract; parity is verified empirically against `./ticket`, not guessed. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `dep tree` sibling ordering.
+Bash behavior is the contract; parity is verified empirically against `./ticket` via `make parity` (differential harness, `scripts/parity/README.md`; delete at T6), not guessed. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `dep tree` sibling ordering.
 
 Key functions:
 - `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides

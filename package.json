@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/ticket.mjs --banner:js=\"#!/usr/bin/env node\"",
+    "build:parity": "esbuild scripts/parity/dump.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist-parity/dump.mjs",
     "build:test": "esbuild test/*.test.ts --bundle --platform=node --format=esm --target=node18 --outdir=dist-test --sourcemap",
     "test": "npm run --silent build:test && node --test dist-test/*.test.js",
     "typecheck": "tsc --noEmit"
