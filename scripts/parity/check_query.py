@@ -29,7 +29,21 @@ EDGE_FILES = {
     "created_iso: 2026-01-01T00:00:00Z\n---\n\nbody\n",
 }
 
-MISSING_ID_FILE = "nofm.md"
+# The three ways a `.md` under _tickets/ is not a ticket, with the TS message each earns
+# (the path is prepended). bash skips all three alike.
+CORRUPT_FILES = [
+    ("nofm.md", "no frontmatter here\n", "has no YAML frontmatter block"),
+    (
+        "noid.md",
+        '---\ntitle: "no id"\nstatus: open\n---\n',
+        "has no 'id' frontmatter field",
+    ),
+    (
+        "crlf.md",
+        '---\r\nid: nid_crlf_e\r\ntitle: "CR"\r\nstatus: open\r\n---\r\n',
+        "frontmatter block is not parseable (CRLF line endings are not supported)",
+    ),
+]
 
 # `min_lines`: how many rows this invocation MUST produce against the fixtures below. Two
 # identical empty outputs compare equal, so an invocation that stops matching would keep
@@ -94,25 +108,32 @@ def _parses_as_json(jsonl):
 
 
 def _check_missing_id_divergence():
-    """Whitelisted divergence: a `.md` with no `id` is skipped by bash, fatal in TS.
+    """Whitelisted divergence: an unusable `.md` is skipped by bash, fatal in TS.
 
     Deliberate (nid_n6eavbm0h77twvna8k9nnpu2g_e): silently omitting a ticket from every
     listing hides a corrupt repo. Pinned here rather than byte-compared, so the day
     either side changes its mind the harness says so.
+
+    The three corrupt shapes get three DIFFERENT TS messages (bash skips all of them
+    identically), and the CRLF one must not blame the `id` field the file visibly
+    contains -- nid_z10hpj927zqilxcpl9ycpe0ad_e.
     """
-    with TempRepo("parity-missing-id-") as repo:
-        path = os.path.join(repo.tickets, MISSING_ID_FILE)
-        with open(path, "w") as f:
-            f.write("no frontmatter here\n")
-        bash, ts = repo.bash_result("query"), repo.ts_cli_result("query")
-        # bash emits a bare blank line for such a file (no JSON record) -- hence strip().
-        bash_skips = bash.returncode == 0 and bash.stdout.strip() == ""
-        if bash_skips and ts.returncode != 0 and path in ts.stderr:
-            return True, "missing-id: bash skips, TS fails naming the file (as designed)"
-        return False, (
-            "missing-id divergence changed: bash rc=%d out=[%s] / ts rc=%d stderr=[%s]"
-            % (bash.returncode, bash.stdout.strip(), ts.returncode, ts.stderr.strip()[:200])
-        )
+    for name, content, expected in CORRUPT_FILES:
+        with TempRepo("parity-missing-id-") as repo:
+            path = os.path.join(repo.tickets, name)
+            with open(path, "w", newline="") as f:
+                f.write(content)
+            bash, ts = repo.bash_result("query"), repo.ts_cli_result("query")
+            # bash never errors on any of them: it emits a bare blank line for a file with
+            # no parseable block, and an id-less JSON record for one whose block parsed.
+            bash_tolerates = bash.returncode == 0 and '"id"' not in bash.stdout
+            ts_message = "%s %s" % (path, expected)
+            if not (bash_tolerates and ts.returncode != 0 and ts_message in ts.stderr):
+                return False, (
+                    "missing-id divergence changed for %s: bash rc=%d out=[%s] / ts rc=%d stderr=[%s]"
+                    % (name, bash.returncode, bash.stdout.strip(), ts.returncode, ts.stderr.strip()[:200])
+                )
+    return True, "corrupt files: bash tolerates, TS fails naming the file and the cause (as designed)"
 
 
 # Enough tickets that the JSONL exceeds the 64 KB pipe buffer, so jq really is killed by

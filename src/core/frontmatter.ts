@@ -252,6 +252,17 @@ export class TicketDocument {
         return new TicketDocument(frontmatter, [], body.split(LINE_SEPARATOR), "terminated");
     }
 
+    /**
+     * Whether an opening `---` fence was found at all.
+     *
+     * False for a file that has none — and for a CRLF file, whose `---\r` is not the
+     * fence: the distinction between "no block" and "no `id` in the block" is what keeps
+     * the load error from naming a field the file visibly contains.
+     */
+    hasFrontmatterBlock(): boolean {
+        return this.shape !== "none";
+    }
+
     /** Body text after the closing marker, verbatim. Empty when there is no closing marker. */
     body(): string {
         return this.bodyLines.join(LINE_SEPARATOR);

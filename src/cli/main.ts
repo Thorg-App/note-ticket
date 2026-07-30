@@ -1,4 +1,4 @@
-import { MissingTicketIdError } from "../core/id.js";
+import { CorruptTicketFileError } from "../core/ticket-file-error.js";
 import type { TicketStore } from "../core/ticket-store.js";
 import { BrokenPipe } from "./broken-pipe.js";
 import { CliError } from "./cli-error.js";
@@ -138,7 +138,7 @@ class Cli {
         }
         // A corrupt repo is the user's problem, not a defect, but core knows nothing of
         // the CLI, so its error is adopted into the one user-facing channel here.
-        if (error instanceof MissingTicketIdError) {
+        if (error instanceof CorruptTicketFileError) {
             return new CliError(error.message);
         }
         return undefined;

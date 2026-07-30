@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-30T18:30:57Z
 id: nid_z10hpj927zqilxcpl9ycpe0ad_e
 title: CRLF ticket files hard-fail every listing with a misleading no-'id' error
-status: in_progress
+status: closed
 deps: [nid_zesi8c4t7lyw6jgmqqsjqd54k_e]
 links: []
 created_iso: '2026-07-30T02:24:10Z'
-status_updated_iso: '2026-07-30T18:11:51Z'
+status_updated_iso: 2026-07-30T18:30:57Z
 type: bug
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -58,3 +59,39 @@ it the expensive half of the problem while the cheap half removes the actual use
 --------------------------------------------------------------------------------
 
 HUMAN_DECISION: lets go with cheap B dont support CRLF for now.
+
+## Resolution (2026-07-30, commit 2504911)
+
+Option (b) as decided: CRLF ticket files stay UNSUPPORTED; only the misleading message
+was fixed. Three distinct causes now get three distinct messages:
+
+| file shape | message |
+|---|---|
+| block parsed, no `id` | `<path> has no 'id' frontmatter field` (unchanged) |
+| no block at all | `<path> has no YAML frontmatter block` |
+| CRLF | `<path> frontmatter block is not parseable (CRLF line endings are not supported)` |
+
+All three still exit 1 (pre-approved by nid_n6eavbm0h77twvna8k9nnpu2g_e).
+
+Changes:
+- NEW `src/core/ticket-file-error.ts`: `CorruptTicketFileError` base with
+  `MissingTicketIdError` (moved out of `id.ts`, which is about generation/resolution) and
+  `MissingFrontmatterBlockError`, which picks its wording from whether the file text
+  contains a `\r`. `main.ts` adopts the BASE class, so a future third cause needs no CLI change.
+- `TicketDocument.hasFrontmatterBlock()` — the "no block" vs "block without id" distinction.
+- `TicketStore.load` checks block-presence FIRST; only the second check may name `id`.
+- Tests: 3 unit tests in `test/frontmatter.test.ts` (block presence incl. CRLF), a CRLF
+  message test + reworded no-block tests in `test/ticket-store.test.ts`, and a BDD scenario
+  `Listing blames the line endings for a CRLF ticket file` with a new
+  `... exists with CRLF line endings and content` step. Mutation-verified: disabling the
+  block check fails exactly those 3 store tests.
+- Parity: `check_query._check_missing_id_divergence` now pins all THREE messages (it covered
+  only the no-frontmatter file before, and its "bash emits nothing" assumption was wrong for
+  the id-less-block case — bash emits an id-less JSON record).
+- Docs: README.md, ORIGINAL_README.md, CHANGELOG.md, CLAUDE.md, scripts/parity/README.md #2.
+
+Gates: `make typecheck`, `make unit-test` (408 pass), `make test` (248 scenarios), `make parity`
+(graph/query/slug/write all OK) — green.
+
+NOT done, deliberately: supporting CRLF (would touch `TicketDocument`'s byte-exact round trip).
+No follow-up ticket filed, per the decision above — speculative until a real user hits it.

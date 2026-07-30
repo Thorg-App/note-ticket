@@ -65,7 +65,7 @@ export class Ticket {
 
     /**
      * Stable identity. Empty only for a corrupt file: `TicketStore.load` rejects such a
-     * file with `MissingTicketIdError`, so a ticket obtained from the store always has one.
+     * file with a `CorruptTicketFileError`, so a ticket obtained from the store always has one.
      */
     get id(): string {
         return this.frontmatter.getString(TicketField.ID) ?? "";

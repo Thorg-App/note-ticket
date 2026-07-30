@@ -189,6 +189,8 @@ Feature: Ticket Listing
     Then the command should fail
     And stderr should contain "blank-id.md has no 'id' frontmatter field"
 
+  # A different failure from a block without an 'id', and it says so: the file has no
+  # block at all, so naming the 'id' field would point at the wrong thing.
   Scenario: Listing fails loudly when a file has no frontmatter at all
     Given a raw ticket file "loose-note.md" exists with content
       """
@@ -196,7 +198,23 @@ Feature: Ticket Listing
       """
     When I run "ticket ls"
     Then the command should fail
-    And stderr should contain "loose-note.md has no 'id' frontmatter field"
+    And stderr should contain "loose-note.md has no YAML frontmatter block"
+
+  # CRLF ticket files stay UNSUPPORTED; the message must not send the user hunting for an
+  # 'id' field the file visibly contains. See nid_z10hpj927zqilxcpl9ycpe0ad_e.
+  Scenario: Listing blames the line endings for a CRLF ticket file
+    Given a raw ticket file "crlf-note.md" exists with CRLF line endings and content
+      """
+      ---
+      id: crlf-0001
+      title: "Windows edited"
+      status: open
+      ---
+      """
+    When I run "ticket ls"
+    Then the command should fail
+    And stderr should contain "crlf-note.md frontmatter block is not parseable (CRLF line endings are not supported)"
+    And the output should not contain "has no 'id' frontmatter field"
 
   Scenario: Ready fails loudly on a ticket file with no id
     Given a raw ticket file "orphan.md" exists with content

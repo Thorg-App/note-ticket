@@ -21,6 +21,15 @@ Every ticket MUST carry an `id` frontmatter field. A `.md` file under `_tickets/
 without one is a corrupt repo: commands fail with
 `Error: <path> has no 'id' frontmatter field` instead of silently omitting that
 ticket from every listing. Restore the `id`, or move the file out of `_tickets/`.
+A file whose frontmatter block cannot be read at all is reported separately, as
+`Error: <path> has no YAML frontmatter block` — the `id` field is never blamed for
+a file that has no block to hold it.
+
+Ticket files must use **LF** line endings. CRLF is not supported: `---\r` is not the
+frontmatter fence, so such a file fails with
+`Error: <path> frontmatter block is not parseable (CRLF line endings are not supported)`
+however complete its frontmatter looks. Convert the file (`dos2unix`), and keep
+`git config core.autocrlf` from rewriting `_tickets/` on checkout.
 
 Every command that takes an `<id>` accepts a partial one: an exact match wins, otherwise
 the id must contain the text you typed as a substring, and more than one match at the
