@@ -1,17 +1,17 @@
 ---
 id: nid_z10hpj927zqilxcpl9ycpe0ad_e
-title: "CRLF ticket files hard-fail every listing with a misleading no-'id' error"
-status: open
+title: CRLF ticket files hard-fail every listing with a misleading no-'id' error
+status: in_progress
 deps: [nid_zesi8c4t7lyw6jgmqqsjqd54k_e]
 links: []
-created_iso: 2026-07-30T02:24:10Z
-status_updated_iso: 2026-07-30T02:24:10Z
+created_iso: '2026-07-30T02:24:10Z'
+status_updated_iso: '2026-07-30T18:11:51Z'
 type: bug
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port, core]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 A ticket file with CRLF line endings (Windows editor, synced Obsidian vault, `git config core.autocrlf=true` checkout) is now a HARD failure for every command served by the TypeScript core.
 
 Repro (verified 2026-07-29 on branch nid_zesi8c4t7lyw6jgmqqsjqd54k_e_2026-07-29T18-22-47PDT):
