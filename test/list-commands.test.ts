@@ -299,6 +299,11 @@ describe("RowLimit", () => {
  * does the mtime sort), so these cases are about selection, row format and `--limit`.
  */
 describe("ClosedCommand", () => {
+    // Production parses the limit in `render`, before the store is touched, and passes it
+    // down; every case here just wants the one its own options carry.
+    const renderClosed = (recentFirst: readonly Ticket[], options: ListOptions): string =>
+        ClosedCommand.renderTickets(recentFirst, options, options.rowLimit);
+
     const RECENT_FIRST = ticketsOf([
         { id: "cc3", title: "Gamma", status: "closed", assignee: "ann", tags: ["ui"] },
         { id: "aa1", title: "Alpha", status: "done", assignee: "bob" },
@@ -308,44 +313,44 @@ describe("ClosedCommand", () => {
 
     it("prints closed tickets in the order given, with no priority and no deps", () => {
         assert.equal(
-            ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS),
+            renderClosed(RECENT_FIRST, NO_OPTIONS),
             "cc3      [closed] - Gamma\naa1      [done] - Alpha\ndd4      [closed] - Delta\n",
         );
     });
 
     it("counts the legacy `done` status as closed", () => {
-        assert.match(ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS), /aa1 {6}\[done\] - Alpha/);
+        assert.match(renderClosed(RECENT_FIRST, NO_OPTIONS), /aa1 {6}\[done\] - Alpha/);
     });
 
     it("excludes open and in-progress tickets", () => {
-        assert.doesNotMatch(ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS), /bb2/);
+        assert.doesNotMatch(renderClosed(RECENT_FIRST, NO_OPTIONS), /bb2/);
     });
 
     it("applies --limit to the surviving rows, not to the tickets scanned", () => {
         assert.equal(
-            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["--limit=2"])),
+            renderClosed(RECENT_FIRST, ListOptions.parse(["--limit=2"])),
             "cc3      [closed] - Gamma\naa1      [done] - Alpha\n",
         );
     });
 
     it("filters by assignee", () => {
         assert.equal(
-            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["-a", "ann"])),
+            renderClosed(RECENT_FIRST, ListOptions.parse(["-a", "ann"])),
             "cc3      [closed] - Gamma\n",
         );
     });
 
     it("filters by tag", () => {
         assert.equal(
-            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["--tag=ui"])),
+            renderClosed(RECENT_FIRST, ListOptions.parse(["--tag=ui"])),
             "cc3      [closed] - Gamma\n",
         );
     });
 
     it("ignores --status, as bash does", () => {
         assert.equal(
-            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["--status=open"])),
-            ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS),
+            renderClosed(RECENT_FIRST, ListOptions.parse(["--status=open"])),
+            renderClosed(RECENT_FIRST, NO_OPTIONS),
         );
     });
 
@@ -355,14 +360,14 @@ describe("ClosedCommand", () => {
             { id: "aa1", title: "Second copy", status: "closed" },
         ]);
         assert.equal(
-            ClosedCommand.renderTickets(twice, NO_OPTIONS),
+            renderClosed(twice, NO_OPTIONS),
             "aa1      [closed] - First copy\naa1      [closed] - Second copy\n",
         );
     });
 
     it("keeps a title containing a pipe whole (no sort key is packed here)", () => {
         const piped = ticketsOf([{ id: "aa1", title: "Ship it | phase 2", status: "closed" }]);
-        assert.equal(ClosedCommand.renderTickets(piped, NO_OPTIONS), "aa1      [closed] - Ship it | phase 2\n");
+        assert.equal(renderClosed(piped, NO_OPTIONS), "aa1      [closed] - Ship it | phase 2\n");
     });
 });
 
