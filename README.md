@@ -34,7 +34,9 @@ included. `query <jq-filter>` pipes that JSONL through `jq -c "select(<filter>)"
 `jq` must be installed for filtering (only then) and its exit code is passed through;
 without `jq` on PATH, filtering exits 127 with `Error: jq: command not found`.
 
-Piping a listing into a short reader (`tk ls | head -1`) exits 141, the usual code for a
-command killed by SIGPIPE.
+Piping a listing into a short reader (`tk ls | head -1`, `tk query ... | head -1`) exits
+141, the usual code for SIGPIPE, only once the output is large enough that the write
+actually fails. A listing that fits in the pipe buffer is written before the reader goes
+away and exits 0, so the exit code depends on how many tickets were listed.
 
 

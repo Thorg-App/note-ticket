@@ -22,7 +22,6 @@
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
 - `ls`, `ready`, `blocked`, `closed`, `query`, `dep tree`, and `dep cycle` exited with code 2 and an awk error when no ticket files existed; they now exit 0 with no output
 - `closed` no longer mangles paths containing spaces
-- `query <jq-filter> | head` (any short reader) now exits 141, as `ls | head` does, instead of 1
 - `closed` orders a symlinked ticket file by the link's own modification time, matching `ls -t` (a listing containing symlinks could come out in the wrong order)
 
 ### Removed
