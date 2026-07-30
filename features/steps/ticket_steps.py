@@ -1288,9 +1288,15 @@ def step_run_command_piped_into(context, command, reader):
 # working tree without a build. The copy carries the wrapper, the manifests and src/, and
 # SYMLINKS node_modules so the on-demand build needs no network.
 
-# Everything the wrapper needs to rebuild dist/ticket.mjs from scratch. This list doubles as
-# the answer to "what must a packaged install put on disk" (src/ + these + node_modules).
-TOOL_COPY_FILES = ('ticket', 'package.json', 'package-lock.json', 'tsconfig.json')
+def _install_manifest():
+    """Everything a complete install of the tool needs on disk, from the ONE list that says so.
+
+    Read from pkg/install-manifest.txt rather than repeated here: the packaging (PKGBUILD,
+    Homebrew formula) needs exactly this set, and two hand-maintained copies would drift --
+    silently, since a scenario copying a file the packages forget still passes.
+    """
+    lines = (REPO / 'pkg' / 'install-manifest.txt').read_text().splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.startswith('#')]
 
 # A stand-in bundle that announces itself, so a scenario can tell "the wrapper rebuilt" from
 # "the wrapper ran what was already there" by looking at stdout alone.
@@ -1320,9 +1326,12 @@ def _isolated_tool_copy(context):
     # loudly rather than silently mutating the real tree.
     assert (project / 'node_modules').is_dir(), \
         f"[{project / 'node_modules'}] is missing; run `make build` before driving behave directly"
-    for name in TOOL_COPY_FILES:
-        shutil.copy2(project / name, root / name)
-    shutil.copytree(project / 'src', root / 'src')
+    for name in _install_manifest():
+        source = project / name
+        if source.is_dir():
+            shutil.copytree(source, root / name)
+        else:
+            shutil.copy2(source, root / name)
     os.symlink(project / 'node_modules', root / 'node_modules')
     return root
 

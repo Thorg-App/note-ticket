@@ -24,8 +24,32 @@ TOP_LEVEL_AGENT commits between phases. One `change_log` entry at the very end.
 
 ## Status
 
-- [ ] PHASE_A
-- [ ] REVIEW_A / ITERATION_A
-- [ ] PHASE_B
+- [x] PHASE_A — `42ccf92`. 1727 lines of bash deleted; 78-line launcher; parity harness gone.
+- [x] REVIEW_A / ITERATION_A — **converged in 2 rounds** (`0ef05a5`, `2bf6e49`).
+- [ ] PHASE_B — running (fresh agent; the PHASE_A implementer ended at ~239k, over the 200K cap)
 - [ ] REVIEW_B / ITERATION_B
 - [ ] change_log + ticket close
+
+## Convergence record — IMPLEMENTATION_ITERATION (PHASE_A)
+
+2 iterations, converged. Reviewer verified by MUTATION rather than by report, which was
+the right call twice over:
+
+| Round | Blocking | Outcome |
+|-------|----------|---------|
+| 1 | Divergence #7 folded only half-way — the `query \| head -1` half was left backed by an assertion that a constant equals 141, which cannot fail | Fixed; and correcting it exposed a SECOND wrongly-claimed pin (#13's scalar `deps:` sub-case) |
+| 2 | none | Converged. Dropping `ChildExit`'s signal branch turns exactly 1 of 261 scenarios red — the new pin bites and the gap was real |
+
+Rejected feedback, with rationale:
+- **S2 (delete the unreachable `src/`-absent arm)** — REJECTED by the implementer, and the
+  reviewer then **withdrew the suggestion**: deleting it makes `find /nonexistent -newer …`
+  spray its own error AND still return the silent "not stale" answer. The arm now fails
+  loudly instead, pinned by a scenario.
+- **S1 (future-mtime source rebuilds forever)** — behavior left as-is by design, trap
+  documented in a comment.
+- **S5 (install-manifest duplication)** — rejected as a PHASE_A code change, handed to
+  PHASE_B, which owns packaging.
+
+Owner decision, 2026-07-30: `tk <unknown-command>` reports the unknown command rather than
+bash's missing-tickets-dir ordering. Reviewer independently agreed the bash ordering was an
+artifact of the `case` default arm.

@@ -1,0 +1,21 @@
+# What a complete install of the tool needs on disk, one path per line, relative to the
+# repo root. Directories are copied whole.
+#
+# THE SINGLE SOURCE OF TRUTH for that list. Three places consume it and would otherwise
+# each keep their own copy and drift:
+#   - pkg/aur/ticket-core/PKGBUILD          (package() reads this file from the tarball)
+#   - scripts/publish-homebrew.sh           (interpolates it into the generated formula)
+#   - features/steps/ticket_steps.py        (the isolated tool copy the launcher BDD drives)
+#
+# NOT listed here: dist/ticket.mjs. It is BUILT, not copied — from src/ via package.json's
+# `build` script — and every consumer builds it after materializing this set. `./ticket`
+# itself refuses to run without src/, so the sources are part of a complete install, not an
+# optional extra.
+#
+# Blank lines and `#` comments are ignored.
+
+ticket
+package.json
+package-lock.json
+tsconfig.json
+src

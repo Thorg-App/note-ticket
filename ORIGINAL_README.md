@@ -19,12 +19,12 @@ The rule is: every `.md` file at any depth under `_tickets/` is a ticket, except
 **Homebrew (macOS/Linux):**
 ```bash
 brew tap wedow/tools
-brew install ticket
+brew install ticket-core
 ```
 
 **Arch Linux (AUR):**
 ```bash
-yay -S ticket  # or paru, etc.
+yay -S ticket-core  # or paru, etc.
 ```
 
 **From source (auto-updates on git pull):**
@@ -33,11 +33,15 @@ git clone https://github.com/wedow/ticket.git
 cd ticket && ln -s "$PWD/ticket" ~/.local/bin/tk
 ```
 
-**Or** just copy `ticket` to somewhere in your PATH.
+Copying `ticket` alone to your PATH is **not** enough — it is a launcher that needs the `src/` tree next to it. Symlink it, or copy the whole checkout.
 
 ## Requirements
 
-`tk` is a portable bash script requiring only coreutils and `git`, so it works out of the box on any POSIX system with bash installed. Tickets are anchored to the enclosing git repository root, so `tk` must be run inside a git repo (or with `TICKETS_DIR` set). The `query` command requires `jq`. Uses `rg` (ripgrep) if available, falls back to `grep`.
+`tk` is a TypeScript CLI running on **Node.js**, launched by a small bash script. You need **node**, **git**, and a POSIX shell environment (`bash`, `readlink`, `find`). Tickets are anchored to the enclosing git repository root, so `tk` must be run inside a git repo (or with `TICKETS_DIR` set). The `query` command needs **jq** only when you pass it a filter.
+
+From a source checkout, `tk` builds its bundle (`dist/ticket.mjs`) the first time you run it and again whenever `src/` changes, so a `git pull` needs no build step. That build needs **npm** and network access once. Everything the launcher prints while building goes to stderr, so `tk query | jq` and `tk ls | head` stay clean even on the invocation that builds.
+
+Homebrew and AUR packages build the bundle at install time — `npm` and network are needed then, not afterwards.
 
 ## Agent Setup
 
@@ -57,15 +61,21 @@ tk - minimal ticket system with dependency tracking
 Usage: tk <command> [args]
 
 Commands:
-  create [title] [options] Create ticket, prints JSON with id and full_path
+  create [title] [options] Create ticket, prints JSON with id and full_path.
+                           When creating tickets SPLIT them up so that processing each ticket
+                           will fit into 200K context window. IF common planning is required for tickets
+                           create a ticket for plan creation and make it a dependency of implementation tickets.
     -d, --description      Description text. Goes into markdown body of the ticket.
+                           MUST be self contained, if referencing files make sure they are referenced
+                           with full relative path from git repo. And NOT just the file names.
+                           This should give GOOD context for new agent picking this up.
                            For newlines use bash $'...\n...' quoting, e.g.:
                              -d $'First line.\n\nSecond paragraph.\n- bullet'
     --design               Design notes
     --acceptance           Acceptance criteria
     -t, --type             Type (bug|feature|task|epic|chore) [default: task]
     -p, --priority         Priority 0-4, 0=highest [default: 2]
-    -a, --assignee         Assignee [default: git user.name]
+    -a, --assignee         Assignee
     --external-ref         External reference (e.g., gh-123, JIRA-456)
     --parent               Parent ticket ID
     --tags                 Comma-separated tags (e.g., --tags ui,backend,urgent)
@@ -88,14 +98,21 @@ Commands:
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
 
-Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var)
+Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var).
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
-IDs are stored in frontmatter; supports partial ID matching
+IDs are stored in frontmatter at 'id' field;
+Tickets may be organized into nested subfolders (e.g. _tickets/backend/api/foo.md)
+by simply moving the files; all commands search every nesting level.
+Every .md file at any depth is a ticket, except those inside a hidden
+directory (.trash, .obsidian, ...) - such folders are skipped whole.
+Hidden files are NOT skipped (_tickets/.draft.md is a ticket).
+ls/query list in path order.
+New tickets are always created at the top level of _tickets/.
 ```
 
 ## Testing
 
-The tests are written in the Behavior-Driven Development library [behave](https://behave.readthedocs.io/en/latest/) and require Python.
+Acceptance tests are written in the Behavior-Driven Development library [behave](https://behave.readthedocs.io/en/latest/) and require Python; `make test` also builds the bundle and runs the `node:test` unit tests over `src/` first. You need `node`/`npm` as well as `uv`.
 
 If you have `uv` [installed](https://docs.astral.sh/uv/getting-started/installation/) simply:
 

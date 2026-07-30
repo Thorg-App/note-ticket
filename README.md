@@ -5,6 +5,22 @@ Tickets are stored at the repository root under `<git-repo-root>/_tickets`,
 resolved via `git rev-parse --show-toplevel`. Override with the `TICKETS_DIR`
 env var.
 
+## Requirements
+
+The CLI is TypeScript running on **Node.js**; `ticket` itself is a small bash launcher
+for it. You need **node**, **git** and a POSIX shell environment (`bash`, `readlink`,
+`find`). **jq** is needed only for `tk query <jq-filter>`.
+
+From a git checkout, `tk` builds its own bundle (`dist/ticket.mjs`) on the first run and
+again whenever `src/` changes — so a `git pull` needs no build step. That first build
+needs **npm** and network access; everything the launcher prints while building goes to
+stderr, so `tk query | jq` stays clean even then. Installing from Homebrew or the AUR
+builds the bundle at install time instead, and needs nothing but node afterwards.
+
+```bash
+git clone <repo> && cd note-ticket && ln -s "$PWD/ticket" ~/.local/bin/tk
+```
+
 Tickets may be organized into nested subfolders (e.g. `_tickets/backend/api/foo.md`)
 by simply moving the files. Every command searches all nesting levels; identity is
 the `id` in the frontmatter, not the path. New tickets are always created at the top

@@ -2,17 +2,57 @@
 pkgname=ticket-core
 pkgver=0.3.2
 pkgrel=1
-pkgdesc="Minimal ticket tracking in bash (core only)"
+pkgdesc="Minimal ticket tracking CLI (TypeScript on Node, git-backed markdown tickets)"
 arch=('any')
 url="https://github.com/wedow/ticket"
 license=('MIT')
-depends=('bash' 'coreutils' 'findutils' 'gawk')
-optdepends=('ripgrep: faster searching')
+# Runtime: bash runs the launcher, node runs the CLI, git resolves the repo root that anchors
+# _tickets/, coreutils/findutils supply readlink+dirname+find (the launcher's staleness check).
+depends=('bash' 'nodejs' 'git' 'coreutils' 'findutils')
+# npm is BUILD-ONLY. See build() -- the bundle is produced here, not on the user's first run,
+# because /usr is not writable by the user the tool runs as.
+makedepends=('npm')
+optdepends=('jq: filtering for the `query` command (`tk query <jq-filter>`)')
 source=("ticket-$pkgver.tar.gz::https://github.com/wedow/ticket/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
+# Where the tool's own tree lives. /usr/bin/tk is a symlink into it; the launcher resolves
+# symlinks to find its sources and bundle.
+_installdir="usr/share/$pkgname"
+
+build() {
+    cd "ticket-$pkgver"
+    # WHY here and not on first run: `./ticket` builds dist/ticket.mjs on demand next to
+    # itself, which works from a git checkout but CANNOT work from a root-owned /usr prefix
+    # (verified: esbuild fails with `mkdir dist: permission denied`). Building at package
+    # time also keeps npm and the network off the end user's box.
+    npm install --no-audit --no-fund
+    npm run build
+}
+
 package() {
     cd "ticket-$pkgver"
-    install -Dm755 ticket "$pkgdir/usr/bin/tk"
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # pkg/install-manifest.txt is the single source of truth for what a complete install
+    # needs; see its header. `cp -a` preserves mtimes, which matters: the launcher rebuilds
+    # when any source file is newer than the bundle, and the bundle is touched last below.
+    install -dm755 "$pkgdir/$_installdir"
+    local entry
+    while read -r entry; do
+        if [[ -n "$entry" && "$entry" != \#* ]]; then
+            cp -a "$entry" "$pkgdir/$_installdir/"
+        fi
+    done < pkg/install-manifest.txt
+
+    install -Dm644 dist/ticket.mjs "$pkgdir/$_installdir/dist/ticket.mjs"
+    # The launcher compares the bundle's mtime against every source file's. Make the bundle
+    # unambiguously the newest thing installed, so a packaged install never tries to rebuild
+    # itself into a read-only prefix.
+    touch "$pkgdir/$_installdir/dist/ticket.mjs"
+
+    chmod 755 "$pkgdir/$_installdir/ticket"
+    install -dm755 "$pkgdir/usr/bin"
+    ln -s "/$_installdir/ticket" "$pkgdir/usr/bin/tk"
+
+    install -Dm644 LICENSE.md "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }
