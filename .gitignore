@@ -4,4 +4,6 @@ node_modules/
 dist/
 # Transpiled unit tests (npm test output).
 dist-test/
+# Parity harness bundle (make parity output).
+dist-parity/
 .tmp/
