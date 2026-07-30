@@ -25,6 +25,10 @@ A file whose frontmatter block cannot be read at all is reported separately, as
 `Error: <path> has no YAML frontmatter block` — the `id` field is never blamed for
 a file that has no block to hold it.
 
+A ticket file the operating system refuses to touch is reported the same way: a write into a
+read-only checkout, or onto a `chmod 444` ticket, fails with
+`Error: cannot write <path>: permission denied (EACCES)` and exit 1, naming the file to fix.
+
 Ticket files must use **LF** line endings. CRLF is not supported: `---\r` is not the
 frontmatter fence, so such a file fails with
 `Error: <path> frontmatter block is not parseable (CRLF line endings are not supported)`

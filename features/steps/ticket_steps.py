@@ -412,6 +412,20 @@ def step_ticket_title_has_tab(context, ticket_id):
     path.write_text('\n'.join(lines))
 
 
+@given(r'the tickets directory is not writable')
+def step_tickets_dir_not_writable(context):
+    """Drop write permission on _tickets, so rewriting a ticket fails with EACCES.
+
+    Root ignores the permission bits entirely, which would make the scenario pass for
+    the wrong reason — skip loudly instead of asserting nothing. after_scenario restores
+    the permissions so the temp tree can be removed.
+    """
+    if os.geteuid() == 0:
+        context.scenario.skip('running as root: permission bits are not enforced')
+        return
+    (Path(context.test_dir) / '_tickets').chmod(0o555)
+
+
 @given(r'the test root is not a git repository')
 def step_test_root_not_git(context):
     """Remove the git repository from the test root."""

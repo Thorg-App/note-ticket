@@ -21,6 +21,7 @@ Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a deleg
 - `ticket-store.ts` — `TicketsDirectory.resolve()` and `TicketStore` (discovery/load/save); `collectFiles()` is the single source of truth for "what is a ticket file"
 - `id.ts` — `TicketId.generate()`, `IdResolver` (exact beats partial, ambiguity is an error)
 - `ticket-file-error.ts` — `CorruptTicketFileError` and its two cases: `MissingTicketIdError` (a block that parsed, no `id`) and `MissingFrontmatterBlockError` (no block at all — and CRLF, which is unsupported and named as the cause instead of the `id`)
+- `file-system-error.ts` — `FileSystemError.guarding(operation, path, body)`: the ONE place an OS-level failure (EACCES, EROFS, ENOSPC, …) becomes a one-line message naming the path the USER knows, not `save`'s scratch file. Anything without an errno is rethrown so a defect keeps its stack trace. Every `node:fs` call in `ticket-store.ts` goes through it
 - `clock.ts` — `Clock`/`SystemClock`/`FixedClock`: bash `_iso_date`'s `%Y-%m-%dT%H:%M:%SZ`, injected so written bytes are testable
 - `git.ts` — the only place git is invoked: repo root (for `TicketsDirectory`) and `user.name` (`create`'s default assignee); every probe answers `undefined` rather than throwing
 - `slug.ts` — title → filename, collision suffixes
