@@ -177,6 +177,20 @@ def require_dump():
         raise SystemExit("Missing %s -- run `make build`" % TS_CLI)
 
 
+def require_jq():
+    """`query <filter>` spawns external `jq` on BOTH sides, so a missing jq is a vacuous pass.
+
+    Without jq both sides exit 127 with empty stdout, and every jq-filter comparison in
+    check_query "matches" while measuring nothing. Refuse to run instead -- especially in CI,
+    where nobody is watching the summary line.
+    """
+    if shutil.which("jq") is None:
+        raise SystemExit(
+            "jq is not on PATH -- the query filter checks would compare two 127s and pass "
+            "vacuously. Install jq and re-run."
+        )
+
+
 # Hand-picked graph shapes: the structures where bash's dep traversal is most
 # likely to differ (shared subtrees, cycles, dangling deps, uneven depth).
 FIXED_SCENARIOS = [
