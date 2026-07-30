@@ -56,6 +56,25 @@ class BashReference:
         return path
 
 
+# Titles the byte-compare must survive, cycled over the tickets of every scenario. Written
+# exactly as bash `create` writes them (quotes backslash-escaped), so these are real inputs:
+# each one is reachable through `tk create`.
+# WHY no `|` here: bash `ready`/`blocked` pack their sort key as `prio|id|status|title`, so a
+# pipe in a title is a genuine divergence -- pinned in check_graph, not byte-compared.
+HOSTILE_TITLES = [
+    "T %s",
+    "a - b [c] %s",
+    "Fix: the thing %s",
+    'say \\"hi\\" %s',
+    "back\\slash %s",
+    "ünïcødé %s",
+    "trailing space %s ",
+]
+
+# A title that trips bash's `|`-packed sort key. Used only by the pinned divergence check.
+PIPE_TITLE = "Pipe %s | tail"
+
+
 class TempRepo:
     """A git-initialized throwaway repo with a `_tickets/` dir, removed on exit."""
 
@@ -72,18 +91,21 @@ class TempRepo:
     def __exit__(self, *_exc):
         shutil.rmtree(self._root, ignore_errors=True)
 
-    def write_scenario(self, scenario):
+    def write_scenario(self, scenario, title_template=None):
         """Materialize a scenario as ticket files.
 
         `assignee` and `tags` cycle over small sets so the -a/-T/--status filters select
-        real, non-trivial subsets instead of always matching everything.
+        real, non-trivial subsets instead of always matching everything. Titles cycle over
+        HOSTILE_TITLES for the same reason: a fixture whose titles are all `T <id>` cannot
+        catch a metacharacter bug. `title_template` pins one title for every ticket instead.
         """
         for index, (tid, status, deps, prio) in enumerate(scenario):
+            template = title_template or HOSTILE_TITLES[index % len(HOSTILE_TITLES)]
             with open(os.path.join(self.tickets, tid + ".md"), "w") as f:
                 f.write(
-                    '---\nid: %s\ntitle: "T %s"\nstatus: %s\ndeps: [%s]\npriority: %s\n'
+                    '---\nid: %s\ntitle: "%s"\nstatus: %s\ndeps: [%s]\npriority: %s\n'
                     'assignee: u%d\ntags: [t%d, common]\n---\n'
-                    % (tid, tid, status, ", ".join(deps), prio, index % 2, index % 3)
+                    % (tid, template % tid, status, ", ".join(deps), prio, index % 2, index % 3)
                 )
 
     def bash(self, *args):

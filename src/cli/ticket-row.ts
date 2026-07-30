@@ -1,7 +1,13 @@
 import type { BlockedTicket } from "../core/dep-graph.js";
 import type { Ticket } from "../core/ticket.js";
 
-/** Width bash's `printf "%-8s"` gives the id column; longer ids are NOT truncated. */
+/**
+ * Width bash's `printf "%-8s"` gives the id column; longer ids are NOT truncated.
+ *
+ * WHY-NOT byte-accurate padding: bash pads to 8 BYTES, `padEnd` to 8 UTF-16 units, so a
+ * non-ASCII id would pad differently. Generated ids are `[a-z0-9]`, so the two agree for
+ * every id `create` can produce; only a hand-written non-ASCII id could differ.
+ */
 const ID_COLUMN_WIDTH = 8;
 
 const ROW_SEPARATOR = "\n";
@@ -10,11 +16,15 @@ const RELATED_IDS_MARKER = " <- ";
 /**
  * One rendered line per listing command.
  *
- * Every method reproduces a bash `printf` byte for byte, trailing space included: a
- * ticket with no title really does end in `- `.
+ * Every method reproduces a bash `printf` for an ASCII id byte for byte, trailing space
+ * included: a ticket with no title really does end in `- `.
+ *
+ * DIVERGENCE (deliberate): bash `ready`/`blocked` pack their sort key as
+ * `prio|id|status|title` and `split()` it back apart, so they truncate any title at its
+ * first `|`. These rows print the title whole; see CHANGELOG and `scripts/parity/README.md`.
  */
 export class TicketRow {
-    /** `<id> [<status>] - <title>` — the `closed` row. */
+    /** `<id> [<status>] - <title>` — the row `closed` prints and `withDeps` builds on. */
     static withStatus(ticket: Ticket): string {
         return `${TicketRow.idColumn(ticket)} [${ticket.status}] - ${ticket.title}`;
     }

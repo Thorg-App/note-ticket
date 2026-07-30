@@ -93,6 +93,9 @@ Verify these while porting — they are contractual even where scenarios are thi
   whitespace-trimmed input.
 - `closed`: mtime-sorted, capped at 100 files scanned, `--limit` applied after.
 - `ready`/`blocked`: unknown dep IDs count as not-closed (blocking).
+- `ready`/`blocked`: bash packs its sort key as `prio|id|status|title`, so it TRUNCATES a
+  title at the first `|`. Do NOT reproduce that; the TS row prints the title whole
+  (whitelisted divergence #3 in `scripts/parity/README.md`).
 - `status closed` sets `closed_iso`; other statuses remove it; both bump
   `status_updated_iso`.
 - TTY handling: `edit` only launches `$EDITOR` when stdin+stdout are TTYs, else

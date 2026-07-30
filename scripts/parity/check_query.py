@@ -66,7 +66,14 @@ def _check_jsonl():
             with open(os.path.join(repo.tickets, name), "w") as f:
                 f.write(content)
 
-        bash_out, ts_out = repo.bash("query"), repo.ts("query")
+        bash, ts = repo.bash_result("query"), repo.ts_result("query")
+        if bash.returncode != ts.returncode:
+            return False, "query exit codes differ (bash=%d ts=%d, ts stderr=[%s])" % (
+                bash.returncode,
+                ts.returncode,
+                ts.stderr.strip()[:200],
+            )
+        bash_out, ts_out = bash.stdout, ts.stdout
         if bash_out == ts_out:
             return True, "query JSONL identical (%d lines)" % len(bash_out.splitlines())
 

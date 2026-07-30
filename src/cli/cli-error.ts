@@ -1,13 +1,32 @@
+const ERROR_PREFIX = "Error: ";
+const LINE_SEPARATOR = "\n";
+
 /**
- * An error whose message is meant for the user.
+ * A failure whose text is meant for the user, and the ONE place that knows how such a
+ * failure looks on stderr. Every user-facing failure is raised as this type so the
+ * dispatcher never has a second rendering path to keep in step.
  *
- * The dispatcher prints it as `Error: <message>` on stderr and exits non-zero, the way
- * every bash error line is shaped. Anything NOT of this type is a bug and is allowed to
- * crash with a stack trace rather than being dressed up as a user-facing message.
+ * Anything NOT of this type is a bug and is allowed to crash with a stack trace rather
+ * than being dressed up as a usage error.
  */
 export class CliError extends Error {
-    constructor(message: string) {
+    /**
+     * @param message the `Error: `-prefixed first line.
+     * @param detailLines follow-up lines printed WITHOUT the prefix, as bash does for its
+     *   "Run inside a git repo, or set TICKETS_DIR env var" hint.
+     */
+    constructor(
+        message: string,
+        readonly detailLines: readonly string[] = [],
+    ) {
         super(message);
         this.name = "CliError";
+    }
+
+    /** Exactly what goes to stderr, trailing newline included. */
+    get stderrText(): string {
+        return [`${ERROR_PREFIX}${this.message}`, ...this.detailLines]
+            .map((line) => `${line}${LINE_SEPARATOR}`)
+            .join("");
     }
 }

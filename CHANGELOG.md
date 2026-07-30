@@ -15,6 +15,7 @@
 - `ls`, `ready` and `blocked` now reject a `-a`/`-T` given without a value (`Error: option '-a' requires a value`) instead of aborting with an internal bash `unbound variable` message. Output formats and filtering are unchanged.
 
 ### Fixed
+- `ready` and `blocked` no longer truncate a title at a `|` character (e.g. `tk create "Ship it | phase 2"` listed as `Ship it `); `blocked` also no longer prints the rest of such a title where the blocker list belongs
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
 - `ls`, `ready`, `blocked`, `closed`, `query`, `dep tree`, and `dep cycle` exited with code 2 and an awk error when no ticket files existed; they now exit 0 with no output
 - `closed` no longer mangles paths containing spaces

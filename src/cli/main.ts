@@ -43,11 +43,11 @@ class Cli {
         try {
             return Cli.dispatch(command, args);
         } catch (error) {
-            const message = Cli.userFacingMessage(error);
-            if (message === undefined) {
+            const failure = Cli.userFacingFailure(error);
+            if (failure === undefined) {
                 throw error;
             }
-            process.stderr.write(`Error: ${message}\n`);
+            process.stderr.write(failure.stderrText);
             return EXIT_FAILURE;
         }
     }
@@ -78,24 +78,23 @@ class Cli {
      * what the command renders. An existing-but-empty directory prints nothing and succeeds.
      */
     private static read(args: readonly string[], body: ReadCommandBody): number {
-        const resolution = StoreResolver.forReadCommand();
-        if (resolution.kind === "error") {
-            for (const message of resolution.messages) {
-                process.stderr.write(`${message}\n`);
-            }
-            return EXIT_FAILURE;
-        }
-        process.stdout.write(body(resolution.store, ListOptions.parse(args)));
+        const store = StoreResolver.forReadCommand();
+        process.stdout.write(body(store, ListOptions.parse(args)));
         return EXIT_SUCCESS;
     }
 
     /**
-     * Message to print as `Error: …`, or undefined for a defect, which must keep its
-     * stack trace instead of masquerading as a usage error.
+     * The failure as the user should see it, or undefined for a defect, which must keep
+     * its stack trace instead of masquerading as a usage error.
      */
-    private static userFacingMessage(error: unknown): string | undefined {
-        if (error instanceof CliError || error instanceof MissingTicketIdError) {
-            return error.message;
+    private static userFacingFailure(error: unknown): CliError | undefined {
+        if (error instanceof CliError) {
+            return error;
+        }
+        // A corrupt repo is the user's problem, not a defect, but core knows nothing of
+        // the CLI, so its error is adopted into the one user-facing channel here.
+        if (error instanceof MissingTicketIdError) {
+            return new CliError(error.message);
         }
         return undefined;
     }

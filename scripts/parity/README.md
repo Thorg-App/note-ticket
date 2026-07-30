@@ -39,7 +39,7 @@ exactly this reason.
 
 ## Whitelisted divergences
 
-Byte-comparison is the default; these two are deliberate and are *pinned* instead, so
+Byte-comparison is the default; the following are deliberate and are *pinned* instead, so
 the harness still fails if either side changes its mind.
 
 1. **`dep cycle`** — bash aborts its DFS on the first cycle and leaves nodes marked
@@ -51,6 +51,16 @@ the harness still fails if either side changes its mind.
 2. **A `.md` under `_tickets/` with no `id`** — bash silently skips it; the TS core
    fails naming the file (`nid_n6eavbm0h77twvna8k9nnpu2g_e`, an intentional behavior
    change: a corrupt repo must not be silently under-reported).
+3. **A `|` in a title, for `ready`/`blocked`** — bash packs its sort key as
+   `prio|id|status|title` and `split()`s it back apart, so it truncates the title at the
+   first pipe (and `blocked` prints the rest of the title where the blockers belong).
+   Reachable through `tk create "a | b"`, so it is a real input class. TS prints the title
+   whole; `check_graph._check_pipe_title_divergence` pins both sides. `ls` is unaffected and
+   IS byte-compared. Remove this whitelist at T6, when bash is gone.
+
+Because of #3, `harness.HOSTILE_TITLES` — the titles every generated scenario cycles
+through so the byte-compare sees `"`, `\`, `:`, `[]`, non-ASCII and a trailing space —
+deliberately contains no `|`.
 
 ## Lifetime
 

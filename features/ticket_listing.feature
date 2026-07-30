@@ -243,6 +243,22 @@ Feature: Ticket Listing
     Then the command should succeed
     And the output should contain "list-0001"
 
+  # A `|` in a title used to be truncated: both commands packed their sort key as
+  # `priority|id|status|title` and split it back apart.
+  Scenario: Ready shows a title containing a pipe in full
+    Given a ticket exists with ID "pipe-0001" and title "Ship it | phase 2"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should contain "Ship it | phase 2"
+
+  Scenario: Blocked shows a title containing a pipe in full, blockers last
+    Given a ticket exists with ID "pipe-0001" and title "Ship it | phase 2"
+    And a ticket exists with ID "pipe-0002" and title "Blocker"
+    And ticket "pipe-0001" depends on "pipe-0002"
+    When I run "ticket blocked"
+    Then the command should succeed
+    And the output should contain "Ship it | phase 2 <- [pipe-0002]"
+
   Scenario: Blocked lists unresolved blockers only, sorted by priority
     Given a ticket exists with ID "block-0001" and title "Low priority" with priority 3
     And a ticket exists with ID "block-0002" and title "High priority" with priority 1

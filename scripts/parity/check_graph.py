@@ -13,7 +13,40 @@ closed walk, and no cyclic graph may come back empty. bash's bogus cycles are
 counted and reported, not failed on. DROP this whitelist once T4
 (nid_fba92yfczp71jjcprn4ufmory_e) flips `dep cycle` to the TS implementation.
 """
-from harness import TempRepo, all_scenarios
+from harness import PIPE_TITLE, TempRepo, all_scenarios
+
+# Two tickets, so one is ready and one is blocked, both with a `|` in the title.
+PIPE_TITLE_SCENARIO = [("aa1", "open", ["bb2"], "1"), ("bb2", "open", [], "2")]
+
+
+def _check_pipe_title_divergence():
+    """Whitelisted divergence: bash `ready`/`blocked` truncate a title at its first `|`.
+
+    Both pack the sort key as `prio|id|status|title` and `split()` it back apart, so bash
+    loses everything after the pipe -- and `blocked` prints a title fragment where the
+    blockers belong. TS prints the title whole, which is the intended behavior. Pinned
+    rather than byte-compared, so the day either side changes its mind the harness says so.
+    """
+    with TempRepo("parity-pipe-title-") as repo:
+        repo.write_scenario(PIPE_TITLE_SCENARIO, title_template=PIPE_TITLE)
+        ready_title, blocked_title = PIPE_TITLE % "bb2", PIPE_TITLE % "aa1"
+        expectations = [
+            # (label, bash text, TS text, what bash keeps, what only TS keeps)
+            ("ready", repo.bash("ready"), repo.ts_cli("ready"), ready_title.split("|")[0], ready_title),
+            ("blocked", repo.bash("blocked"), repo.ts_cli("blocked"), blocked_title.split("|")[0], blocked_title),
+        ]
+        problems = []
+        for label, bash_out, ts_out, truncated, whole in expectations:
+            if whole in bash_out or truncated not in bash_out:
+                problems.append("bash %s no longer truncates at `|`: [%s]" % (label, bash_out.strip()))
+            if whole not in ts_out:
+                problems.append("TS %s no longer renders the whole title: [%s]" % (label, ts_out.strip()))
+        # The blockers bash drops, and only TS still prints.
+        if "[bb2]" in expectations[1][1] or "<- [bb2]" not in expectations[1][2]:
+            problems.append("blocked blockers changed: bash=[%s] ts=[%s]" % (expectations[1][1].strip(), expectations[1][2].strip()))
+        if problems:
+            return False, "pipe-title divergence changed: " + "; ".join(problems)
+        return True, "pipe-title: bash truncates ready/blocked at `|`, TS does not (as designed)"
 
 
 def _parse_cycles(out):
@@ -85,11 +118,18 @@ CLI_INVOCATIONS = [
 ]
 
 
+def _outcome(result):
+    """What must match: exit code AND stdout. Comparing stdout alone would let a bash-side
+    crash that prints nothing look equal to an empty TS success."""
+    return "rc=%d\n%s" % (result.returncode, result.stdout)
+
+
 def _exact_mismatches(repo, scenario):
     """(label, bash, ts) for every command whose output must match byte-for-byte."""
     problems = []
     for args in CLI_INVOCATIONS:
-        bash_out, ts_out = repo.bash(*args), repo.ts_cli(*args)
+        bash_out = _outcome(repo.bash_result(*args))
+        ts_out = _outcome(repo.ts_cli_result(*args))
         if bash_out != ts_out:
             problems.append((" ".join(args), bash_out, ts_out))
     dump_comparisons = []
@@ -128,9 +168,11 @@ def run(random_count, seed):
                 failures += 1
                 print("MISMATCH scenario=[%s] check=[%s] graph=%s" % (label, problem_label, scenario))
                 print("  --- bash ---\n%s  --- ts ---\n%s" % (bash_out, ts_out))
-    summary = "scenarios=%d failures=%d (whitelisted: bash bogus cycles=%d)" % (
+    pipe_ok, pipe_summary = _check_pipe_title_divergence()
+    summary = "scenarios=%d failures=%d (whitelisted: bash bogus cycles=%d); %s" % (
         len(scenarios),
         failures,
         bash_bogus_cycles,
+        pipe_summary,
     )
-    return failures == 0, summary
+    return failures == 0 and pipe_ok, summary

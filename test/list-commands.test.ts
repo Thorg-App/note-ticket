@@ -106,6 +106,17 @@ describe("ListOptions", () => {
     });
 });
 
+describe("CliError", () => {
+    it("prefixes the message with `Error: `", () => {
+        assert.equal(new CliError("nope").stderrText, "Error: nope\n");
+    });
+
+    it("leaves detail lines un-prefixed, as bash's TICKETS_DIR hint is", () => {
+        const error = new CliError("not inside a git repository", ["Run inside a git repo"]);
+        assert.equal(error.stderrText, "Error: not inside a git repository\nRun inside a git repo\n");
+    });
+});
+
 describe("TicketRow", () => {
     it("pads the id column to 8", () => {
         assert.equal(TicketRow.withStatus(ticketOf({ id: "aa1", title: "Alpha" })), "aa1      [open] - Alpha");
@@ -139,6 +150,32 @@ describe("TicketRow", () => {
 
     it("emits nothing at all for no rows", () => {
         assert.equal(TicketRow.text([]), "");
+    });
+});
+
+/**
+ * bash `cmd_ready`/`cmd_blocked` pack their sort key as `prio|id|status|title` and split it
+ * back apart, so bash truncates such a title (and `blocked` prints a title fragment where
+ * the blockers belong). Reachable via `tk create "a | b"`. These tests pin the corrected
+ * behavior so a later porter cannot "restore parity" by re-introducing the bash bug.
+ */
+describe("a title containing the sort-key separator '|'", () => {
+    const PIPED_TITLE = "Ship the thing | phase 2";
+    const TICKETS = ticketsOf([
+        { id: "aa1", title: PIPED_TITLE, deps: ["zz9"], priority: "1" },
+        { id: "cc3", title: PIPED_TITLE, priority: "2" },
+    ]);
+
+    it("renders whole in a `ready` row", () => {
+        assert.equal(ReadyCommand.render(TICKETS, NO_OPTIONS), `cc3      [P2][open] - ${PIPED_TITLE}\n`);
+    });
+
+    it("renders whole in a `blocked` row, blockers still last", () => {
+        assert.equal(BlockedCommand.render(TICKETS, NO_OPTIONS), `aa1      [P1][open] - ${PIPED_TITLE} <- [zz9]\n`);
+    });
+
+    it("renders whole in an `ls` row", () => {
+        assert.equal(LsCommand.render([TICKETS[1] as Ticket], NO_OPTIONS), `cc3      [open] - ${PIPED_TITLE}\n`);
     });
 });
 
