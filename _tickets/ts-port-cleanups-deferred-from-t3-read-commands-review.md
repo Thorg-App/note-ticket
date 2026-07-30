@@ -1,18 +1,17 @@
 ---
 id: nid_7opxnvhia4a2ty7o0k9t6z4bl_e
-title: "TS port: cleanups deferred from T3 read-commands review"
-status: open
+title: 'TS port: cleanups deferred from T3 read-commands review'
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-07-30T05:19:44Z
-status_updated_iso: 2026-07-30T05:19:44Z
+created_iso: '2026-07-30T05:19:44Z'
+status_updated_iso: '2026-07-30T19:32:16Z'
 type: task
 priority: 3
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
-
 ## Notes
 
 **2026-07-30T05:20:18Z**
