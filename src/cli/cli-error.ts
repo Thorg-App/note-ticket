@@ -1,6 +1,9 @@
 const ERROR_PREFIX = "Error: ";
 const LINE_SEPARATOR = "\n";
 
+/** Exit code of a plain usage error, which is what bash `return 1` gives for all of them. */
+const DEFAULT_EXIT_CODE = 1;
+
 /**
  * A failure whose text is meant for the user, and the ONE place that knows how such a
  * failure looks on stderr. Every user-facing failure is raised as this type so the
@@ -14,10 +17,13 @@ export class CliError extends Error {
      * @param message the `Error: `-prefixed first line.
      * @param detailLines follow-up lines printed WITHOUT the prefix, as bash does for its
      *   "Run inside a git repo, or set TICKETS_DIR env var" hint.
+     * @param exitCode process exit code; 1 for every usage error, overridden only where bash
+     *   produced a different one (a missing `jq` exits 127, the shell's "command not found").
      */
     constructor(
         message: string,
         readonly detailLines: readonly string[] = [],
+        readonly exitCode: number = DEFAULT_EXIT_CODE,
     ) {
         super(message);
         this.name = "CliError";

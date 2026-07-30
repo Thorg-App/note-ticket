@@ -74,6 +74,13 @@ class PathOrder {
     }
 }
 
+/** A ticket file with its modification time, the pair `loadRecent` orders by. */
+interface TimestampedFile {
+    readonly path: string;
+    /** Nanoseconds, so files written in the same millisecond still order correctly. */
+    readonly modifiedAt: bigint;
+}
+
 /**
  * Reads and writes tickets under one directory.
  *
@@ -115,6 +122,45 @@ export class TicketStore {
     /** Every ticket file parsed, in `collectFiles` order. */
     loadAll(): readonly Ticket[] {
         return this.collectFiles().map((path) => this.load(path));
+    }
+
+    /**
+     * The `maxFiles` most recently modified ticket files, newest first.
+     *
+     * Mirrors bash `cmd_closed`'s `ls -t "${TICKET_FILES[@]}" | head -n 100`: the cap is on
+     * FILES SCANNED, applied before any filtering, so an old closed ticket behind 100 newer
+     * files is invisible to `closed` no matter what `--limit` says. Verified against ./ticket.
+     *
+     * Files that cannot be stat'ed (removed mid-run, broken permissions) are dropped, as
+     * `ls -t 2>/dev/null` drops them.
+     */
+    loadRecent(maxFiles: number): readonly Ticket[] {
+        const stamped: TimestampedFile[] = [];
+        for (const path of this.collectFiles()) {
+            const modifiedAt = TicketStore.modifiedAtOrUndefined(path);
+            if (modifiedAt !== undefined) {
+                stamped.push({ path, modifiedAt });
+            }
+        }
+        return stamped
+            .sort(TicketStore.byRecency)
+            .slice(0, maxFiles)
+            .map((file) => this.load(file.path));
+    }
+
+    /**
+     * Newest first, ties broken by ascending byte-wise path — GNU `ls -t`'s ordering.
+     *
+     * WHY nanoseconds: `ls -t` compares the full `st_mtim`, and `statSync().mtimeMs` is
+     * truncated to milliseconds, which would reorder files written in the same millisecond.
+     * WHY byte-wise for ties: `ls` breaks them with `strcoll`, i.e. the caller's locale;
+     * byte-wise matches it under `LC_ALL=C` and is the ordering the rest of this class uses.
+     */
+    private static byRecency(left: TimestampedFile, right: TimestampedFile): number {
+        if (left.modifiedAt !== right.modifiedAt) {
+            return left.modifiedAt > right.modifiedAt ? -1 : 1;
+        }
+        return PathOrder.compare(left.path, right.path);
     }
 
     /**
@@ -199,6 +245,15 @@ export class TicketStore {
     private static statOrUndefined(path: string): ReturnType<typeof statSync> | undefined {
         try {
             return statSync(path);
+        } catch {
+            return undefined;
+        }
+    }
+
+    /** Modification time in nanoseconds, or undefined when the file cannot be stat'ed. */
+    private static modifiedAtOrUndefined(path: string): bigint | undefined {
+        try {
+            return statSync(path, { bigint: true }).mtimeNs;
         } catch {
             return undefined;
         }

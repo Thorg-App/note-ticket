@@ -4,8 +4,10 @@ import { MissingTicketIdError } from "../core/id.js";
 import type { TicketStore } from "../core/ticket-store.js";
 import { CliError } from "./cli-error.js";
 import { BlockedCommand } from "./commands/blocked.js";
+import { ClosedCommand } from "./commands/closed.js";
 import { HelpCommand } from "./commands/help.js";
 import { LsCommand } from "./commands/ls.js";
+import { QueryCommand } from "./commands/query.js";
 import { ReadyCommand } from "./commands/ready.js";
 import { ListOptions } from "./list-options.js";
 import { StoreResolver } from "./store-resolver.js";
@@ -48,7 +50,7 @@ class Cli {
                 throw error;
             }
             process.stderr.write(failure.stderrText);
-            return EXIT_FAILURE;
+            return failure.exitCode;
         }
     }
 
@@ -66,6 +68,14 @@ class Cli {
                 return Cli.read(args, (store, options) => ReadyCommand.render(store.loadAll(), options));
             case "blocked":
                 return Cli.read(args, (store, options) => BlockedCommand.render(store.loadAll(), options));
+            case "closed":
+                // The store, not loadAll(): `closed` orders by file mtime and reads only the
+                // most recently modified files.
+                return Cli.read(args, (store, options) => ClosedCommand.render(store, options));
+            case "query":
+                // Not Cli.read: `query` may hand its output to jq and exit with jq's code,
+                // so it owns its own writing.
+                return QueryCommand.run(StoreResolver.forReadCommand(), args);
             default:
                 process.stderr.write(`Unknown command: ${command}\n`);
                 process.stderr.write(HelpCommand.render(Cli.programName()));

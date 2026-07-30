@@ -21,8 +21,12 @@ export class ListOptions {
     private constructor(
         /** Status + assignee + tag. Only `ls` accepts a status, so only `ls` uses this. */
         readonly filter: TicketFilter,
-        /** Raw `--limit=` text, empty when absent. Only `closed` reads it. */
-        readonly limitText: string,
+        /**
+         * Raw `--limit=` text, undefined when the flag was not given. Only `closed` reads it.
+         * WHY not "" for absent: bash rejects an empty `--limit=` (`head: invalid number of
+         * lines: ''`) but defaults to 20 when the flag is missing, so the two must differ.
+         */
+        readonly limitText: string | undefined,
     ) {}
 
     /** Assignee + tag only — the filter of every command that fixes the status itself. */
@@ -34,7 +38,7 @@ export class ListOptions {
         let status = "";
         let assignee = "";
         let tag = "";
-        let limit = "";
+        let limit: string | undefined;
         for (let index = 0; index < args.length; index++) {
             const arg = args[index] as string;
             if (arg.startsWith(OPTION_STATUS)) {
