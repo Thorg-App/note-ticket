@@ -17,20 +17,23 @@ make parity PARITY_ARGS="--seed 42"      # different graphs; failures are reprod
 
 | File | Role |
 |------|------|
-| `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format, for commands the shipped CLI does not serve yet; bundled to `dist-parity/dump.mjs` |
+| `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format, for commands the shipped CLI does not serve yet (only `slug` is left); bundled to `dist-parity/dump.mjs` |
 | `harness.py` | Throwaway repo, command runners, scenario generators, pinned bash reference |
-| `check_graph.py` | `ls`/`ready`/`blocked`/`closed` (every filter flag) + `dep tree[ --full]` byte-compare, `dep cycle` semantic check, pinned `closed` divergences, `closed` scan cap / mtime ties / symlink mtime / default limit, `ls \| head -1` exit code |
+| `check_graph.py` | `ls`/`ready`/`blocked`/`closed` (every filter flag) + `dep tree[ --full]` byte-compare, `dep cycle` and `show` semantic checks, pinned `closed` divergences, `closed` scan cap / mtime ties / symlink mtime / default limit, `ls \| head -1` exit code, the `show` and id-resolution divergences |
 | `check_query.py` | `query` JSONL byte-compare (bare and through jq), the empty-tickets-dir short-circuit, `query <filter> \| head -1` exit code, and the missing-`id` and control-character divergences |
 | `check_slug.py` | `title_to_filename` vs `Slug.fromTitle` |
 | `run.py` | Runs all checks; exit 1 on any unexpected mismatch |
 
 ## The bash side is a pinned copy, not `./ticket`
 
-`./ticket` exec's the TS bundle for every command named in its `TS_COMMANDS`, so calling it
-directly would compare TS against TS the moment a command is ported — a harness that can no
-longer fail. `harness.py` therefore runs a copy of the script with `TS_COMMANDS` emptied
+`./ticket` exec's the TS bundle for every command named in its `TS_COMMANDS`, and `cmd_dep`
+does the same for the subcommands in `TS_DEP_SUBCOMMANDS`, so calling it directly would
+compare TS against TS the moment a command is ported — a harness that can no longer fail.
+`harness.py` therefore runs a copy of the script with **both** lists emptied
 (`BashReference`, materialized under `$REPO/.tmp` because the system temp dir may be
-`noexec`). Nothing in the shipped script changes.
+`noexec`). Nothing in the shipped script changes. Each list must appear exactly once, or
+`BashReference` refuses to build: a delegation switch that quietly stops being disabled
+would hollow out every check below it.
 
 The TS side of a check is the **real CLI** (`dist/ticket.mjs`) for every ported command, and
 `dump.mjs` only for the rest; a command's `dump.ts` mode is deleted when it is ported, so no
@@ -39,15 +42,16 @@ exactly this reason.
 
 ## Whitelisted divergences
 
-Byte-comparison is the default; the following seven are deliberate and are *pinned*
+Byte-comparison is the default; the following nine are deliberate and are *pinned*
 instead, so the harness still fails if either side changes its mind.
 
 1. **`dep cycle`** — bash aborts its DFS on the first cycle and leaves nodes marked
    "visiting", so it prints paths that are not cycles and misses real ones (19 bogus
    cycles over the default scenario set). Diffing bytes would pin a bug, so both sides
    are checked semantically instead: every cycle the TS core reports must be a real
-   closed walk, and no cyclic graph may come back empty. Remove this whitelist when T4
-   (`nid_fba92yfczp71jjcprn4ufmory_e`) flips `dep cycle` to TS.
+   closed walk, and no cyclic graph may come back empty. T4 flipped `dep cycle` to TS and
+   BDD scenarios now pin the TS behavior; the whitelist stays until T6, because until then
+   there is still a buggy bash implementation on the other side of the diff.
 2. **A `.md` under `_tickets/` with no `id`** — bash silently skips it; the TS core
    fails naming the file (`nid_n6eavbm0h77twvna8k9nnpu2g_e`, an intentional behavior
    change: a corrupt repo must not be silently under-reported).
@@ -87,6 +91,34 @@ instead, so the harness still fails if either side changes its mind.
    `check_graph._check_broken_pipe_exit_code` pins the two ends (3000 tickets ⇒ 141 on both,
    one ticket ⇒ 0 on both) and `check_query._check_query_broken_pipe` pins the `jq` case,
    where the child really is signalled and both sides say 141.
+
+8. **`show`'s computed sections** — bash builds Blocking and Children by iterating an awk
+   associative array, whose order is UNSPECIFIED (measured: neither path nor id order), and
+   appends one Blocking row per matching `deps` ENTRY, so a ticket naming the target twice is
+   printed twice. TS uses enumeration (path) order and lists each ticket once.
+   `check_graph._show_mismatches` therefore byte-compares the echoed FILE and the section
+   HEADINGS in order, and compares the rows within a section as a sorted MULTISET —
+   except `## Blocking`, the only section with the count divergence, which is compared as a
+   sorted SET so the `duplicate-dep*` scenarios do not trip it; `_check_show_duplicate_blocking`
+   pins that duplicate-row difference by COUNT. Deduplicating every section instead was
+   measured to hide a real `show` regression (a `[...new Set(ids)]` row dedup shipped green),
+   so keep the dedup narrow. The `Blockers` and `Linked` sections are `deps`/`links` order on
+   both sides, duplicate entries included — both sides repeat the row.
+   **Approval status:** the ORDER half needs none (bash's order is unspecified, so any
+   implementation must pick one). The DUPLICATE-ROW REMOVAL is a deliberate behavior change
+   that is **shipped but PENDING HUMAN SIGN-OFF** — ticket `nid_qxt3z5unr9k220aqttbw84a6a_e`
+   (tagged `decide`). It is NOT covered by the id-resolution decision ticket, which is #9 only.
+9. **`dep tree`'s root id, and an empty id anywhere** — bash's `cmd_dep_tree` resolved its
+   root with its own awk scan matching by SUBSTRING, so a full id contained in another
+   ticket's id came back "ambiguous" and that tree was unreachable, while untrimmed input
+   matched nothing. Separately, awk's `index(s, "")` is 1, so an EMPTY id matched every
+   ticket and resolved to the only one in a single-ticket repo — `tk show "$UNSET_VAR"`
+   printed an arbitrary ticket. Both were confirmed as bugs by the owner
+   (`nid_5g3eta9cf7yi6iukmscxma6wc_e`): `dep tree` now resolves through the shared
+   `IdResolver` (exact beats partial, input trimmed) and an empty id matches nothing.
+   BDD scenarios pin the TS side; `check_graph._check_id_resolution_divergences` pins that
+   bash really did behave the other way. bash's error WORDING for a `dep tree` root is
+   reproduced exactly (`Error: ticket <id> not found`, unquoted — unlike `ticket_path`'s).
 
 Because of #3, `harness.HOSTILE_TITLES` — the titles every generated scenario cycles
 through so the byte-compare sees `"`, `\`, `:`, `[]`, non-ASCII and a trailing space —

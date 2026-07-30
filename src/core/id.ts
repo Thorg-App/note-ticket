@@ -91,8 +91,8 @@ export class IdResolver {
      * DIVERGENCE (deliberate): awk `index(s, "")` is 1, so bash resolves `""` to the
      * only ticket in a single-ticket repo and calls it "ambiguous" otherwise. That makes
      * `tk close "$UNSET_VAR"` mutate an arbitrary ticket, so it is treated as a bug, not
-     * a contract. Needs human confirmation before the write commands are flipped —
-     * ticket nid_5g3eta9cf7yi6iukmscxma6wc_e.
+     * a contract. Confirmed as a bug by the owner in nid_5g3eta9cf7yi6iukmscxma6wc_e
+     * (closed); whitelisted divergence #9 in scripts/parity/README.md.
      */
     private partialMatches(search: string): readonly IdCandidate[] {
         if (search === "") {

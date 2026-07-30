@@ -6,10 +6,12 @@ import { BrokenPipe } from "./broken-pipe.js";
 import { CliError } from "./cli-error.js";
 import { BlockedCommand } from "./commands/blocked.js";
 import { ClosedCommand } from "./commands/closed.js";
+import { DepCommand } from "./commands/dep.js";
 import { HelpCommand } from "./commands/help.js";
 import { LsCommand } from "./commands/ls.js";
 import { QueryCommand } from "./commands/query.js";
 import { ReadyCommand } from "./commands/ready.js";
+import { ShowCommand } from "./commands/show.js";
 import { ExitCode } from "./exit-codes.js";
 import { ListOptions } from "./list-options.js";
 import { StoreResolver } from "./store-resolver.js";
@@ -76,6 +78,14 @@ class Cli {
                 // Not Cli.read: `query` may hand its output to jq and exit with jq's code,
                 // so it owns its own writing.
                 return QueryCommand.run(StoreResolver.forReadCommand(), args);
+            // Only the read-only `tree`/`cycle` subcommands reach us; bash still serves
+            // `dep <id> <dep-id>`, which is a write. See TS_DEP_SUBCOMMANDS in ./ticket.
+            case "dep":
+                return DepCommand.run(StoreResolver.forReadCommand(), args);
+            case "show":
+                // Not Cli.read: `show` takes an id rather than list filters, and may hand its
+                // output to a pager and exit with the pager's code.
+                return ShowCommand.run(StoreResolver.forReadCommand(), args);
             default:
                 process.stderr.write(`Unknown command: ${command}\n`);
                 process.stderr.write(HelpCommand.render(Cli.programName()));

@@ -22,6 +22,27 @@ without one is a corrupt repo: commands fail with
 `Error: <path> has no 'id' frontmatter field` instead of silently omitting that
 ticket from every listing. Restore the `id`, or move the file out of `_tickets/`.
 
+Every command that takes an `<id>` accepts a partial one: an exact match wins, otherwise
+the id must contain the text you typed as a substring, and more than one match at the
+winning tier is an error. Surrounding whitespace is trimmed. An **empty** id matches
+nothing, so `tk show "$UNSET_VAR"` fails instead of picking an arbitrary ticket.
+
+`dep tree [--full] <id>` draws the dependency graph below one ticket. By default every
+ticket appears once, at its DEEPEST position in the tree, and siblings are ordered by
+subtree depth then id, so the longest chain reads down the left; `--full` draws every path
+to every ticket instead. Cycles are cut, not followed.
+
+`dep cycle` lists every dependency cycle among tickets that are not closed, each reported
+once (`Cycle 1: a -> b -> a` plus one row per member), and prints
+`No dependency cycles found` when there is none. A ticket that merely points INTO a cycle
+is not part of one and is not listed.
+
+`show <id>` prints the ticket file as it is on disk — with the parent's title appended to
+the `parent:` line — followed by the sections `## Blockers` (dependencies that are not
+closed), `## Blocking` (non-closed tickets that depend on this one), `## Children`
+(tickets whose `parent` is this one) and `## Linked`, each omitted when empty. Output goes
+through `$TICKET_PAGER` (else `$PAGER`) only when stdout is a terminal.
+
 `closed` lists tickets whose status is `closed` (or the legacy `done`), most recently
 modified first. It looks only at the 100 most recently modified ticket files, so a
 ticket closed long ago is not listed however large `--limit` is. `--limit=N` takes a

@@ -40,6 +40,28 @@ init_tickets_dir() {
     return 0
 }
 
+# True when $2 appears in the space-separated list $1 (TS_COMMANDS / TS_DEP_SUBCOMMANDS).
+# The emptiness test is load-bearing: with an EMPTY list (how the parity harness disables
+# delegation) the substring match would otherwise accept an empty name, e.g. a bare `dep`.
+_ts_serves() {
+    [[ -n "$2" && " $1 " == *" $2 "* ]]
+}
+
+# Hand the whole invocation to the TypeScript bundle. Replaces this process, never returns.
+_exec_ts() {
+    # Script location, NOT $PWD: the bundle sits next to this script.
+    local script_dir bundle
+    script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+    bundle="$script_dir/dist/ticket.mjs"
+    if [[ ! -f "$bundle" ]]; then
+        echo "Error: TypeScript bundle not built: [$bundle]" >&2
+        echo "Run: make build" >&2
+        exit 1
+    fi
+    # TICKET_INVOKED_AS: node cannot see this script's $0, and usage text interpolates it.
+    TICKET_INVOKED_AS="$0" exec node "$bundle" "$@"
+}
+
 TICKET_PAGER="${TICKET_PAGER:-${PAGER:-}}"
 
 # Prefer ripgrep if available, fall back to grep
@@ -731,6 +753,12 @@ cmd_dep_cycle() {
 }
 
 cmd_dep() {
+    # Read-only subcommands already ported to TypeScript (see TS_DEP_SUBCOMMANDS). The
+    # default `dep <id> <dependency-id>` form is a write and stays bash until T5.
+    if _ts_serves "$TS_DEP_SUBCOMMANDS" "${1:-}"; then
+        _exec_ts dep "$@"
+    fi
+
     # Handle subcommands
     if [[ "${1:-}" == "tree" ]]; then
         shift
@@ -1569,19 +1597,15 @@ EOF
 # TypeScript delegation (strangler-fig port; see docs-internal/migration-to-ts-high-level.md).
 # Commands listed here are served by the TS bundle. Removing a name from the list
 # instantly rolls that command back to the bash implementation below.
-TS_COMMANDS="help --help -h ls list ready blocked closed query"
+TS_COMMANDS="help --help -h ls list ready blocked closed query show"
 
-if [[ " $TS_COMMANDS " == *" ${1:-help} "* ]]; then
-    # Script location, NOT $PWD: the bundle sits next to this script.
-    SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-    TS_BUNDLE="$SCRIPT_DIR/dist/ticket.mjs"
-    if [[ ! -f "$TS_BUNDLE" ]]; then
-        echo "Error: TypeScript bundle not built: [$TS_BUNDLE]" >&2
-        echo "Run: make build" >&2
-        exit 1
-    fi
-    # TICKET_INVOKED_AS: node cannot see this script's $0, and usage text interpolates it.
-    TICKET_INVOKED_AS="$0" exec node "$TS_BUNDLE" "$@"
+# `dep` cannot be flipped as a whole: `dep tree` / `dep cycle` are read-only and ported,
+# while its default form `dep <id> <dependency-id>` is a WRITE still served by bash (T5).
+# cmd_dep consults this list for its first argument; emptying it rolls both back.
+TS_DEP_SUBCOMMANDS="tree cycle"
+
+if _ts_serves "$TS_COMMANDS" "${1:-help}"; then
+    _exec_ts "$@"
 fi
 
 # Initialize tickets dir for built-in commands (skip for help)

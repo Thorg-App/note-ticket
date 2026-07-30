@@ -109,6 +109,18 @@ Verify these while porting — they are contractual even where scenarios are thi
 - A closed stdout (`tk ls | head -1`): node ignores SIGPIPE, so the CLI turns the failed write
   into 128+SIGPIPE itself. bash's code there depended on awk's write chunking, i.e. on output
   size, so the two agree except in a band of output sizes (whitelisted divergence #7).
+- `dep tree`: root resolution goes through the shared `IdResolver` (exact beats partial,
+  input trimmed, empty matches nothing) instead of bash's own substring scan, which called a
+  full id contained in another id "ambiguous" (whitelisted divergence #9; approved in
+  `nid_5g3eta9cf7yi6iukmscxma6wc_e`). bash's `dep tree`-specific error wording is kept.
+- `show`: bash's Blocking/Children order is an awk hash order, i.e. unspecified, and it
+  printed one Blocking row per matching `deps` entry; TS uses enumeration order and one row
+  per ticket (whitelisted divergence #8). The order half needs no approval; the duplicate-row
+  removal is shipped but PENDING human sign-off in `nid_qxt3z5unr9k220aqttbw84a6a_e` — the
+  closed decision ticket covers #9 only.
+- `dep` is ONE command name whose `tree`/`cycle` subcommands are reads and whose default form
+  is a write, so it is NOT in `TS_COMMANDS`: bash `cmd_dep` delegates those two branches via
+  a second list, `TS_DEP_SUBCOMMANDS`. The parity harness must empty BOTH lists.
 - `ready`/`blocked`: unknown dep IDs count as not-closed (blocking).
 - `ready`/`blocked`: bash packs its sort key as `prio|id|status|title`, so it TRUNCATES a
   title at the first `|`. Do NOT reproduce that; the TS row prints the title whole

@@ -143,3 +143,39 @@ Feature: Ticket Dependencies
     And the dep tree output should have task-0010 before task-0015
     And the dep tree output should have task-0010 before task-0020
     And the dep tree output should have task-0015 before task-0020
+
+  Scenario: Cycle detection reports nothing for an acyclic graph
+    Given ticket "task-0001" depends on "task-0002"
+    When I run "ticket dep cycle"
+    Then the command should succeed
+    And the output should be "No dependency cycles found"
+
+  Scenario: Cycle detection finds a two-ticket cycle
+    Given ticket "task-0001" depends on "task-0002"
+    And ticket "task-0002" depends on "task-0001"
+    When I run "ticket dep cycle"
+    Then the command should succeed
+    And the output should contain "Cycle 1:"
+    And the output should contain "task-0001 [open] Main task"
+    And the output should contain "task-0002 [open] Dependency task"
+
+  # A ticket that merely POINTS INTO a cycle is not part of one. The bash implementation
+  # aborted its DFS at the first cycle and left the nodes it had entered marked "visiting",
+  # so a later traversal through task-0001 reported it as a second, non-existent cycle.
+  Scenario: Cycle detection does not report a ticket that only points into a cycle
+    Given ticket "task-0001" depends on "task-0002"
+    And ticket "task-0002" depends on "task-0003"
+    And ticket "task-0003" depends on "task-0002"
+    When I run "ticket dep cycle"
+    Then the command should succeed
+    And the output should contain "Cycle 1:"
+    And the output should not contain "Cycle 2:"
+    And the output should not contain "task-0001"
+
+  Scenario: Cycle detection ignores closed tickets
+    Given ticket "task-0001" depends on "task-0002"
+    And ticket "task-0002" depends on "task-0001"
+    And ticket "task-0002" has status "closed"
+    When I run "ticket dep cycle"
+    Then the command should succeed
+    And the output should be "No dependency cycles found"
