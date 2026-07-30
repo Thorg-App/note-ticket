@@ -1,17 +1,17 @@
 ---
 id: nid_em5zmsstl3kz85jp8n70aidbb_e
-title: "Give ticket status a compile-time union type instead of bare strings"
-status: open
+title: Give ticket status a compile-time union type instead of bare strings
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-07-30T10:51:49Z
-status_updated_iso: 2026-07-30T10:51:49Z
+created_iso: '2026-07-30T10:51:49Z'
+status_updated_iso: '2026-07-30T19:21:33Z'
 type: chore
 priority: 3
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 `src/core/ticket.ts` exposes `VALID_TICKET_STATUSES: readonly string[]` and `TicketField` as a static class of `string`s, so every status-taking signature in the TS CLI is `status: string` -- e.g. `StatusUpdate.applied(ticket, status: string, now)` in src/cli/commands/status.ts and `TicketFilter`'s `--status` handling in src/cli/ticket-filter.ts. A typo in a status literal is a runtime error where CLAUDE.md asks for a compile-time one.
 
 Raised in the T5 phase A implementation review (suggestion S3). Pre-existing, predates T5, and deliberately NOT fixed inside T5 phase A because it touches read commands too and would enlarge an already-large diff.
@@ -25,4 +25,3 @@ Do this WITH or AFTER T5 phase C, not before: phases B and C are in flight in th
 ## Acceptance Criteria
 
 No `status: string` parameter remains in src/cli or src/core; `make typecheck`, `make unit-test`, `make test`, `make parity` all green with no test-expectation changes.
-
