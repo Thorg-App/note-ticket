@@ -118,9 +118,14 @@ on 2026-07-30 (`nid_r3mp6uylht7t77iwxtuqvhxv2_e`). Nothing here is pending a dec
    halves of the bug — the points-into-a-cycle shape (exactly one cycle, no bogus second) and
    three cycles overlapping in one ticket (all 3 found). The whitelist stays until T6, because until then
    there is still a buggy bash implementation on the other side of the diff.
-2. **A `.md` under `_tickets/` with no `id`** — bash silently skips it; the TS core
-   fails naming the file (`nid_n6eavbm0h77twvna8k9nnpu2g_e`, an intentional behavior
-   change: a corrupt repo must not be silently under-reported).
+2. **A `.md` under `_tickets/` that is not a usable ticket** — bash tolerates it (skipped, or
+   emitted as an id-less JSON record); the TS core fails naming the file
+   (`nid_n6eavbm0h77twvna8k9nnpu2g_e`, an intentional behavior change: a corrupt repo must
+   not be silently under-reported). TS distinguishes three causes, and
+   `check_query._check_missing_id_divergence` pins the message of each: no frontmatter block,
+   a block with no `id`, and a CRLF file — whose `---\r` is not the fence, so it is rejected for
+   its LINE ENDINGS rather than for the `id` it visibly contains
+   (`nid_z10hpj927zqilxcpl9ycpe0ad_e`; CRLF ticket files stay unsupported).
 3. **A `|` in a title, for `ready`/`blocked`** — bash packs its sort key as
    `prio|id|status|title` and `split()`s it back apart, so it truncates the title at the
    first pipe (and `blocked` prints the rest of the title where the blockers belong).

@@ -367,6 +367,20 @@ def step_raw_ticket_file(context, filename):
     path.write_text(context.text + '\n')
 
 
+@given(r'a raw ticket file "(?P<filename>[^"]+)" exists with CRLF line endings and content')
+def step_raw_crlf_ticket_file(context, filename):
+    """Same, but every line ends CRLF -- a Windows editor or `core.autocrlf=true` checkout.
+
+    CRLF ticket files are unsupported: `---\\r` is not the frontmatter fence, so the file
+    must be rejected for its LINE ENDINGS, never for the 'id' it visibly contains.
+    """
+    path = Path(context.test_dir) / '_tickets' / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # newline='' keeps python from re-translating the \r\n we write.
+    with open(path, 'w', newline='') as f:
+        f.write((context.text + '\n').replace('\n', '\r\n'))
+
+
 @given(r'ticket "(?P<ticket_id>[^"]+)" was modified (?P<seconds>\d+) seconds ago')
 def step_ticket_modified_seconds_ago(context, ticket_id, seconds):
     """Pin a ticket file's mtime. `closed` orders by it, and files created microseconds

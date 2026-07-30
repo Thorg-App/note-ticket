@@ -20,6 +20,7 @@ Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a deleg
 - `ticket.ts` — `Ticket` entity: typed field accessors, immutable `withField`/`withoutField`, `toJsonRecord()` (the `query` payload), `TicketField` (the on-disk key names, one place)
 - `ticket-store.ts` — `TicketsDirectory.resolve()` and `TicketStore` (discovery/load/save); `collectFiles()` is the single source of truth for "what is a ticket file"
 - `id.ts` — `TicketId.generate()`, `IdResolver` (exact beats partial, ambiguity is an error)
+- `ticket-file-error.ts` — `CorruptTicketFileError` and its two cases: `MissingTicketIdError` (a block that parsed, no `id`) and `MissingFrontmatterBlockError` (no block at all — and CRLF, which is unsupported and named as the cause instead of the `id`)
 - `clock.ts` — `Clock`/`SystemClock`/`FixedClock`: bash `_iso_date`'s `%Y-%m-%dT%H:%M:%SZ`, injected so written bytes are testable
 - `git.ts` — the only place git is invoked: repo root (for `TicketsDirectory`) and `user.name` (`create`'s default assignee); every probe answers `undefined` rather than throwing
 - `slug.ts` — title → filename, collision suffixes
@@ -40,7 +41,7 @@ Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a deleg
 - `commands/add-note.ts` — the ONLY write that APPENDS bytes (`TicketStore.appendTo`) instead of rewriting through `save`, because bash used `>>` and a rename would replace a symlinked ticket with a regular file. `TicketNote.appendedTo()` is the pure note layout; `NoteText` is the argument/stdin/TTY choice
 - `row-limit.ts` — `closed`'s `--limit=`; a plain count only (bash forwarded it to `head -n`)
 - `jq.ts` — spawns the external `jq` for `query <filter>`; jq stays a real dependency, never reimplemented
-- `cli-error.ts` — `CliError`; `main.ts` renders it (and core's `MissingTicketIdError`) as `Error: <message>`, exit 1 (or the error's own `exitCode`). `UsageError` is the subclass for bash's un-prefixed `Usage: …` lines
+- `cli-error.ts` — `CliError`; `main.ts` renders it (and core's `CorruptTicketFileError`) as `Error: <message>`, exit 1 (or the error's own `exitCode`). `UsageError` is the subclass for bash's un-prefixed `Usage: …` lines
 - `exit-codes.ts` — every exit code in one place, including `128 + signal` for a signalled child
 - `broken-pipe.ts` — node ignores SIGPIPE, so a closed stdout is turned into exit 141 here
 

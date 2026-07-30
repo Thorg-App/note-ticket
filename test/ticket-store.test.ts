@@ -16,7 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { MissingTicketIdError } from "../src/core/id.js";
+import {
+    CorruptTicketFileError,
+    MissingFrontmatterBlockError,
+    MissingTicketIdError,
+} from "../src/core/ticket-file-error.js";
 import { TicketsDirectory, TicketStore } from "../src/core/ticket-store.js";
 
 /** Mirrors the scratch name `TicketStore.save` uses; deliberately not a `.md`. */
@@ -358,22 +362,40 @@ describe("TicketStore id enforcement", () => {
 
     it("rejects a file with no frontmatter block at all", () => {
         const path = tree.write("bare.md", "just prose, no frontmatter\n");
-        assert.throws(() => new TicketStore(tree.root).load(path), MissingTicketIdError);
+        assert.throws(() => new TicketStore(tree.root).load(path), MissingFrontmatterBlockError);
     });
 
     it("names the offending path in the error", () => {
         const path = tree.write("named.md", "no frontmatter\n");
         assert.throws(
             () => new TicketStore(tree.root).load(path),
-            (error: Error) => error.message === `${path} has no 'id' frontmatter field`,
+            (error: Error) => error.message === `${path} has no YAML frontmatter block`,
+        );
+    });
+
+    /**
+     * A CRLF file (Windows editor, `core.autocrlf=true` checkout) has an `id` line the user
+     * can SEE, and `---\r` is not the fence, so the old `has no 'id' frontmatter field`
+     * message sent them hunting for a field that is right there. CRLF stays unsupported —
+     * ticket nid_z10hpj927zqilxcpl9ycpe0ad_e fixed the wording only.
+     */
+    it("blames the line endings, not the id field, for a CRLF ticket file", () => {
+        const path = tree.write("crlf.md", '---\r\nid: crlf1\r\ntitle: "CR"\r\n---\r\n');
+        assert.throws(
+            () => new TicketStore(tree.root).load(path),
+            (error: Error) =>
+                error.message ===
+                `${path} frontmatter block is not parseable (CRLF line endings are not supported)`,
         );
     });
 
     // The accepted trade-off: ONE malformed file breaks every command that enumerates.
+    // Asserted on the base class: the tree still holds the earlier fixtures, so WHICH
+    // corrupt file the enumeration trips over first is not this test's point.
     it("fails the whole enumeration, not just the malformed file", () => {
         tree.ticket("fine.md", "nid_fine");
         tree.write("broken.md", "---\ntitle: \"t\"\n---\n");
-        assert.throws(() => new TicketStore(tree.root).loadAll(), MissingTicketIdError);
+        assert.throws(() => new TicketStore(tree.root).loadAll(), CorruptTicketFileError);
     });
 });
 

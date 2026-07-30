@@ -230,6 +230,23 @@ describe("TicketDocument", () => {
         assert.equal(TicketDocument.parse("---\nid: x\n").body(), "");
     });
 
+    it("reports a block for a normal ticket", () => {
+        assert.equal(TicketDocument.parse(TICKET_TEXT).hasFrontmatterBlock(), true);
+    });
+
+    it("reports no block for a file that has no marker", () => {
+        assert.equal(TicketDocument.parse("just a note\n").hasFrontmatterBlock(), false);
+    });
+
+    // CRLF is unsupported: `---\r` is not the fence, so the block is absent, not empty.
+    // The load error's wording depends on telling those two apart.
+    it("reports no block for a CRLF file", () => {
+        assert.equal(
+            TicketDocument.parse('---\r\nid: x\r\ntitle: "CR"\r\n---\r\n').hasFrontmatterBlock(),
+            false,
+        );
+    });
+
     it("gives a file that had no frontmatter a terminated block when fields are added", () => {
         const parsed = TicketDocument.parse("just a note\n");
         const updated = parsed.withFrontmatter(parsed.frontmatter.withField("id", "x"));

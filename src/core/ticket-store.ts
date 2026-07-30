@@ -18,8 +18,8 @@ import {
 import { join } from "node:path";
 
 import { Git } from "./git.js";
-import { MissingTicketIdError } from "./id.js";
 import { Ticket } from "./ticket.js";
+import { MissingFrontmatterBlockError, MissingTicketIdError } from "./ticket-file-error.js";
 
 const TICKETS_DIR_ENV_VAR = "TICKETS_DIR";
 const TICKETS_DIR_NAME = "_tickets";
@@ -100,9 +100,15 @@ export class TicketStore {
         return files.sort(PathOrder.compare);
     }
 
-    /** Throws `MissingTicketIdError` when the file carries no `id` — see that class. */
+    /** Throws a `CorruptTicketFileError` for a file that is not a ticket — see that class. */
     load(path: string): Ticket {
-        const ticket = Ticket.parse(path, readFileSync(path, FILE_ENCODING));
+        const text = readFileSync(path, FILE_ENCODING);
+        const ticket = Ticket.parse(path, text);
+        // Order matters: no block at all is a DIFFERENT failure from a block without an
+        // `id`, and only the second may name the `id` field.
+        if (!ticket.document.hasFrontmatterBlock()) {
+            throw new MissingFrontmatterBlockError(path, text);
+        }
         if (ticket.id === "") {
             throw new MissingTicketIdError(path);
         }
