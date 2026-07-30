@@ -244,8 +244,4 @@ describe("TicketDocument", () => {
         assert.equal(TicketDocument.parse("just a note\n").text(), "just a note\n");
     });
 
-    it("appends to the body", () => {
-        const appended = TicketDocument.parse(TICKET_TEXT).withBodyAppended("\n## Notes\n");
-        assert.equal(appended.body(), "\nbody line\n\n## Notes\n");
-    });
 });

@@ -3,10 +3,12 @@ import type { TicketStore } from "../core/ticket-store.js";
 import { BrokenPipe } from "./broken-pipe.js";
 import { CliError } from "./cli-error.js";
 import { CommandEnvironment } from "./command-environment.js";
+import { AddNoteCommand } from "./commands/add-note.js";
 import { BlockedCommand } from "./commands/blocked.js";
 import { ClosedCommand } from "./commands/closed.js";
 import { CreateCommand } from "./commands/create.js";
 import { DepCommand } from "./commands/dep.js";
+import { EditCommand } from "./commands/edit.js";
 import { HelpCommand } from "./commands/help.js";
 import { LinkCommand } from "./commands/link.js";
 import { LsCommand } from "./commands/ls.js";
@@ -91,6 +93,12 @@ class Cli {
                 return LinkCommand.run(StoreResolver.forWriteCommand(), args);
             case "unlink":
                 return UnlinkCommand.run(StoreResolver.forWriteCommand(), args);
+            case "add-note":
+                return AddNoteCommand.run(StoreResolver.forWriteCommand(), args, environment);
+            case "edit":
+                // A write command by intent: it hands the file to an editor, and bash required
+                // an existing tickets directory for it like every non-`create` command.
+                return EditCommand.run(StoreResolver.forWriteCommand(), args, environment);
             case "show":
                 // Not Cli.read: `show` takes an id rather than list filters, and may hand its
                 // output to a pager and exit with the pager's code.

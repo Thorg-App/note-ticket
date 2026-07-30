@@ -46,3 +46,40 @@ Feature: Ticket Notes
     When I run "ticket add-note 0001 'Partial ID note'"
     Then the command should succeed
     And the output should be "Note added to note-0001"
+
+  Scenario: The note is a bold timestamp, a blank line and the text, in that order
+    When I run "ticket add-note note-0001 'Layout matters'"
+    Then the command should succeed
+    And ticket "note-0001" should end with the note "Layout matters"
+
+  Scenario: A second note reuses the one Notes heading
+    When I run "ticket add-note note-0001 'First'"
+    And I run "ticket add-note note-0001 'Second'"
+    Then ticket "note-0001" should contain "## Notes" exactly 1 time
+    And ticket "note-0001" should end with the note "Second"
+
+  Scenario: A ticket that already has a notes section gains no second heading
+    Given ticket "note-0001" has a notes section
+    When I run "ticket add-note note-0001 'Another'"
+    Then ticket "note-0001" should contain "## Notes" exactly 1 time
+
+  Scenario: Words given as separate arguments are joined by single spaces
+    When I run "ticket add-note note-0001 two   words"
+    Then the command should succeed
+    And ticket "note-0001" should end with the note "two words"
+
+  Scenario: Note read from stdin, without its trailing newlines
+    When I run "ticket add-note note-0001" with "piped note\n\n\n" on stdin
+    Then the command should succeed
+    And the output should be "Note added to note-0001"
+    And ticket "note-0001" should end with the note "piped note"
+
+  Scenario: Multi-line note read from stdin
+    When I run "ticket add-note note-0001" with "first\nsecond\n" on stdin
+    Then the command should succeed
+    And ticket "note-0001" should end with the note "first\nsecond"
+
+  Scenario: add-note with no id at all
+    When I run "ticket add-note"
+    Then the command should fail
+    And stderr should contain "Usage: ticket add-note <id> [note text]"

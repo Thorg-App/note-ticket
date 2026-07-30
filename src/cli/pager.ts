@@ -1,8 +1,7 @@
 import { spawnSync } from "node:child_process";
 
-import { ChildExit } from "./child-exit.js";
-import { CliError } from "./cli-error.js";
 import { ExitCode } from "./exit-codes.js";
+import { SpawnedChild } from "./spawned-child.js";
 
 const TICKET_PAGER_ENV_VAR = "TICKET_PAGER";
 const PAGER_ENV_VAR = "PAGER";
@@ -47,13 +46,6 @@ export class Pager {
     private static pipeThrough(command: readonly string[], text: string): number {
         const [binary, ...args] = command as [string, ...string[]];
         const result = spawnSync(binary, args, { input: text, stdio: ["pipe", "inherit", "inherit"] });
-        const code = ChildExit.codeOf(result);
-        if (code !== undefined) {
-            return code;
-        }
-        if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
-            throw new CliError(`${binary}: command not found`, [], ExitCode.COMMAND_NOT_FOUND);
-        }
-        throw new CliError(`${binary} could not be run: ${result.error?.message ?? "no exit status"}`);
+        return SpawnedChild.exitCode(result, binary);
     }
 }

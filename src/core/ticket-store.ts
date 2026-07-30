@@ -3,6 +3,7 @@
  */
 
 import {
+    appendFileSync,
     existsSync,
     lstatSync,
     mkdirSync,
@@ -173,6 +174,23 @@ export class TicketStore {
             TicketStore.discardScratch(tempPath);
             throw error;
         }
+    }
+
+    /**
+     * Append text to a ticket file, bash `printf … >> "$file"`.
+     *
+     * WHY-NOT `save` with the text already concatenated onto the document: `save` replaces the
+     * file by renaming a new one over it, which turns a SYMLINKED ticket (a shape this repo
+     * supports and enumerates) into a regular file and detaches every other name for it. bash
+     * appended through the link. Rewriting also means re-serializing bytes nobody asked to
+     * change, so a file whose frontmatter block the parser normalizes at all would be edited by
+     * a command that is documented to touch only the end of the file.
+     * WHY-NOT the write-then-rename durability `save` argues for: that protects a TRUNCATING
+     * write, which loses the whole ticket if it fails halfway. An append cannot lose what is
+     * already there.
+     */
+    appendTo(ticket: Ticket, text: string): void {
+        appendFileSync(ticket.path, text, FILE_ENCODING);
     }
 
     /**

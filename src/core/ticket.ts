@@ -176,10 +176,6 @@ export class Ticket {
         return this.withField(key, FrontmatterValue.serializeArray(items));
     }
 
-    withBodyAppended(text: string): Ticket {
-        return new Ticket(this.path, this.document.withBodyAppended(text));
-    }
-
     text(): string {
         return this.document.text();
     }

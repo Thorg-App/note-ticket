@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Differential parity for the WRITE commands: `create`, the `status` family, `dep`/`undep`
-and `link`/`unlink`.
+"""Differential parity for the WRITE commands: `create`, the `status` family, `dep`/`undep`,
+`link`/`unlink`, `add-note` and `edit`.
 
 Every other check in this harness reads: the fixtures are written by Python and only the
 printed output is compared. A write command's real contract is the FILE BYTES it leaves
@@ -49,7 +49,7 @@ class WriteRepo:
     a working directory is part of the contract.
     """
 
-    def __init__(self, fixtures, user_name):
+    def __init__(self, fixtures, user_name, symlinks=None):
         self.root = tempfile.mkdtemp(prefix="parity-write-", dir=os.path.join(REPO, ".tmp"))
         subprocess.run(["git", "init", "-q", self.root], check=True)
         subprocess.run(["git", "config", "user.name", user_name], cwd=self.root, check=True)
@@ -58,6 +58,10 @@ class WriteRepo:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
                 f.write(content)
+        for relative, target in (symlinks or {}).items():
+            path = os.path.join(self.root, relative)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            os.symlink(target, path)
 
     def transcript(self, program, commands):
         """`rc`/stdout/stderr of each command, then a dump of the whole tickets tree."""
@@ -92,11 +96,21 @@ class WriteRepo:
             subdirectories.sort()
             for filename in sorted(filenames):
                 path = os.path.join(directory, filename)
+                # WHETHER an entry is still a symlink is part of the compared state: bash's
+                # `add-note` appended THROUGH a link with `>>`, while a write-then-rename
+                # replaces the link with a regular file. Without this marker both sides dump
+                # the dereferenced content and that difference is invisible.
+                kind = " [symlink -> %s]" % os.readlink(path) if os.path.islink(path) else ""
+                if os.path.islink(path) and not os.path.exists(path):
+                    dumped.append("===== %s%s =====\n<dangling>\n"
+                                  % (os.path.relpath(path, self.root), kind))
+                    continue
                 with open(path, "rb") as f:
                     # `backslashreplace`: a hand-broken fixture need not be valid UTF-8, and
                     # a decode error must not be reported as a parity failure.
                     body = f.read().decode("utf8", "backslashreplace")
-                dumped.append("===== %s =====\n%s" % (os.path.relpath(path, self.root), body))
+                dumped.append("===== %s%s =====\n%s"
+                              % (os.path.relpath(path, self.root), kind, body))
         return "".join(dumped) or "<empty _tickets dir>\n"
 
     def _normalize(self, text):
@@ -180,12 +194,14 @@ class Case:
     """One command sequence run on both sides. `diverges` inverts the expectation."""
 
     def __init__(self, name, commands, fixtures=None, diverges=False,
-                 user_name=CONFIGURED_USER_NAME):
+                 user_name=CONFIGURED_USER_NAME, symlinks=None):
         self.name = name
         self.commands = commands
         self.fixtures = fixtures or {}
         self.diverges = diverges
         self.user_name = user_name
+        # `{path under the repo: link target}`, created after `fixtures`.
+        self.symlinks = symlinks or {}
 
 
 CASES = [
@@ -308,6 +324,63 @@ CASES = [
     Case("unlink no args", [["unlink"]], BASE),
     Case("unlink one arg", [["unlink", "aaaaa"]], BASE),
     Case("unlink unknown target", [["unlink", "aaaaa", "zzz"]], BASE),
+    # --- add-note --------------------------------------------------------------------------
+    # NB every command here runs with stdin=DEVNULL, i.e. readable and at EOF but NOT a
+    # terminal. That is bash's stdin arm, so `add-note <id>` with no text appends an EMPTY
+    # note on both sides; the "no note provided" arm needs a real TTY and is unit-tested.
+    Case("add-note with text", [["add-note", "aaaaa", "A note"]], BASE),
+    Case("add-note twice keeps one heading",
+         [["add-note", "aaaaa", "First"], ["add-note", "aaaaa", "Second"]], BASE),
+    Case("add-note with no text at all", [["add-note", "aaaaa"]], BASE),
+    Case("add-note with an explicitly empty text", [["add-note", "aaaaa", ""]], BASE),
+    Case("add-note joins several words", [["add-note", "aaaaa", "two", "words"]], BASE),
+    Case("add-note leaves the frontmatter alone", [["add-note", "aaaaa", "x"], ["query"]], BASE),
+    Case("add-note rewrites a nested ticket in place", [["add-note", "ccccc", "x"], ["ls"]], BASE),
+    Case("add-note partial and exact ids", [["add-note", "aaaaa", "x"], ["add-note", ALPHA_ID, "y"]],
+         BASE),
+    Case("add-note id with surrounding whitespace", [["add-note", "  aaaaa  ", "x"]], BASE),
+    Case("add-note no args", [["add-note"]], BASE),
+    Case("add-note unknown id", [["add-note", "zzz", "x"]], BASE),
+    Case("add-note ambiguous id", [["add-note", "nid_", "x"]], BASE),
+    Case("add-note with no tickets directory", [["add-note", "x", "y"]]),
+    # A ticket whose Notes section already exists: bash grepped `^## Notes` over the whole
+    # FILE, so no second heading is added.
+    Case("add-note to an existing notes section", [["add-note", "aaaaa", "x"]],
+         _with(BASE, "_tickets/alpha.md",
+               BASE["_tickets/alpha.md"] + "\n## Notes\n\n**2020-01-01T00:00:00Z**\n\nOld\n")),
+    # `## Notesish` starts with the heading, which bash's `grep -q '^## Notes'` accepts.
+    Case("add-note where a body line merely starts with the heading",
+         [["add-note", "aaaaa", "x"]],
+         _with(BASE, "_tickets/alpha.md", BASE["_tickets/alpha.md"].replace("Body.", "## Notesish"))),
+    # Shapes where a body-level append and a FILE-level append part ways: bash appends bytes to
+    # the end of the file, so no marker is invented and nothing before the first `---` is lost.
+    Case("add-note to a file that does not end in a newline", [["add-note", "aaaaa", "x"]],
+         _with(BASE, "_tickets/alpha.md", BASE["_tickets/alpha.md"].rstrip("\n"))),
+    Case("add-note to a file with text before the opening marker", [["add-note", "aaaaa", "x"]],
+         _with(BASE, "_tickets/alpha.md", "lead\n" + BASE["_tickets/alpha.md"])),
+    Case("add-note to an unterminated frontmatter block", [["add-note", "t-1", "x"]],
+         {"_tickets/one.md": '---\nid: t-1\ntitle: "One"\nstatus: open\n'}),
+    # A SYMLINKED ticket, the shape that separates "append bytes" from "rewrite the file":
+    # bash's `>>` wrote through the link and left it a link. The target lives OUTSIDE
+    # `_tickets/`, so the id is enumerated exactly once.
+    Case("add-note through a symlinked ticket", [["add-note", "t-1", "noted"]],
+         {"outside.md": _fixture("t-1", "Outside")},
+         symlinks={"_tickets/link.md": "../outside.md"}),
+    # The contrast, and the reason `appendTo` is a separate operation: a FRONTMATTER edit
+    # replaces the file on both sides — bash's `_sed_i` is also `sed > tmp && mv`.
+    Case("status through a symlinked ticket", [["close", "t-1"]],
+         {"outside.md": _fixture("t-1", "Outside")},
+         symlinks={"_tickets/link.md": "../outside.md"}),
+    # --- edit ------------------------------------------------------------------------------
+    # stdout is a pipe here, so both sides take the "print the path" arm. The editor arm needs
+    # a terminal on BOTH streams and is unit-tested instead.
+    Case("edit prints the path", [["edit", "aaaaa"]], BASE),
+    Case("edit a nested ticket", [["edit", "ccccc"]], BASE),
+    Case("edit exact id", [["edit", ALPHA_ID]], BASE),
+    Case("edit no args", [["edit"]], BASE),
+    Case("edit unknown id", [["edit", "zzz"]], BASE),
+    Case("edit ambiguous id", [["edit", "nid_"]], BASE),
+    Case("edit with no tickets directory", [["edit", "x"]]),
     # --- declared divergences (README.md "Whitelisted divergences") ----------------------
     # #10: bash dies with the shell's own `$2: unbound variable`.
     Case("DIVERGENCE #10 value flag ends the argument list", [["create", "x", "--design"]],
@@ -377,7 +450,7 @@ def run():
     for case in CASES:
         texts = []
         for program in (bash_program, TICKET):
-            repo = WriteRepo(case.fixtures, case.user_name)
+            repo = WriteRepo(case.fixtures, case.user_name, case.symlinks)
             try:
                 texts.append(repo.transcript(program, case.commands))
             finally:

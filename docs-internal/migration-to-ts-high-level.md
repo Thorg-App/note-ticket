@@ -80,7 +80,8 @@ Design rules:
 core over generated ticket graphs and covers the graph/JSONL/slug items below
 empirically. Since T5 phase A it also diffs the WRITE commands (`check_write.py`): the same
 command sequence on two identical fresh repos, comparing the transcript plus every byte under
-`_tickets/`, with ids and timestamps neutralised. It runs in CI (`.github/workflows/test.yml`) alongside `make test`, because 6 of
+`_tickets/` (and whether each entry is still a symlink), with ids and timestamps neutralised.
+As of T5 phase C that covers every write command, `add-note` and `edit` included. It runs in CI (`.github/workflows/test.yml`) alongside `make test`, because 6 of
 the 14 mutations it catches are invisible to the BDD suite. Delete both the harness and that CI
 step at T6 with bash.
 
@@ -179,8 +180,37 @@ Verify these while porting — they are contractual even where scenarios are thi
   other write command's usage text hardcodes `ticket`, and that difference is bash's, kept.
 - TTY handling: `edit` only launches `$EDITOR` when stdin+stdout are TTYs, else
   prints path; `show` pages via `TICKET_PAGER`/`PAGER` only when stdout is a TTY;
-  `add-note` reads stdin when not a TTY.
+  `add-note` reads stdin when not a TTY. The two streams reach a command through
+  `Terminal` (`src/cli/terminal.ts`), injected on `CommandEnvironment`, because a unit test
+  is the ONLY way to reach the terminal arms — no BDD runner has a TTY on either stream.
+- `$EDITOR` is used UNSPLIT, exactly as bash's quoted `"${EDITOR:-vi}"` used it: `EDITOR="code
+  -w"` is looked up as one filename and fails. Splitting it (as `TICKET_PAGER` is split) would
+  make a command bash rejected start working. An `$EDITOR` that is not on PATH exits **127**
+  as it did, but with `Error: <editor>: command not found` instead of whatever the shell said
+  (a message naming a line of the script, or nothing at all — see divergence #19) — the same trade already made for
+  `jq` (#6), and now decided in ONE place, `src/cli/spawned-child.ts`, for `jq`, `$PAGER` and
+  `$EDITOR` alike.
+- `add-note` APPENDS BYTES to the file (`TicketStore.appendTo`, node's `appendFileSync`),
+  where every other write command rewrites it through `TicketStore.save`. That is bash's own
+  split — `printf … >> "$file"` for the note, `sed > tmp && mv` for a frontmatter edit — and
+  it matters: a rename replaces a SYMLINKED ticket with a regular file, which `>>` did not do.
+  Both shapes are pinned against bash by `check_write` cases that dump whether each entry is
+  still a symlink.
 - Exit codes and stderr message wording (several scenarios assert them).
+
+## State after T5: bash `./ticket` is a delegating shim
+
+`TS_COMMANDS` names **every** command the tool has, so the top-level check delegates every
+real invocation to `dist/ticket.mjs`. The only bash that still runs for a user is the
+dispatch itself plus the `Unknown command` fallback — an unrecognized name is not in
+`TS_COMMANDS`, so it keeps going through `init_tickets_dir` first and reports a missing
+tickets directory BEFORE the unknown-command help, which is the pinned behavior.
+
+The `cmd_*` bodies are deliberately **kept, unreachable**, until T6. They are the differential
+oracle: `make parity` runs a copy of `./ticket` with both delegation lists emptied and diffs
+it against the TS bundle. Deleting them at T5 would turn every parity check into TS vs TS —
+a harness that can no longer fail — and would remove the one-line rollback (drop a name from
+`TS_COMMANDS`). They go at the T6 cutover together with `scripts/parity/`.
 
 ## Phases → execution tickets
 

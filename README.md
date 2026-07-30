@@ -54,6 +54,17 @@ closed), `## Blocking` (non-closed tickets that depend on this one), `## Childre
 (tickets whose `parent` is this one) and `## Linked`, each omitted when empty. Output goes
 through `$TICKET_PAGER` (else `$PAGER`) only when stdout is a terminal.
 
+`add-note <id> [note text]` appends a timestamped note to the end of the ticket file, under a
+`## Notes` heading it adds only if the file has none. With no note text it reads the note from
+stdin (so `... | tk add-note <id>` works); it asks for one only when stdin is a terminal, and
+piping in nothing records an empty note. Nothing but the appended lines changes — the
+frontmatter is untouched, and a symlinked ticket file stays a symlink.
+
+`edit <id>` opens the ticket in `$EDITOR` (default `vi`) when stdin AND stdout are terminals,
+and otherwise just prints `Edit ticket file: <path>`, so it is safe in a script. The editor's
+exit code becomes the command's. `$EDITOR` is used as a single command name, not split into
+words: `EDITOR="code -w"` is looked up verbatim and reported as not found (exit 127).
+
 `closed` lists tickets whose status is `closed` (or the legacy `done`), most recently
 modified first. It looks only at the 100 most recently modified ticket files, so a
 ticket closed long ago is not listed however large `--limit` is. `--limit=N` takes a

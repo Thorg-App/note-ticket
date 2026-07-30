@@ -1,8 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import { ChildExit } from "./child-exit.js";
-import { CliError } from "./cli-error.js";
-import { ExitCode } from "./exit-codes.js";
+import { SpawnedChild } from "./spawned-child.js";
 
 const JQ_BINARY = "jq";
 const JQ_COMPACT_OUTPUT = "-c";
@@ -23,39 +21,14 @@ export class Jq {
      *
      * WHY 128+signal when jq is killed: `tk query <filter> | head -1` kills jq with SIGPIPE,
      * and bash's pipeline reported 141 for exactly that. jq is a real child here too, so the
-     * shell convention reproduces bash's code instead of flattening it to a generic 1.
-     *
-     * WHY the outcome is read BEFORE `result.error`: when jq dies mid-input, spawnSync reports
-     * BOTH `signal: "SIGPIPE"` and `error: EPIPE` — the EPIPE is our failed write to a child
-     * that is already gone, i.e. a symptom of the death the signal already describes.
-     * Measured. Checking `error` first turned every `query <filter> | head` into "jq could
-     * not be run", exit 1.
+     * shell convention reproduces bash's code instead of flattening it to a generic 1. That
+     * rule, and the 127 for a missing `jq`, live in `SpawnedChild`.
      */
     static select(jsonl: string, expression: string): number {
         const result = spawnSync(JQ_BINARY, [JQ_COMPACT_OUTPUT, `select(${expression})`], {
             input: jsonl,
             stdio: ["pipe", "inherit", "inherit"],
         });
-        const code = ChildExit.codeOf(result);
-        if (code !== undefined) {
-            return code;
-        }
-        // No outcome at all: jq never ran (or node could not tell us how it ended).
-        throw Jq.unusable(result.error);
-    }
-
-    /**
-     * DIVERGENCE (deliberate): with no `jq` on PATH bash emitted the shell's own
-     * `line NNN: jq: command not found`, which names a line of the script. The exit code 127
-     * is kept; the message is one the user can act on.
-     */
-    private static unusable(error: Error | undefined): CliError {
-        if (error === undefined) {
-            return new CliError(`${JQ_BINARY} ended without an exit status`);
-        }
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return new CliError(`${JQ_BINARY}: command not found`, [JQ_HINT], ExitCode.COMMAND_NOT_FOUND);
-        }
-        return new CliError(`${JQ_BINARY} could not be run: ${error.message}`);
+        return SpawnedChild.exitCode(result, JQ_BINARY, [JQ_HINT]);
     }
 }

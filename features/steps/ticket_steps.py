@@ -648,6 +648,39 @@ def step_run_command_without_binary(context, command, binary):
     context.last_command = command
 
 
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with "(?P<piped>(?:[^"\\]|\\.)*)" on stdin')
+def step_run_command_with_stdin(context, command, piped):
+    """Run a command with text piped into its stdin.
+
+    WHY a dedicated runner: every other runner passes `stdin=DEVNULL`, which is readable and
+    at EOF, so `add-note`'s "read the note from stdin" arm is exercised but always with an
+    EMPTY note. `\\n` in the step text is a real newline, so trailing-newline handling can be
+    asserted.
+    """
+    command = command.replace('\\"', '"')
+    piped = piped.replace('\\n', '\n').replace('\\"', '"')
+
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+    cwd = getattr(context, 'working_dir', context.test_dir)
+
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        input=piped,
+        env=os.environ.copy(),
+    )
+
+    context.result = result
+    context.stdout = result.stdout.strip()
+    context.stderr = result.stderr.strip()
+    context.returncode = result.returncode
+    context.last_command = command
+
+
 @when(r'I run "(?P<command>(?:[^"\\]|\\.)+)"')
 def step_run_command(context, command):
     """Run a ticket CLI command."""
@@ -950,6 +983,32 @@ def step_ticket_contains(context, ticket_id, text):
     ticket_path = find_ticket_file(context, ticket_id)
     content = ticket_path.read_text()
     assert text in content, f"Ticket does not contain '{text}'\nContent: {content}"
+
+
+@then(r'ticket "(?P<ticket_id>[^"]+)" should contain "(?P<text>[^"]+)" exactly (?P<count>\d+) time(?:s)?')
+def step_ticket_contains_count(context, ticket_id, text, count):
+    """Assert how OFTEN text occurs -- a second `## Notes` heading is a real bug."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    found = content.count(text)
+    assert found == int(count), \
+        f"'{text}' occurs {found} time(s), expected {count}\nContent: {content}"
+
+
+@then(r'ticket "(?P<ticket_id>[^"]+)" should end with the note "(?P<note>[^"]*)"')
+def step_ticket_ends_with_note(context, ticket_id, note):
+    """Assert the exact bytes `add-note` appends: a bold timestamp, a blank line, the note.
+
+    Anchored at the END of the file, so the blank lines and the trailing newline are pinned
+    too -- `should contain` cannot see any of that.
+    """
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    # `\n` in the step text is a real newline, so a multi-line note can be pinned.
+    pattern = (r'\n\*\*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\*\*\n\n'
+               + re.escape(note.replace('\\n', '\n')) + r'\n$')
+    assert re.search(pattern, content), \
+        f"File does not end with the note '{note}'\nContent: {content!r}"
 
 
 @then(r'ticket "(?P<ticket_id>[^"]+)" should contain a timestamp in notes')

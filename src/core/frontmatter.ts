@@ -267,11 +267,6 @@ export class TicketDocument {
         return new TicketDocument(frontmatter, this.prologue, this.bodyLines, shape);
     }
 
-    /** Append text to the body verbatim. */
-    withBodyAppended(text: string): TicketDocument {
-        return TicketDocument.of(this.frontmatter, this.body() + text);
-    }
-
     /** Full file text; byte-identical to the parsed input when nothing was changed. */
     text(): string {
         if (this.shape === "none") {

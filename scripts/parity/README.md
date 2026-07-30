@@ -59,6 +59,13 @@ pinned bash copy in one and the shipped `./ticket` in the other, and compares a 
 Frontmatter key order, `closed_iso`'s insertion position, the slug picked for a colliding
 title, the JSON line and every usage string are all inside that comparison.
 
+Each dumped entry also records **whether it is still a symlink** and what it points at. That is
+not decoration: bash appended a note with `>>`, which writes THROUGH a link, while a
+write-then-rename would leave a regular file in its place. Both sides dereference the link when
+read, so without the marker the difference would be invisible. `Case(symlinks={...})` creates
+one; the two cases that use it pin that `add-note` appends through the link on both sides and
+that a frontmatter edit (`close`) replaces it on both sides.
+
 Only the two things that cannot match by construction are neutralized — generated ids become
 `<ID1>`, `<ID2>`, … (consistently, so a reference to an earlier ticket still has to line up)
 and ISO timestamps become `<TS>`. Nothing else is masked. `create`'s default assignee comes
@@ -70,16 +77,21 @@ and the check fails loudly if they ever agree again. That is how the write-comma
 the whitelist below (#5, #9, #10, #11, #12, #13, #14, #15, #16, #17) are pinned rather than
 merely described.
 
-Still not diffed: `add-note` and `edit` — phase C of T5. Adding one is a `Case(...)` entry in
-`CASES`; nothing else.
+Every write command is now diffed. What is NOT reachable here is any behavior gated on a
+terminal: the runners give the child pipes, so `edit` always takes its "print the path" arm and
+`add-note` always takes its read-stdin arm (with an empty note). The editor arm and the
+"no note provided" arm are pinned by `test/edit-command.test.ts` /
+`test/add-note-command.test.ts`, which can say that both streams are terminals.
 
 **A green run of this check only proves the LISTED cases agree.** Mutation-tested with 8
 breakages of the `create`/`status` path (`closed_iso` never written, a new frontmatter field
 appended instead of prepended, tags not re-spaced, the git-config assignee default dropped,
 `--parent` not expanded, `Updated <typed id>`, `.trim()` on git's output, slug collisions
-ignored) and with 18 of the `dep`/`undep`/`link`/`unlink` path (table in
-`.ai_out/ts-port-5-write-commands/**/IMPLEMENTATION_PHASE_B__PUBLIC.md`) — all turn a gate
-red. Extend `CASES` when a fix depends on an input shape that is not there yet; that lesson
+ignored), with 18 of the `dep`/`undep`/`link`/`unlink` path (table in
+`.ai_out/ts-port-5-write-commands/**/IMPLEMENTATION_PHASE_B__PUBLIC.md`) and with 15 of the
+`add-note`/`edit` path (table in `…/IMPLEMENTATION_PHASE_C__PUBLIC.md`) — all turn a gate
+red. Note that "rewrite the file instead of appending" is caught by **one** case only, the
+symlinked one: for a regular file the two are byte-identical. Extend `CASES` when a fix depends on an input shape that is not there yet; that lesson
 was learned the expensive way with `dep tree` and duplicate `deps`.
 
 One shape is deliberately absent: `link a b c` on three UNLINKED tickets. bash appends the
@@ -246,6 +258,21 @@ instead, so the harness still fails if either side changes its mind.
    the tickets. Not pinnable by the harness in either direction, for exactly that reason; the
    TS order is pinned by a unit test on `LinkClosure` and by a BDD scenario asserting the
    whole `links` value.
+
+19. **An `$EDITOR` that is not on PATH** (`tk edit x` with a terminal on both streams) — both
+   sides exit **127**, but bash left the message to the SHELL while TS prints
+   `Error: nosucheditor: command not found`. Only the exit code is stable on the bash side: the
+   shell printed `./ticket: line 1509: nosucheditor: command not found` (naming a line of the
+   script) for a value containing a slash or a space, and NOTHING at all for a bare name when
+   the shell had a `command_not_found_handle` installed — so do not pin bash's wording here. The same trade as #6, and now made in ONE place
+   (`src/cli/spawned-child.ts`) for `jq`, `$PAGER` and `$EDITOR`. **The harness cannot see this
+   at all**: the editor is launched only when stdin AND stdout are terminals, and every runner
+   here uses pipes. Pinned by `test/edit-command.test.ts` ("exits 127 naming the editor when it
+   is not on PATH"). That file is also the only pin for the rest of the launch arm, one test
+   each: the adopted editor exit code, the ticket path reaching the child as its argument, and
+   a multi-word `$EDITOR` being looked up as ONE filename (so `EDITOR="code -w"` exits 127
+   rather than starting `code`). Those three drive the REAL `spawnSync`; a test that only
+   asserts what `Editor.configured` RETURNS does not pin the spawn site.
 
 Because of #3, `harness.HOSTILE_TITLES` — the titles every generated scenario cycles
 through so the byte-compare sees `"`, `\`, `:`, `[]`, non-ASCII and a trailing space —

@@ -86,7 +86,78 @@ Code-modifying agents run SERIALLY.
       `diverges=True`, which cannot pin TS; (S2) divergence #17 `tk link a a` refused is
       user-visible, has no `decide` ticket, and is inconsistent with `tk dep a a` which still
       records a self-dependency; (S3) CHANGELOG still says `dep <id> <dep-id>` stays bash — TOP's job.
-- [x] PHASE_B iteration spawned (S1+S2; S3 explicitly reserved for TOP)
+- [x] PHASE_B iteration DONE: S1 incorporated (#16 now has a positive BDD pin; audit showed
+      #13/#14/#15/#17/#18 already pinned, but #17's mixed-list COUNT was not → pinned).
+      S2a: both behaviours KEPT with the WHY written down in dep.ts, link.ts, parity README,
+      migration doc and README — `deps` self-edges are a graph error `dep cycle` reports,
+      `links` self-entries are inert. Rejected extending the refusal to `dep` (a second brand-new
+      error string on a byte-exact command). S2b: appended option analysis to `decide` ticket
+      **nid_r3mp6uylht7t77iwxtuqvhxv2_e** (retitled, acceptance widened).
+      All 4 NITs fixed (N1 via new `Ticket.arrayField` shared by deps/links/tags +
+      TicketRelation.idsOf). S3 rejected on scope; verbatim CHANGELOG correction left for TOP.
+      Both new scenarios mutation-verified (each was the ONLY failure under its mutation).
+- [x] PHASE_B gates re-verified BY TOP: typecheck/test/parity rc=0; 239 scenarios 0 failed;
+      parity graph 71 | query | slug 13 | write 109.
+- [x] PHASE_B COMMITTED → 10a1450
+- [x] PHASE_C impl spawned (add-note, edit, + shim reduction)
+      ⚠ Flagged the central tension to Phase C: reducing the shim DESTROYS the differential
+      oracle — the pinned-bash reference is how every parity check works, and harness.py needs
+      both delegation assignments. Recommended keeping the oracle intact (total dispatch;
+      unreachable bash bodies documented as the parity reference, deleted at T6), with any
+      other choice requiring a written justification + a still-meaningful `make parity`.
+      Also warned: an inverted parity case cannot pin the TS side; continue divergences from #19;
+      TTY paths need unit pins; EXPLORATION is a guide, not gospel (§3.4 was wrong).
+- [!] PHASE_C impl instance #1 KILLED by a session restart. It left substantial UNCOMMITTED work
+      (new src/cli/commands/add-note.ts, edit.ts, src/cli/spawned-child.ts, terminal.ts,
+      test/add-note-command.test.ts, test/edit-command.test.ts; modified ticket,
+      scripts/parity/check_write.py, main.ts, command-environment.ts, jq.ts, pager.ts,
+      core/frontmatter.ts, core/ticket.ts, test/frontmatter.test.ts, test/ticket.test.ts,
+      features/ticket_notes.feature, features/ticket_edit.feature, features/steps/ticket_steps.py)
+      but wrote NEITHER PRIVATE nor PUBLIC — so none of its reasoning survived and NO gate was
+      ever confirmed green on it. The diff is the only evidence.
+- [x] PHASE_C impl RESTARTED as a fresh instance (protocol: restart, do not resume), told to audit
+      the orphaned diff as an unverified third-party draft — keep what is sound, fix what is not —
+      and to scrutinise its edits to shared committed files (core/frontmatter.ts, core/ticket.ts,
+      jq.ts, pager.ts) for regressions.
+- [x] PHASE_C impl DONE (uncommitted): add-note + edit ported; `TS_COMMANDS` now names EVERY arm
+      of bash's `case`, so ./ticket is a total delegating shim.
+      ★ Caught a real defect in the inherited draft: it made `add-note` rewrite via
+      `TicketStore.save` (write-temp-then-rename), but bash appends with `>>` — a rename REPLACES
+      a symlinked ticket with a regular file, and symlinked tickets are a supported shape.
+      Replaced with `TicketStore.appendTo` (appendFileSync) + pure `TicketNote.appendedTo`;
+      deleted the draft's `withTextAppended` edits to shared core; taught the parity tree dump to
+      record symlink-ness so the behavior has a differential pin.
+      SHIM DECISION (as recommended): parity oracle KEPT — unreachable `cmd_*` bodies stay until
+      T6, because emptying the delegation lists is how the harness builds its reference and
+      deleting the bodies would make every check TS-vs-TS. harness.py needed no change;
+      `-n "$2"` guard and unknown-command ordering untouched; rollback proven by mutation M12.
+      Divergence #19 (missing-$EDITOR wording, exit 127 preserved), unit-pinned since no harness
+      or BDD runner has a TTY. New `SpawnedChild` consolidates the jq/pager/editor exit policy;
+      `Terminal` injected via CommandEnvironment.
+      Gates claimed unmasked: typecheck 0, unit 402/402, behave 247 scenarios/1651 steps 0 failed,
+      parity graph 71 | query OK | slug 13 | write 136. 15-row mutation table.
+- [x] PHASE_C review spawned (also asked to judge the ticket's 3 acceptance criteria, and to
+      scrutinise the NEVER-reviewed inherited draft + its edits to shared committed modules)
+- [x] PHASE_C review DONE: **READY, 0 BLOCKING**, 2 SHOULD-FIX + 4 NIT.
+      **All three ticket acceptance criteria MET** (retained unreachable `cmd_*` bodies are a
+      justified, consistently documented parity-oracle exception to "pure shim", deleted at T6).
+      Reviewer reran all 4 gates (every number matched), ran a 29-case bash-vs-TS differential
+      (only the 2 pre-approved divergence-#9 empty-id cases differ), verified the symlink claim
+      under `lstat` on both sides, drove the editor arm under a REAL PTY (rc 0/7/127 identical,
+      `vi` default, `$EDITOR` unsplit — only wording differs = #19), and enumerated all 21 bash
+      `case` arms against TS_COMMANDS by hand. Own 16 mutations: 14 killed.
+      SF#1: the 2 survivors are ONE untested seam (edit.ts:69-71) — splitting `$EDITOR` on
+      whitespace, and handing the editor the WRONG path — each survives unit + parity + behave.
+      So parity README #19, the ticket_edit.feature comment and the M6 mutation row OVERSTATE
+      coverage. SF#2: CHANGELOG TS-port bullet is factually wrong, must be REWRITTEN (TOP's job).
+- [x] PHASE_C iteration spawned (SF#1 + nits; SF#2 explicitly reserved for TOP)
+
+## ⚠ TOP's remaining obligations before closing
+1. Rewrite (NOT append to) the factually-wrong CHANGELOG TS-port bullet + add the single flow
+   entry. Phase B and Phase C PUBLIC.md each carry verbatim replacement text — use both.
+2. Close ticket nid_2ziai8ka9l0yak2lxnwlu9lk2_e with a resolution.
+3. Leave `decide` ticket nid_r3mp6uylht7t77iwxtuqvhxv2_e open for the human
+   (`link a a` refused vs `dep a a` recorded; divergences #6/#10/#11/#12 + #17).
 
 ## ⚠ TOP's own outstanding obligation
 CHANGELOG.md currently claims `dep <id> <dep-id>` stays bash. MUST be corrected in the final

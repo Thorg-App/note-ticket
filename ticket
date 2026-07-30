@@ -1594,11 +1594,24 @@ EOF
 }
 
 # Main dispatch
+#
+# THIS SCRIPT IS NOW A DELEGATING SHIM. TS_COMMANDS below names EVERY command the tool has,
+# so no cmd_* function above serves a user any more; the only bash left on a normal
+# invocation is this dispatch (and, for a name that is not a command at all, the
+# `Unknown command` fallback at the bottom, which the TS side cannot be reached to print
+# because it never gets the invocation).
+#
+# WHY-NOT deleting the cmd_* bodies now: they ARE the differential oracle. `make parity`
+# (scripts/parity/) runs a copy of THIS FILE with the delegation lists emptied and diffs it
+# against the TS bundle, byte for byte, including the contents of every ticket file a write
+# command leaves behind. Deleting the bodies would silently turn every check into TS vs TS —
+# a harness that can no longer fail. They go at the T6 cutover, together with
+# scripts/parity/ itself (see docs-internal/migration-to-ts-high-level.md).
 
 # TypeScript delegation (strangler-fig port; see docs-internal/migration-to-ts-high-level.md).
 # Commands listed here are served by the TS bundle. Removing a name from the list
-# instantly rolls that command back to the bash implementation below.
-TS_COMMANDS="help --help -h ls list ready blocked closed query show create status start close reopen dep undep link unlink"
+# instantly rolls that command back to the bash implementation above.
+TS_COMMANDS="help --help -h ls list ready blocked closed query show create status start close reopen dep undep link unlink add-note edit"
 
 # Every `dep` form is now served through TS_COMMANDS above, so cmd_dep's own delegation
 # never runs. This list is KEPT until the T6 cutover for two reasons: emptying it is half of
@@ -1610,7 +1623,14 @@ if _ts_serves "$TS_COMMANDS" "${1:-help}"; then
     _exec_ts "$@"
 fi
 
+# Everything from here down is UNREACHABLE for a real command (see the note above): it runs
+# only for a name that is not a command, and as the pinned parity reference with the
+# delegation lists emptied.
+
 # Initialize tickets dir for built-in commands (skip for help)
+# NB an unknown command goes through here too, so `tk bogus` outside a repo with no _tickets
+# reports the missing directory BEFORE `Unknown command` — kept deliberately, since the TS
+# side never sees such an invocation and could not reproduce the ordering.
 case "${1:-help}" in
     help|--help|-h) ;;
     *) init_tickets_dir "${1:-}" || exit 1 ;;

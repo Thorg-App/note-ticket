@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+    lstatSync,
     lutimesSync,
     mkdtempSync,
     mkdirSync,
+    readFileSync,
     readdirSync,
     rmSync,
     symlinkSync,
@@ -428,6 +430,29 @@ describe("TicketStore writes", () => {
                 ["survivor.md"],
             );
         });
+    });
+
+    it("appends text to the end of the file without touching what is there", () => {
+        const path = tree.ticket("appended.md", "nid_appended");
+        const before = readFileSync(path, "utf8");
+        const store = new TicketStore(tree.root);
+        store.appendTo(store.load(path), "\ntail\n");
+        assert.equal(readFileSync(path, "utf8"), `${before}\ntail\n`);
+    });
+
+    /**
+     * bash `printf … >> "$file"` follows a symlink and writes THROUGH it. `save`'s
+     * write-then-rename would replace the link with a regular file instead, which is why
+     * `appendTo` exists: symlinked ticket files are a supported shape here (see README).
+     */
+    it("appends THROUGH a symlinked ticket, leaving the link a link", () => {
+        const target = tree.ticket("linked-target/real.md", "nid_linked_note");
+        const link = join(tree.root, "note-link.md");
+        symlinkSync(target, link);
+        const store = new TicketStore(tree.root);
+        store.appendTo(store.load(link), "\ntail\n");
+        assert.equal(lstatSync(link).isSymbolicLink(), true);
+        assert.ok(readFileSync(target, "utf8").endsWith("\ntail\n"));
     });
 
     it("places a new ticket at the top level", () => {

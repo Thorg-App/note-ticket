@@ -156,10 +156,6 @@ describe("Ticket mutation", () => {
         assert.equal(ticket.withoutField("parent").parent, "");
     });
 
-    it("appends to the body", () => {
-        assert.equal(ticket.withBodyAppended("\n## Notes\n").body, "\nThe body.\n\n## Notes\n");
-    });
-
     it("keeps the path", () => {
         assert.equal(ticket.withField("status", "closed").path, PATH);
     });
