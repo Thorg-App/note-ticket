@@ -1,17 +1,17 @@
 ---
 id: nid_fhmxugci00tfkeu3eyeggv6gq_e
-title: "TS port 6: cutover, delete bash, packaging + docs"
-status: open
+title: 'TS port 6: cutover, delete bash, packaging + docs'
+status: in_progress
 deps: [nid_zesi8c4t7lyw6jgmqqsjqd54k_e, nid_8cislepljqvv88ayndtjlw34k_e, nid_2ziai8ka9l0yak2lxnwlu9lk2_e]
 links: []
-created_iso: 2026-07-29T21:57:25Z
-status_updated_iso: 2026-07-29T21:57:25Z
+created_iso: '2026-07-29T21:57:25Z'
+status_updated_iso: '2026-07-30T22:23:06Z'
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 Read docs-internal/migration-to-ts-high-level.md first (its Distribution section still carries the OLD recommendation - update it to the decision below as part of this ticket).
 
 DECIDED (human, 2026-07-30): distribution is **build-on-demand from source**, NOT a
@@ -50,4 +50,3 @@ Scope:
 - BDD: a scenario for the wrapper's build-on-demand arm (no bundle -> first invocation builds and succeeds, stdout uncontaminated by build output) and one for the stale-bundle arm (src newer than dist -> rebuilt).
 
 Acceptance: git grep finds no awk-based ticket logic and no `cmd_*` bash function; the only bash left is the wrapper; make test green; fresh-clone install (no dist, no node_modules) verified end to end.
-
