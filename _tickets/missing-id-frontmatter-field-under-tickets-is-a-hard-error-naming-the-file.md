@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-30T00:06:43Z
 id: nid_n6eavbm0h77twvna8k9nnpu2g_e
 title: Missing 'id' frontmatter field under _tickets is a hard error naming the file
-status: in_progress
+status: closed
 deps: []
 links: []
 created_iso: '2026-07-29T23:59:37Z'
-status_updated_iso: '2026-07-30T00:03:09Z'
+status_updated_iso: 2026-07-30T00:06:43Z
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -31,3 +32,23 @@ Do NOT change ./ticket (bash) for this: the BDD suite runs against bash until ea
 - Unit tests cover: missing `id`, empty `id` value, and a file with no frontmatter block at all.
 - A BDD scenario pinning the error ships with T3 (the first flipped enumerating command).
 - README/ORIGINAL_README documents that `id` is mandatory.
+
+## Notes
+
+**2026-07-30T00:06:43Z**
+
+RESOLVED.
+
+Implementation:
+- `src/core/id.ts`: new `MissingTicketIdError extends Error` — message `<path> has no 'id' frontmatter field`, `name` set, `path` exposed. Doc comment records the human decision and the accepted trade-off (one bad file fails every enumerating command, `ls` included). WHY it lives in id.ts: identity concerns belong to the id module; ticket-store imports it.
+- `src/core/ticket-store.ts`: `TicketStore.load()` throws it when `ticket.id === ''`. WHY `load()` is the enforcement point: `collectFiles()` only yields paths (no parsing), and `loadAll()` plus every single-ticket read funnel through `load()`, so this is the one place on the enumeration path that sees content.
+- `src/core/ticket.ts`: `Ticket.id` doc comment updated — an empty id now means a corrupt file, not a non-ticket.
+- The `Error: ` prefix stays the CLI's job (bash convention: `echo \"Error: ...\" >&2`).
+
+Tests (`test/ticket-store.test.ts`, new `TicketStore id enforcement` describe, 6 cases): missing `id` key, empty value (`id:`), quoted-empty value (`id: \"\"`), no frontmatter block at all, exact error message naming the path, and `loadAll()` failing the whole enumeration rather than skipping the bad file.
+
+Verification: `make test` green — 179 unit tests, 180 BDD scenarios, 12 features.
+
+Docs: README.md and ORIGINAL_README.md now state `id` is mandatory and quote the error text. CHANGELOG under Unreleased/Changed.
+
+Not done here (by design, per the ticket): no `./ticket` (bash) change, and no BDD scenario — the scenario pins on the first flipped enumerating command. A note with the exact expected stderr line was added to T3 (nid_zesi8c4t7lyw6jgmqqsjqd54k_e).

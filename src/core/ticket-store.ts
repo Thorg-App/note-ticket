@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { MissingTicketIdError } from "./id.js";
 import { Ticket } from "./ticket.js";
 
 const TICKETS_DIR_ENV_VAR = "TICKETS_DIR";
@@ -102,8 +103,13 @@ export class TicketStore {
         return files.sort(PathOrder.compare);
     }
 
+    /** Throws `MissingTicketIdError` when the file carries no `id` — see that class. */
     load(path: string): Ticket {
-        return Ticket.parse(path, readFileSync(path, FILE_ENCODING));
+        const ticket = Ticket.parse(path, readFileSync(path, FILE_ENCODING));
+        if (ticket.id === "") {
+            throw new MissingTicketIdError(path);
+        }
+        return ticket;
     }
 
     /** Every ticket file parsed, in `collectFiles` order. */

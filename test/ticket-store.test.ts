@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, describe, it } from "node:test";
 
+import { MissingTicketIdError } from "../src/core/id.js";
 import { TicketsDirectory, TicketStore } from "../src/core/ticket-store.js";
 
 /** Mirrors the scratch name `TicketStore.save` uses; deliberately not a `.md`. */
@@ -172,6 +173,51 @@ describe("TicketStore symlink handling", () => {
             "linked.md",
             "real/inner.md",
         ]);
+    });
+});
+
+/**
+ * Every `.md` file under the tickets dir MUST carry an `id`; one that does not is a
+ * corrupt repo, so it fails loudly instead of vanishing from every listing.
+ */
+describe("TicketStore id enforcement", () => {
+    const tree = new TicketsTree();
+
+    after(() => tree.remove());
+
+    it("rejects a file whose frontmatter has no id key", () => {
+        const path = tree.write("no-id.md", '---\ntitle: "t"\nstatus: open\n---\n');
+        assert.throws(() => new TicketStore(tree.root).load(path), MissingTicketIdError);
+    });
+
+    it("rejects an empty id value", () => {
+        const path = tree.write("empty-id.md", '---\nid:\ntitle: "t"\n---\n');
+        assert.throws(() => new TicketStore(tree.root).load(path), MissingTicketIdError);
+    });
+
+    it("rejects a quoted-empty id value", () => {
+        const path = tree.write("quoted-empty-id.md", '---\nid: ""\ntitle: "t"\n---\n');
+        assert.throws(() => new TicketStore(tree.root).load(path), MissingTicketIdError);
+    });
+
+    it("rejects a file with no frontmatter block at all", () => {
+        const path = tree.write("bare.md", "just prose, no frontmatter\n");
+        assert.throws(() => new TicketStore(tree.root).load(path), MissingTicketIdError);
+    });
+
+    it("names the offending path in the error", () => {
+        const path = tree.write("named.md", "no frontmatter\n");
+        assert.throws(
+            () => new TicketStore(tree.root).load(path),
+            (error: Error) => error.message === `${path} has no 'id' frontmatter field`,
+        );
+    });
+
+    // The accepted trade-off: ONE malformed file breaks every command that enumerates.
+    it("fails the whole enumeration, not just the malformed file", () => {
+        tree.ticket("fine.md", "nid_fine");
+        tree.write("broken.md", "---\ntitle: \"t\"\n---\n");
+        assert.throws(() => new TicketStore(tree.root).loadAll(), MissingTicketIdError);
     });
 });
 
