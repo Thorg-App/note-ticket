@@ -184,3 +184,149 @@ build. Both packages call this out in comments and CLAUDE.md records it as accep
 Homebrew's install sandbox lets `npm install` reach the network) remain unverified. One real
 `brew install --build-from-source` and one `makepkg` + `namcap` run before the next release tag
 would close B3 and this together.
+
+---
+
+# ROUND 2 — convergence verification of `375ab65`
+
+A fresh implementer acted on the round-1 review. I re-ran every claim myself rather than
+reading the report. All mutations reverted; `git status` clean.
+
+## Verdict: **CONVERGED.** Nothing blocks. No new IMPORTANT items.
+
+## 1. B1 — trailing newline. Fixed, verified BOTH directions on the real files
+
+| Consumer | old code (`HEAD~1`) + manifest with no trailing `\n` | new code, same manifest |
+|---|---|---|
+| `publish-homebrew.sh` → rendered formula | `libexec.install "ticket", "package.json", "package-lock.json", "tsconfig.json"` — **`src` lost** | `… "tsconfig.json", "src"` ✅ |
+| raw parser loop, both forms | last entry dropped | last entry kept ✅ |
+
+`|| [[ -n "$entry" ]]` is present in **all three** shell consumers — `PKGBUILD:49`,
+`publish-homebrew.sh:27`, and the new `package-smoke.sh:42`. The repo's manifest still ends in
+`\n` (`od -c` → `s r c \n`), and the manifest header now states the tolerance requirement as a
+rule for future consumers. Data lines byte-unchanged.
+
+## 2. B2 — `make package-smoke`. Real, honest, and mutation-proven
+
+Clean run: `package-smoke: OK`, rc 0. I ran four mutations, including one the implementer did
+not:
+
+| Mutation | Result |
+|---|---|
+| manifest without `src` | **RED** — `FAIL: tk help exited 1; stderr: Error: no sources at [...]` |
+| a source file newer than the bundle in the prefix | **RED** — `FAIL: installed file is newer than the bundle: [.../src/cli/main.ts]` |
+| `touch "$BUNDLE"` removed | **GREEN** — reproduces the implementer's honest negative exactly (analysis in §4) |
+| **mine:** `ln -s` replaced with `cp` of the launcher into `bin/` — i.e. the original `bin.install "ticket" => "tk"` breakage | **RED** — `FAIL: tk help exited 1; stderr: Error: no sources at [.../prefix/bin/src]` |
+
+That last one answers the coordinator's question directly: **yes, the smoke test would have
+caught the bug that motivated it.** The launcher itself is the oracle, so any layout in which
+`tk` cannot reach its sources fails.
+
+**Is it honest?** Yes. It drives `$PREFIX/bin/tk` via `command tk` with the staged prefix first
+on `PATH` — and the mutation failures name the *staged* paths, which is proof it is not touching
+the developer's installed tool. (The implementer's note that this shell exports a `tk` function
+shadowing PATH is real; I hit the same thing in round 1. `command` is the right fix.) It also
+holds stderr to empty, asserts no `node_modules` leaked, runs `ls` twice to catch a second-run
+rebuild, and `chmod -R a-w`s the prefix so a rebuild attempt cannot silently succeed. The
+header is candid about the two things it does not do (no `brew`/`makepkg`, reuses the built
+bundle).
+
+**Residual scope limit, stated for the record, not a defect:** the script *replays* the shared
+install steps rather than deriving them from the formula/PKGBUILD bodies. It cannot catch a
+hand-edit confined to the formula's `def install` that the script does not mirror. What it does
+cover is the two decisions that actually broke before — *what* gets installed (read from the
+same manifest all three consumers read) and *how* `tk` reaches it — and both are mutation-proven
+above. For an 80/20 guard with no `brew`/`makepkg` in CI, that is the right line.
+
+Wiring checked: `package-smoke: build` in the Makefile, and the CI step is placed **after**
+`make test` — necessarily, since the earlier cold-start smoke step asserts `test ! -e dist/ticket.mjs`.
+
+## 3. The extra defect it found on its own — confirmed, and I hit it independently
+
+While rendering the formula from a copy of the script placed outside the repo, I reproduced the
+bug before reading their report: the old script emitted a bare **`libexec.install`** — valid Ruby
+that installs nothing — and went on to commit and push it. Cause is as they diagnose: the failed
+`done < "$manifest"` redirect does not fail the function, because the trailing `echo` succeeds.
+
+Both new guard arms verified:
+
+| Arm | Result |
+|---|---|
+| manifest unreadable (`chmod 000`) | **rc 1**, `cannot read …/pkg/install-manifest.txt`, **no formula written** |
+| manifest with comments only (no entries) | **rc 1**, `… lists no install entries`, no formula written |
+| old script, manifest unreadable | renders `libexec.install ` and proceeds — the bug ✅ reproduced |
+
+The `exit 1` inside `install_list_ruby` works despite running in a command substitution, because
+`install_list="$(install_list_ruby)"` is a bare assignment under `set -e`. Verified empirically,
+not assumed. Good catch by the implementer; it is the same failure class as B1 and closing it
+was right.
+
+## 4. The honest negative (`touch` mutation stays GREEN) — I pressure-tested it; the reasoning HOLDS
+
+I tried to construct a faithful ordering in which the `touch` is load-bearing and could not:
+
+- **AUR:** `cp -a` preserves the srcdir mtimes (tarball time, or `npm install`'s
+  `package-lock.json` rewrite at T1); `install -Dm644` does **not** preserve mtime, so the bundle
+  lands at *now* — newest even with the `touch` deleted.
+- **Homebrew:** `libexec.install` is a `mv`, preserving mtimes; `npm run build` (T2) is the last
+  write before any install, and T2 > T1 > tarball. Bundle is newest without the `touch`.
+- **makepkg reproducible builds:** `SOURCE_DATE_EPOCH` clamping makes every mtime *equal*, and
+  `find -newer` is strict, so equal is not stale either.
+- **Bottle pour / `pacman -U`:** tar preserves the recorded ordering.
+
+The only way to make it load-bearing is a *future* step that rewrites a file **under `src/`**
+after the build — and note the launcher only scans `src/`, so even a post-`touch`
+`inreplace libexec/"ticket"` would not matter. So: **belt-and-braces, correctly characterised.**
+
+Keeping the `touch` while asserting the *invariant* rather than the *mechanism* — "no installed
+file is newer than the bundle" — is the right call, and mutation 2 proves that assertion is live.
+Manufacturing a fixture whose only purpose is to kill mutation 3 would have been a test that
+lies about the system. I endorse the decision and the decision to write it down rather than
+quietly ship a green board.
+
+## 5. Rejections and the deferral — all reasonable
+
+- **S4 (`bash`/`coreutils`/`findutils` are in Arch `base`)** — rejected, correctly: my own
+  round-1 text recommended leaving it.
+- **S5 (CHANGELOG should mention npm+network at install time)** — rejected as already satisfied.
+  **They are right and I was wrong**: `CHANGELOG.md` already reads "`npm` and network are needed
+  for the build (once from a checkout, **at install time for a package**)". Nothing dropped.
+- **S6 (`tk help` omits the `-a` default)** — deferred to `nid_7qxhyhxhwbxi7yh0f8j7n79et_e`
+  (chore, p3). The ticket exists, diagnoses it correctly, names both files that must change
+  together (`src/cli/commands/help.ts` **and** the ORIGINAL_README block that is a verbatim copy
+  of `help`), and records that it is pre-existing rather than a port regression. Exactly the
+  right disposition — this is a behavior/text change in `src/`, which was out of scope here.
+
+## 6. Formula re-rendered after the edits — still sound
+
+`libexec.install "ticket", "package.json", "package-lock.json", "tsconfig.json", "src"` →
+`(libexec/"dist").install "dist/ticket.mjs"` → `touch` → `chmod 0755` →
+`bin.install_symlink libexec/"ticket" => "tk"` → `prefix.install "LICENSE.md"`. Heredoc escaping
+still correct (all backticks escaped, no stray `$` expansion). `LICENSE.md` lands in `prefix`,
+outside `libexec`, so its post-`touch` position cannot affect the launcher's staleness scan.
+(Ruby still not parsed — no `ruby` in this container, same limit as round 1.)
+
+## 7. Gates, re-run by me
+
+`make typecheck` rc 0 · `make test` **13 features / 261 scenarios / 1729 steps, 0 failed** ·
+`make package-smoke` OK · `bash -n` clean on all three scripts and the PKGBUILD.
+
+## Nitpicks (do not gate the close)
+
+- The **formula's** `touch` comment still reads "Make the bundle the newest file installed so a
+  packaged install never tries to write into the Cellar" — the PKGBUILD's twin was corrected to
+  say the timestamps are not load-bearing, the formula's was not. Same nuance, two places, now
+  inconsistent.
+- `package-smoke.sh`'s `trap _discard_scratch EXIT` wipes the prefix on **failure** too, so a red
+  CI run leaves nothing to inspect. The `_fail` messages embed stderr, so this is mostly covered;
+  a `KEEP_SCRATCH=1` escape hatch would be cheap.
+- The smoke test's staleness assertion scans the whole `$SHARE` tree while the launcher scans only
+  `src/`. Deliberate and stated in the comment; just be aware it can go red on a change that the
+  launcher would not actually care about.
+
+## Carried forward (unchanged from round 1, correctly recorded in the report)
+
+`cp -a --no-preserve=ownership` under a real `fakeroot`, and one real
+`brew install --build-from-source` / `makepkg` + `namcap` run before the next release tag.
+Neither toolchain exists in this container. `make package-smoke` narrows the gap to
+package-manager-*specific* semantics; it does not close them.
