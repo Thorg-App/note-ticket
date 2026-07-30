@@ -15,7 +15,8 @@ Flow: IMPLEMENTATION_WITH_SELF_PLAN → IMPLEMENTATION_REVIEW → IMPLEMENTATION
 ## Log
 
 - [x] Setup
-- [ ] IMPLEMENTATION_WITH_SELF_PLAN — spawned (background)
-- [ ] IMPLEMENTATION_REVIEW
+- [x] IMPLEMENTATION_WITH_SELF_PLAN — done. Commits `94242f2`, `e934523`, `3019ca9`.
+      Reported all four gates green; 2 new declared divergences (#8, #9); 3 vacuous guards found and fixed.
+- [ ] IMPLEMENTATION_REVIEW — spawned (background), read-only, re-verifies the gates independently
 - [ ] IMPLEMENTATION_ITERATION (max 4)
 - [ ] CHANGELOG entry (top-level only), close ticket
