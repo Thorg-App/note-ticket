@@ -189,6 +189,41 @@ describe("DepGraph.cycles", () => {
         assert.deepEqual(cycles[0]?.memberIds, ["b", "c"]);
     });
 
+    /**
+     * The walk is entered at `c`, so the members come off the stack as c, a, b. Rotating
+     * (not sorting) is what makes two spellings of the same cycle compare equal while the
+     * cycle's direction survives — `["a", "b", "c"]`, never `["a", "c", "b"]`.
+     */
+    it("rotates the members when the smallest id is not the entry point", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["a"] },
+            { id: "a", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+        ]).cycles();
+        assert.deepEqual(cycles[0]?.memberIds, ["a", "b", "c"]);
+    });
+
+    it("keeps the walk itself in traversal order, entry point first", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["a"] },
+            { id: "a", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+        ]).cycles();
+        assert.deepEqual(cycles[0]?.pathIds, ["c", "a", "b", "c"]);
+    });
+
+    // Same three tickets, same cycle, reached from a fourth: normalization is what stops it
+    // from being reported a second time.
+    it("reports a cycle once however many entry points reach it", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["a"] },
+            { id: "a", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+            { id: "outside", deps: ["b"] },
+        ]).cycles();
+        assert.equal(cycles.length, 1);
+    });
+
     it("reports one cycle regardless of which member is reached first", () => {
         const cycles = graphOf([
             { id: "z", deps: ["y"] },
@@ -284,6 +319,31 @@ describe("DepGraph.tree", () => {
         assert.deepEqual(render(graph.tree("a", options)), ["a", "└── b", "    └── d"]);
     });
 
+    /**
+     * `mid` is reachable at depth 1 and depth 2; `deep` only below it. Drawing `mid` at
+     * depth 1 would strand `deep` — the dedup rule has to pick the DEEPEST placement, not
+     * the first one seen.
+     */
+    it("draws the whole subtree under the deepest placement", () => {
+        const graph = graphOf([
+            { id: "a", deps: ["mid", "b"] },
+            { id: "b", deps: ["mid"] },
+            { id: "mid", deps: ["deep"] },
+            { id: "deep" },
+        ]);
+        assert.deepEqual(render(graph.tree("a", options)), ["a", "└── b", "    └── mid", "        └── deep"]);
+    });
+
+    it("orders siblings of equal subtree depth by id", () => {
+        const graph = graphOf([
+            { id: "a", deps: ["c2", "c1", "c3"] },
+            { id: "c1" },
+            { id: "c2" },
+            { id: "c3" },
+        ]);
+        assert.deepEqual(render(graph.tree("a", options)), ["a", "├── c1", "├── c2", "└── c3"]);
+    });
+
     it("draws every path in full mode", () => {
         const graph = graphOf([
             { id: "a", deps: ["b", "d"] },
@@ -322,5 +382,26 @@ describe("DepGraph relationships", () => {
 
     it("lists only non-closed dependents", () => {
         assert.deepEqual(idsOf(graph.activeDependents("target")), ["waiter"]);
+    });
+
+    it("lists a dependent once however often it names the target", () => {
+        const twice = graphOf([{ id: "target" }, { id: "waiter", deps: ["target", "target"] }]);
+        assert.deepEqual(idsOf(twice.activeDependents("target")), ["waiter"]);
+    });
+});
+
+describe("DepGraph.blockerIdsOf", () => {
+    const graph = graphOf([
+        { id: "a", deps: ["open-dep", "closed-dep", "ghost"] },
+        { id: "open-dep" },
+        { id: "closed-dep", status: "closed" },
+    ]);
+
+    it("keeps the not-closed dependencies in deps order", () => {
+        assert.deepEqual(graph.blockerIdsOf("a"), ["open-dep", "ghost"]);
+    });
+
+    it("is empty for a ticket with no dependencies", () => {
+        assert.deepEqual(graph.blockerIdsOf("open-dep"), []);
     });
 });

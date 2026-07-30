@@ -22,11 +22,16 @@ TS_CLI = os.path.join(REPO, "dist/ticket.mjs")
 class BashReference:
     """The bash implementation, pinned so a TS_COMMANDS flip cannot hollow out the diff.
 
-    `./ticket` exec's the TS bundle for every command named in its TS_COMMANDS variable.
-    Running it directly would therefore compare TS against TS the moment a command is
-    ported -- a harness that can no longer fail. This is a copy of the script with that
-    variable emptied, so the bash code path is always the one being measured.
+    `./ticket` exec's the TS bundle for every command named in its TS_COMMANDS variable,
+    and `cmd_dep` does the same for the subcommands in TS_DEP_SUBCOMMANDS. Running it
+    directly would therefore compare TS against TS the moment a command is ported -- a
+    harness that can no longer fail. This is a copy of the script with BOTH lists emptied,
+    so the bash code path is always the one being measured.
     """
+
+    # Every delegation switch in `ticket`. Each must be present exactly once: a renamed or
+    # deleted switch has to fail loudly here rather than silently stop being disabled.
+    _DELEGATION_VARIABLES = ("TS_COMMANDS", "TS_DEP_SUBCOMMANDS")
 
     _path = None
 
@@ -45,10 +50,15 @@ class BashReference:
         directory = tempfile.mkdtemp(prefix="parity-bash-ref-", dir=scratch)
         atexit.register(shutil.rmtree, directory, ignore_errors=True)
         with open(TICKET) as f:
-            source = f.read()
-        patched, count = re.subn(r'(?m)^TS_COMMANDS=.*$', 'TS_COMMANDS=""', source)
-        if count != 1:
-            raise SystemExit("Expected exactly one TS_COMMANDS assignment in %s, found %d" % (TICKET, count))
+            patched = f.read()
+        for variable in cls._DELEGATION_VARIABLES:
+            patched, count = re.subn(
+                r'(?m)^%s=.*$' % variable, '%s=""' % variable, patched
+            )
+            if count != 1:
+                raise SystemExit(
+                    "Expected exactly one %s assignment in %s, found %d" % (variable, TICKET, count)
+                )
         path = os.path.join(directory, "ticket")
         with open(path, "w") as f:
             f.write(patched)

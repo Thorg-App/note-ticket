@@ -117,10 +117,18 @@ export class DepGraph {
             .sort(TicketOrder.byPriorityThenId);
     }
 
+    /**
+     * Dependency ids of `id` that are not closed, in `deps` order — what still holds it up.
+     * An unknown id is kept: a dangling reference blocks (see the module doc).
+     */
+    blockerIdsOf(id: string): readonly string[] {
+        return this.depsOf(id).filter((dep) => !this.isClosed(dep));
+    }
+
     /** Open/in_progress tickets with at least one dependency that is not closed. */
     blocked(): readonly BlockedTicket[] {
         return this.activeTickets()
-            .map((ticket) => ({ ticket, blockerIds: ticket.deps.filter((dep) => !this.isClosed(dep)) }))
+            .map((ticket) => ({ ticket, blockerIds: this.blockerIdsOf(ticket.id) }))
             .filter((blocked) => blocked.blockerIds.length > 0)
             .sort((left, right) => TicketOrder.byPriorityThenId(left.ticket, right.ticket));
     }

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Listing + dependency-graph parity: `ls`, `ready`, `blocked`, `dep tree[ --full]`, `dep cycle`.
+"""Listing + graph parity: `ls`, `ready`, `blocked`, `closed`, `dep tree[ --full]`, `dep cycle`, `show`.
 
-`ls` / `ready` / `blocked` (with every filter flag) and `dep tree[ --full]` are compared
-byte-for-byte. The first three are served by the shipped TS CLI, so both sides get the
-same argv; `dep tree`/`dep cycle` are not ported yet and use the `dump.mjs` fixture.
+Every command here is served by the shipped TS CLI, so both sides get the same argv.
+`ls` / `ready` / `blocked` / `closed` (with every filter flag) and `dep tree[ --full]` are
+compared byte-for-byte.
 
-`dep cycle` is the ONE whitelisted divergence: bash aborts its DFS on the first
-cycle and leaves nodes marked "visiting", so it prints paths that are not cycles
-and misses real ones. Comparing its bytes would just pin a bug, so instead both
-sides are validated semantically -- every cycle the TS core reports must be a real
-closed walk, and no cyclic graph may come back empty. bash's bogus cycles are
-counted and reported, not failed on. DROP this whitelist once T4
-(nid_fba92yfczp71jjcprn4ufmory_e) flips `dep cycle` to the TS implementation.
+Two commands cannot be byte-compared and are checked semantically instead:
+
+* `dep cycle` -- bash aborts its DFS on the first cycle and leaves nodes marked "visiting",
+  so it prints paths that are not cycles and misses real ones. Comparing its bytes would
+  just pin a bug, so every cycle the TS side reports must be a real closed walk, and no
+  cyclic graph may come back empty. bash's bogus cycles are counted and reported.
+* `show` -- bash builds its Blocking and Children sections by iterating an awk associative
+  array, whose order is UNSPECIFIED. The echoed file is byte-compared; the computed
+  sections are compared as sorted row sets.
 """
 import os
 
@@ -338,6 +340,117 @@ def _check_broken_pipe_exit_code():
     return True, "ls | head -1 exits %d on both sides (and 0 when nothing breaks)" % BROKEN_PIPE_RC
 
 
+# The computed sections `show` appends after the ticket file itself.
+SHOW_SECTION_HEADINGS = ("## Blockers", "## Blocking", "## Children", "## Linked")
+SHOW_ROW_PREFIX = "- "
+
+
+def _split_show(out):
+    """`show` output -> (echoed file, {heading: [rows]}).
+
+    The echoed file is a byte-for-byte contract. The section ROWS are too, but their ORDER
+    is not: bash iterates an awk associative array for Blocking and Children.
+    """
+    echoed, sections, heading = [], {}, None
+    for line in out.split("\n"):
+        if line in SHOW_SECTION_HEADINGS:
+            heading = line
+            sections[heading] = []
+        elif heading is None:
+            echoed.append(line)
+        elif line.startswith(SHOW_ROW_PREFIX):
+            sections[heading].append(line)
+    # The blank line before the first heading belongs to the section block, not the file.
+    while echoed and echoed[-1] == "":
+        echoed.pop()
+    return "\n".join(echoed), sections
+
+
+def _show_mismatches(repo, scenario):
+    """(label, bash, ts) for `show` over every ticket of a scenario."""
+    problems = []
+    for tid, _status, _deps, _prio in scenario:
+        bash, ts = repo.bash_result("show", tid), repo.ts_cli_result("show", tid)
+        if bash.returncode != ts.returncode:
+            problems.append(("show %s (exit code)" % tid, _outcome(bash), _outcome(ts)))
+            continue
+        bash_file, bash_sections = _split_show(bash.stdout)
+        ts_file, ts_sections = _split_show(ts.stdout)
+        if bash_file != ts_file:
+            problems.append(("show %s (echoed file)" % tid, bash_file, ts_file))
+        if sorted(bash_sections) != sorted(ts_sections):
+            problems.append(
+                ("show %s (sections)" % tid, str(sorted(bash_sections)), str(sorted(ts_sections)))
+            )
+            continue
+        for heading, bash_rows in bash_sections.items():
+            if sorted(bash_rows) != sorted(ts_sections[heading]):
+                problems.append(
+                    ("show %s (%s rows)" % (tid, heading), str(sorted(bash_rows)),
+                     str(sorted(ts_sections[heading])))
+                )
+    return problems
+
+
+# `dup` names `tgt` twice in its deps, which bash's `show` prints as two Blocking rows.
+SHOW_DUPLICATE_SCENARIO = [("tgt", "open", [], "2"), ("dup", "open", ["tgt", "tgt"], "2")]
+EXPECTED_BASH_BLOCKING_ROWS = 2
+EXPECTED_TS_BLOCKING_ROWS = 1
+
+
+def _check_show_duplicate_blocking():
+    """Whitelisted divergence: one Blocking row per ticket, not per matching `deps` entry.
+
+    bash appended a row for every `deps` entry naming the target, so a ticket that lists it
+    twice was printed twice. Pinned rather than byte-compared, so the day either side changes
+    its mind the harness says so. (The ORDER of these sections is bash's awk hash order and
+    is not pinnable at all -- `_show_mismatches` compares them as sets for that reason.)
+    """
+    with TempRepo("parity-show-duplicate-") as repo:
+        repo.write_scenario(SHOW_DUPLICATE_SCENARIO)
+        bash_rows = _split_show(repo.bash("show", "tgt"))[1].get("## Blocking", [])
+        ts_rows = _split_show(repo.ts_cli("show", "tgt"))[1].get("## Blocking", [])
+        if len(bash_rows) != EXPECTED_BASH_BLOCKING_ROWS or len(ts_rows) != EXPECTED_TS_BLOCKING_ROWS:
+            return False, "show duplicate-blocking divergence changed: bash=%r ts=%r" % (bash_rows, ts_rows)
+        return True, "show lists a duplicate dependent once, bash twice (as designed)"
+
+
+# `short` is a full id and also a substring of `short-and-long`: bash's `dep tree` matched
+# by substring only and called that ambiguous.
+ID_SUBSTRING_SCENARIO = [("short", "open", [], "2"), ("short-and-long", "open", [], "2")]
+ONE_TICKET_SCENARIO = [("only", "open", [], "2")]
+
+
+def _check_id_resolution_divergences():
+    """Whitelisted divergence: `dep tree` resolves its root through the shared resolver.
+
+    bash's `cmd_dep_tree` had its own awk scan matching by SUBSTRING, so a full id contained
+    in another id was "ambiguous" and its tree unreachable, while an EMPTY id matched every
+    ticket (awk `index(s, "")` is 1) -- `tk show "$UNSET_VAR"` printed an arbitrary ticket in
+    a one-ticket repo. Both were confirmed as bugs by the human owner (ticket
+    nid_5g3eta9cf7yi6iukmscxma6wc_e); BDD scenarios pin the TS side, and this pins that bash
+    really did behave that way.
+    """
+    problems = []
+    with TempRepo("parity-id-substring-") as repo:
+        repo.write_scenario(ID_SUBSTRING_SCENARIO)
+        bash, ts = repo.bash_result("dep", "tree", "short"), repo.ts_cli_result("dep", "tree", "short")
+        if bash.returncode == 0 or "ambiguous" not in bash.stderr:
+            problems.append("bash `dep tree <full-id>` no longer reports ambiguity: %s" % _outcome(bash))
+        if ts.returncode != 0 or not ts.stdout.startswith("short ["):
+            problems.append("TS `dep tree <full-id>` did not resolve: %s" % _outcome(ts))
+    with TempRepo("parity-id-empty-") as repo:
+        repo.write_scenario(ONE_TICKET_SCENARIO)
+        bash, ts = repo.bash_result("show", ""), repo.ts_cli_result("show", "")
+        if bash.returncode != 0:
+            problems.append("bash `show \"\"` no longer resolves to the only ticket: %s" % _outcome(bash))
+        if ts.returncode != 1 or "not found" not in ts.stderr:
+            problems.append("TS `show \"\"` is no longer not-found: %s" % _outcome(ts))
+    if problems:
+        return False, "id-resolution divergence changed: " + "; ".join(problems)
+    return True, "dep tree root resolves exact-first and an empty id matches nothing (as designed)"
+
+
 def _outcome(result):
     """What must match: exit code AND stdout. Comparing stdout alone would let a bash-side
     crash that prints nothing look equal to an empty TS success."""
@@ -346,22 +459,16 @@ def _outcome(result):
 
 def _exact_mismatches(repo, scenario):
     """(label, bash, ts) for every command whose output must match byte-for-byte."""
+    invocations = list(CLI_INVOCATIONS)
+    for root in [t[0] for t in scenario]:
+        invocations.append(["dep", "tree", root])
+        invocations.append(["dep", "tree", "--full", root])
     problems = []
-    for args in CLI_INVOCATIONS:
+    for args in invocations:
         bash_out = _outcome(repo.bash_result(*args))
         ts_out = _outcome(repo.ts_cli_result(*args))
         if bash_out != ts_out:
             problems.append((" ".join(args), bash_out, ts_out))
-    dump_comparisons = []
-    for root in [t[0] for t in scenario]:
-        dump_comparisons.append(("dep tree %s" % root, ["dep", "tree", root], ["tree", root, "dedup"]))
-        dump_comparisons.append(
-            ("dep tree --full %s" % root, ["dep", "tree", "--full", root], ["tree", root, "full"])
-        )
-    for label, bash_args, ts_args in dump_comparisons:
-        bash_out, ts_out = repo.bash(*bash_args), repo.ts(*ts_args)
-        if bash_out != ts_out:
-            problems.append((label, bash_out, ts_out))
     return problems
 
 
@@ -371,13 +478,13 @@ def run(random_count, seed):
     for scenario, label in scenarios:
         with TempRepo("parity-graph-") as repo:
             repo.write_scenario(scenario)
-            problems = _exact_mismatches(repo, scenario)
+            problems = _exact_mismatches(repo, scenario) + _show_mismatches(repo, scenario)
 
             deps = _active_deps(scenario)
             bash_bogus_cycles += sum(
                 1 for c in _parse_cycles(repo.bash("dep", "cycle")) if not _is_closed_walk(c, deps)
             )
-            ts_cycles = _parse_cycles(repo.ts("cycle"))
+            ts_cycles = _parse_cycles(repo.ts_cli("dep", "cycle"))
             for cycle in ts_cycles:
                 if not _is_closed_walk(cycle, deps):
                     problems.append(("dep cycle (TS reported a non-cycle)", str(cycle), str(deps)))
@@ -396,6 +503,8 @@ def run(random_count, seed):
         _check_closed_symlink_mtime(),
         _check_closed_default_limit(),
         _check_broken_pipe_exit_code(),
+        _check_show_duplicate_blocking(),
+        _check_id_resolution_divergences(),
     ]
     summary = "scenarios=%d failures=%d (whitelisted: bash bogus cycles=%d); %s" % (
         len(scenarios),

@@ -35,3 +35,21 @@ export class CliError extends Error {
             .join("");
     }
 }
+
+/**
+ * A command invoked with the wrong arguments, told as bash tells it: the `Usage:` lines
+ * verbatim, with NO `Error: ` prefix. Same exit code 1 as any other failure.
+ *
+ * WHY a subclass rather than a flag on CliError: the dispatcher has exactly one rendering
+ * path (`stderrText`), and this is the second rendering, not a second kind of message.
+ */
+export class UsageError extends CliError {
+    constructor(readonly usageLines: readonly string[]) {
+        super(usageLines[0] ?? "", usageLines.slice(1));
+        this.name = "UsageError";
+    }
+
+    override get stderrText(): string {
+        return this.usageLines.map((line) => `${line}${LINE_SEPARATOR}`).join("");
+    }
+}

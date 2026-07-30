@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 
+import { ChildExit } from "./child-exit.js";
 import { CliError } from "./cli-error.js";
 import { ExitCode } from "./exit-codes.js";
 
@@ -35,11 +36,9 @@ export class Jq {
             input: jsonl,
             stdio: ["pipe", "inherit", "inherit"],
         });
-        if (result.status !== null) {
-            return result.status;
-        }
-        if (result.signal !== null) {
-            return ExitCode.forSignal(result.signal);
+        const code = ChildExit.codeOf(result);
+        if (code !== undefined) {
+            return code;
         }
         // No outcome at all: jq never ran (or node could not tell us how it ended).
         throw Jq.unusable(result.error);

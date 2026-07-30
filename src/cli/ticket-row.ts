@@ -26,7 +26,7 @@ const RELATED_IDS_MARKER = " <- ";
 export class TicketRow {
     /** `<id> [<status>] - <title>` — the row `closed` prints and `withDeps` builds on. */
     static withStatus(ticket: Ticket): string {
-        return `${TicketRow.idColumn(ticket)} [${ticket.status}] - ${ticket.title}`;
+        return `${TicketRow.idColumn(ticket.id)} [${ticket.status}] - ${ticket.title}`;
     }
 
     /** `withStatus` plus ` <- [dep, dep]` when there are deps — the `ls` row. */
@@ -36,7 +36,7 @@ export class TicketRow {
 
     /** `<id> [P<priority>][<status>] - <title>` — the `ready` row. */
     static withPriority(ticket: Ticket): string {
-        return `${TicketRow.idColumn(ticket)} [P${ticket.priority}][${ticket.status}] - ${ticket.title}`;
+        return `${TicketRow.idColumn(ticket.id)} [P${ticket.priority}][${ticket.status}] - ${ticket.title}`;
     }
 
     /** `withPriority` plus ` <- [blocker, ...]` — the `blocked` row. */
@@ -44,13 +44,27 @@ export class TicketRow {
         return `${TicketRow.withPriority(blocked.ticket)}${TicketRow.relatedIds(blocked.blockerIds)}`;
     }
 
+    /**
+     * `<id> [<status>] <title>` — the shape the graph commands (`dep tree`, `dep cycle`,
+     * `show`) all print, each behind its own prefix.
+     *
+     * `ticket` is undefined for a DANGLING id (a dep or link naming no file). bash looked
+     * such an id up in an awk array and got the empty string for both fields, printing
+     * `ghost [] ` — trailing space included. Reproduced rather than special-cased, because
+     * a dangling reference must stay visible in the output.
+     */
+    static identified(id: string, ticket: Ticket | undefined): string {
+        return `${id} [${ticket?.status ?? ""}] ${ticket?.title ?? ""}`;
+    }
+
     /** Rows as printable output: one trailing newline each, empty text for no rows. */
     static text(rows: readonly string[]): string {
         return rows.map((row) => `${row}${ROW_SEPARATOR}`).join("");
     }
 
-    private static idColumn(ticket: Ticket): string {
-        return ticket.id.padEnd(ID_COLUMN_WIDTH);
+    /** An id padded to bash's `%-8s` column; a longer id is NOT truncated. */
+    static idColumn(id: string): string {
+        return id.padEnd(ID_COLUMN_WIDTH);
     }
 
     /** ` <- [a, b]`, or nothing at all when the list is empty (bash omits the marker). */
