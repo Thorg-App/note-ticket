@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+    lstatSync,
+    lutimesSync,
+    mkdtempSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    rmSync,
+    symlinkSync,
+    utimesSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -32,6 +43,11 @@ class TicketsTree {
 
     relativeNames(paths: readonly string[]): readonly string[] {
         return paths.map((path) => relative(this.root, path));
+    }
+
+    /** Pins a file's mtime, so recency-ordered expectations do not depend on write speed. */
+    setModifiedAt(relativePath: string, seconds: number): void {
+        utimesSync(join(this.root, relativePath), seconds, seconds);
     }
 
     remove(): void {
@@ -107,6 +123,146 @@ describe("TicketStore.collectFiles", () => {
 
     it("exposes the ticket id of a loaded file", () => {
         assert.equal(store.load(join(tree.root, "top.md")).id, "nid_1");
+    });
+});
+
+/**
+ * `loadRecent` is bash `cmd_closed`'s `ls -t "${TICKET_FILES[@]}" | head -n N`: newest first,
+ * capped by FILE COUNT before anything is filtered.
+ */
+describe("TicketStore.loadRecent", () => {
+    const tree = new TicketsTree();
+    let store: TicketStore;
+
+    before(() => {
+        // Ids spell the expected recency order; the mtimes deliberately disagree with the
+        // path order, so a path-ordered implementation cannot pass.
+        tree.ticket("aaa.md", "third");
+        tree.ticket("sub/mmm.md", "first");
+        tree.ticket("zzz.md", "second");
+        tree.setModifiedAt("aaa.md", 1700000100);
+        tree.setModifiedAt("sub/mmm.md", 1700000300);
+        tree.setModifiedAt("zzz.md", 1700000200);
+        store = new TicketStore(tree.root);
+    });
+
+    after(() => tree.remove());
+
+    it("orders the newest modification first", () => {
+        assert.deepEqual(
+            store.loadRecent(10).map((ticket) => ticket.id),
+            ["first", "second", "third"],
+        );
+    });
+
+    it("caps the number of FILES read, keeping the newest", () => {
+        assert.deepEqual(
+            store.loadRecent(2).map((ticket) => ticket.id),
+            ["first", "second"],
+        );
+    });
+
+    it("reads nothing for a cap of zero", () => {
+        assert.deepEqual(store.loadRecent(0), []);
+    });
+
+    it("returns nothing for a missing tickets dir", () => {
+        assert.deepEqual(new TicketStore(join(tree.root, "nope")).loadRecent(10), []);
+    });
+});
+
+/** `ls -t` breaks equal modification times with the file name; so must this. */
+describe("TicketStore.loadRecent with equal modification times", () => {
+    const tree = new TicketsTree();
+    let store: TicketStore;
+
+    before(() => {
+        tree.ticket("zzz.md", "z");
+        tree.ticket("aaa.md", "a");
+        tree.ticket("Bbb.md", "B");
+        for (const name of ["zzz.md", "aaa.md", "Bbb.md"]) {
+            tree.setModifiedAt(name, 1700000000);
+        }
+        store = new TicketStore(tree.root);
+    });
+
+    after(() => tree.remove());
+
+    // Byte order, i.e. LC_ALL=C: 'B' < 'a' < 'z'.
+    it("falls back to ascending byte-wise path order", () => {
+        assert.deepEqual(
+            store.loadRecent(10).map((ticket) => ticket.id),
+            ["B", "a", "z"],
+        );
+    });
+});
+
+/**
+ * `ls -t` compares the full `st_mtim`, so two files written in the same millisecond still
+ * have an order. `statSync().mtimeMs` is truncated to milliseconds and would make this
+ * pair a tie, which is why `loadRecent` reads `mtimeNs`.
+ */
+describe("TicketStore.loadRecent with sub-millisecond modification times", () => {
+    const tree = new TicketsTree();
+    let store: TicketStore;
+
+    // Same millisecond, 250 microseconds apart. The NEWER file is named so that it sorts
+    // LAST by path: truncating to milliseconds makes the pair a tie, and the path tie-break
+    // then puts the older one first. Only a nanosecond comparison gets this right.
+    const EARLIER_SECONDS = 1700000000.000_25;
+    const LATER_SECONDS = 1700000000.000_5;
+
+    before(() => {
+        tree.ticket("aaa-older.md", "older");
+        tree.ticket("zzz-newer.md", "newer");
+        utimesSync(join(tree.root, "aaa-older.md"), EARLIER_SECONDS, EARLIER_SECONDS);
+        utimesSync(join(tree.root, "zzz-newer.md"), LATER_SECONDS, LATER_SECONDS);
+        store = new TicketStore(tree.root);
+    });
+
+    after(() => tree.remove());
+
+    it("orders files whose mtimes differ only below the millisecond", () => {
+        assert.deepEqual(
+            store.loadRecent(10).map((ticket) => ticket.id),
+            ["newer", "older"],
+        );
+    });
+});
+
+/**
+ * GNU `ls -t` does not dereference a symlink operand, so bash `closed` orders a symlinked
+ * ticket by the LINK's mtime. Measured against ./ticket: a link stamped 2030 pointing at a
+ * target stamped 2020 is listed FIRST.
+ */
+describe("TicketStore.loadRecent with a symlinked ticket", () => {
+    const tree = new TicketsTree();
+    let store: TicketStore;
+
+    const TARGET_SECONDS = 1577836800; // 2020
+    const SIBLING_SECONDS = 1735689600; // 2025
+    const LINK_SECONDS = 1893456000; // 2030
+
+    before(() => {
+        tree.ticket("outside/target.md", "linked");
+        tree.ticket("plain.md", "plain");
+        symlinkSync(join(tree.root, "outside/target.md"), join(tree.root, "link.md"));
+        utimesSync(join(tree.root, "outside/target.md"), TARGET_SECONDS, TARGET_SECONDS);
+        utimesSync(join(tree.root, "plain.md"), SIBLING_SECONDS, SIBLING_SECONDS);
+        // follow_symlinks=false, i.e. stamp the LINK and not what it points at.
+        lutimesSync(join(tree.root, "link.md"), LINK_SECONDS, LINK_SECONDS);
+        store = new TicketStore(tree.root);
+    });
+
+    after(() => tree.remove());
+
+    it("orders the link by its own mtime, not its target's", () => {
+        // `outside/target.md` is itself a ticket file and keeps the target's 2020 mtime,
+        // so all three appear; the LINK must lead.
+        assert.deepEqual(
+            store.loadRecent(10).map((ticket) => ticket.id),
+            ["linked", "plain", "linked"],
+        );
     });
 });
 
@@ -274,6 +430,29 @@ describe("TicketStore writes", () => {
                 ["survivor.md"],
             );
         });
+    });
+
+    it("appends text to the end of the file without touching what is there", () => {
+        const path = tree.ticket("appended.md", "nid_appended");
+        const before = readFileSync(path, "utf8");
+        const store = new TicketStore(tree.root);
+        store.appendTo(store.load(path), "\ntail\n");
+        assert.equal(readFileSync(path, "utf8"), `${before}\ntail\n`);
+    });
+
+    /**
+     * bash `printf … >> "$file"` follows a symlink and writes THROUGH it. `save`'s
+     * write-then-rename would replace the link with a regular file instead, which is why
+     * `appendTo` exists: symlinked ticket files are a supported shape here (see README).
+     */
+    it("appends THROUGH a symlinked ticket, leaving the link a link", () => {
+        const target = tree.ticket("linked-target/real.md", "nid_linked_note");
+        const link = join(tree.root, "note-link.md");
+        symlinkSync(target, link);
+        const store = new TicketStore(tree.root);
+        store.appendTo(store.load(link), "\ntail\n");
+        assert.equal(lstatSync(link).isSymbolicLink(), true);
+        assert.ok(readFileSync(target, "utf8").endsWith("\ntail\n"));
     });
 
     it("places a new ticket at the top level", () => {

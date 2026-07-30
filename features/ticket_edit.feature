@@ -22,3 +22,16 @@ Feature: Ticket Edit
     When I run "ticket edit 0001" in non-TTY mode
     Then the command should succeed
     And the output should contain "editable-ticket.md"
+
+  Scenario: Edit with no id at all
+    When I run "ticket edit"
+    Then the command should fail
+    And stderr should contain "Usage: ticket edit <id>"
+
+  # NOTE: no scenario launches an editor and none can. Every BDD runner gives the child
+  # neither a terminal on stdin nor one on stdout, which is exactly the condition bash tested
+  # before launching $EDITOR. That arm -- the adopted editor exit code, the 127 when the
+  # editor is not on PATH, the ticket path reaching the child as its argument, and a
+  # multi-word $EDITOR being looked up UNSPLIT as one filename -- is pinned by
+  # test/edit-command.test.ts, which can say "both streams are terminals" and which spawns
+  # real binaries so the spawn site itself is covered.

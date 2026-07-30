@@ -40,6 +40,28 @@ init_tickets_dir() {
     return 0
 }
 
+# True when $2 appears in the space-separated list $1 (TS_COMMANDS / TS_DEP_SUBCOMMANDS).
+# The emptiness test is load-bearing: with an EMPTY list (how the parity harness disables
+# delegation) the substring match would otherwise accept an empty name, e.g. a bare `dep`.
+_ts_serves() {
+    [[ -n "$2" && " $1 " == *" $2 "* ]]
+}
+
+# Hand the whole invocation to the TypeScript bundle. Replaces this process, never returns.
+_exec_ts() {
+    # Script location, NOT $PWD: the bundle sits next to this script.
+    local script_dir bundle
+    script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+    bundle="$script_dir/dist/ticket.mjs"
+    if [[ ! -f "$bundle" ]]; then
+        echo "Error: TypeScript bundle not built: [$bundle]" >&2
+        echo "Run: make build" >&2
+        exit 1
+    fi
+    # TICKET_INVOKED_AS: node cannot see this script's $0, and usage text interpolates it.
+    TICKET_INVOKED_AS="$0" exec node "$bundle" "$@"
+}
+
 TICKET_PAGER="${TICKET_PAGER:-${PAGER:-}}"
 
 # Prefer ripgrep if available, fall back to grep
@@ -731,6 +753,13 @@ cmd_dep_cycle() {
 }
 
 cmd_dep() {
+    # Unreachable since `dep` joined TS_COMMANDS: the top-level check delegates every form,
+    # including `dep <id> <dependency-id>`. Kept, like the rest of cmd_dep, so that removing
+    # `dep` from TS_COMMANDS is still a complete rollback (deleted at the T6 cutover).
+    if _ts_serves "$TS_DEP_SUBCOMMANDS" "${1:-}"; then
+        _exec_ts dep "$@"
+    fi
+
     # Handle subcommands
     if [[ "${1:-}" == "tree" ]]; then
         shift
@@ -1565,26 +1594,43 @@ EOF
 }
 
 # Main dispatch
+#
+# THIS SCRIPT IS NOW A DELEGATING SHIM. TS_COMMANDS below names EVERY command the tool has,
+# so no cmd_* function above serves a user any more; the only bash left on a normal
+# invocation is this dispatch (and, for a name that is not a command at all, the
+# `Unknown command` fallback at the bottom, which the TS side cannot be reached to print
+# because it never gets the invocation).
+#
+# WHY-NOT deleting the cmd_* bodies now: they ARE the differential oracle. `make parity`
+# (scripts/parity/) runs a copy of THIS FILE with the delegation lists emptied and diffs it
+# against the TS bundle, byte for byte, including the contents of every ticket file a write
+# command leaves behind. Deleting the bodies would silently turn every check into TS vs TS —
+# a harness that can no longer fail. They go at the T6 cutover, together with
+# scripts/parity/ itself (see docs-internal/migration-to-ts-high-level.md).
 
 # TypeScript delegation (strangler-fig port; see docs-internal/migration-to-ts-high-level.md).
 # Commands listed here are served by the TS bundle. Removing a name from the list
-# instantly rolls that command back to the bash implementation below.
-TS_COMMANDS="help --help -h"
+# instantly rolls that command back to the bash implementation above.
+TS_COMMANDS="help --help -h ls list ready blocked closed query show create status start close reopen dep undep link unlink add-note edit"
 
-if [[ " $TS_COMMANDS " == *" ${1:-help} "* ]]; then
-    # Script location, NOT $PWD: the bundle sits next to this script.
-    SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-    TS_BUNDLE="$SCRIPT_DIR/dist/ticket.mjs"
-    if [[ ! -f "$TS_BUNDLE" ]]; then
-        echo "Error: TypeScript bundle not built: [$TS_BUNDLE]" >&2
-        echo "Run: make build" >&2
-        exit 1
-    fi
-    # TICKET_INVOKED_AS: node cannot see this script's $0, and usage text interpolates it.
-    TICKET_INVOKED_AS="$0" exec node "$TS_BUNDLE" "$@"
+# Every `dep` form is now served through TS_COMMANDS above, so cmd_dep's own delegation
+# never runs. This list is KEPT until the T6 cutover for two reasons: emptying it is half of
+# rolling `dep` back to bash, and scripts/parity/harness.py requires exactly one assignment
+# per delegation variable and fails loudly if either disappears.
+TS_DEP_SUBCOMMANDS="tree cycle"
+
+if _ts_serves "$TS_COMMANDS" "${1:-help}"; then
+    _exec_ts "$@"
 fi
 
+# Everything from here down is UNREACHABLE for a real command (see the note above): it runs
+# only for a name that is not a command, and as the pinned parity reference with the
+# delegation lists emptied.
+
 # Initialize tickets dir for built-in commands (skip for help)
+# NB an unknown command goes through here too, so `tk bogus` outside a repo with no _tickets
+# reports the missing directory BEFORE `Unknown command` — kept deliberately, since the TS
+# side never sees such an invocation and could not reproduce the ordering.
 case "${1:-help}" in
     help|--help|-h) ;;
     *) init_tickets_dir "${1:-}" || exit 1 ;;

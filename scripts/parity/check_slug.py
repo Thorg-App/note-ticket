@@ -3,6 +3,10 @@
 
 Each title goes into a fresh empty repo, so collision suffixes are out of scope here
 and the comparison is purely the slug transform.
+
+WHY no newline in TITLES: this check expects the two sides to AGREE, and a newline is
+divergence #11 (bash's line-oriented sed keeps it in the filename). It is pinned in
+check_write.py, where a difference is the expected outcome.
 """
 import os
 

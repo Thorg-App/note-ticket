@@ -189,6 +189,52 @@ describe("DepGraph.cycles", () => {
         assert.deepEqual(cycles[0]?.memberIds, ["b", "c"]);
     });
 
+    /**
+     * The walk is entered at `c`, so the members come off the stack as c, a, b. Rotating
+     * (not sorting) is what makes two spellings of the same cycle compare equal while the
+     * cycle's direction survives — `["a", "b", "c"]`, never `["a", "c", "b"]`.
+     */
+    it("rotates the members when the smallest id is not the entry point", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["a"] },
+            { id: "a", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+        ]).cycles();
+        assert.deepEqual(cycles[0]?.memberIds, ["a", "b", "c"]);
+    });
+
+    it("keeps the walk itself in traversal order, entry point first", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["a"] },
+            { id: "a", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+        ]).cycles();
+        assert.deepEqual(cycles[0]?.pathIds, ["c", "a", "b", "c"]);
+    });
+
+    // Same three tickets, same cycle, reached from a fourth: normalization is what stops it
+    // from being reported a second time.
+    it("reports a cycle once however many entry points reach it", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["a"] },
+            { id: "a", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+            { id: "outside", deps: ["b"] },
+        ]).cycles();
+        assert.equal(cycles.length, 1);
+    });
+
+    /**
+     * `depsOf()` returns `deps` VERBATIM, never deduped, so a hand-edited `deps: [a, a]` walks
+     * the same back edge twice. Only the member-set dedup in `record` stops the cycle from
+     * being reported twice — a second ENTRY POINT cannot exercise it, because the `done`
+     * marking already prevents re-recording.
+     */
+    it("reports a cycle once when a duplicated dep walks the same back edge twice", () => {
+        const cycles = graphOf([{ id: "a", deps: ["b"] }, { id: "b", deps: ["a", "a"] }]).cycles();
+        assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"]]);
+    });
+
     it("reports one cycle regardless of which member is reached first", () => {
         const cycles = graphOf([
             { id: "z", deps: ["y"] },
@@ -207,13 +253,34 @@ describe("DepGraph.cycles", () => {
         assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"], ["c", "d"]]);
     });
 
+    /**
+     * The two cycles SHARE `b`, so bash's abort-on-first-cycle never walked b's second back
+     * edge and missed a real cycle.
+     *
+     * WHY the graph is listed c, b, a: the walk must ENTER at `c` and record the {a,b} cycle
+     * first. Entering at `a` instead makes the aborting algorithm reach {b,c} anyway, through
+     * the stack it failed to unwind — verified by mutation, that spelling of the test passes
+     * against the bug.
+     */
+    it("finds both of two cycles overlapping in one ticket", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["b"] },
+            { id: "b", deps: ["a", "c"] },
+            { id: "a", deps: ["b"] },
+        ]).cycles();
+        assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"], ["b", "c"]]);
+    });
+
     // WHY this case: the bash DFS aborted on the first cycle and left nodes marked
     // "visiting", so a later traversal into one of them reported a non-cycle.
+    // WHY `a` is listed LAST: it must be entered AFTER the {b,c} cycle has been found, which
+    // is what made bash walk into a node still marked "visiting". Listing it first makes even
+    // the aborting algorithm answer correctly — verified by mutation.
     it("does not invent a cycle for a node that merely points into a real cycle", () => {
         const cycles = graphOf([
-            { id: "a", deps: ["b"] },
-            { id: "b", deps: ["c"] },
             { id: "c", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+            { id: "a", deps: ["b"] },
         ]).cycles();
         assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["b", "c"]]);
     });
@@ -284,6 +351,31 @@ describe("DepGraph.tree", () => {
         assert.deepEqual(render(graph.tree("a", options)), ["a", "└── b", "    └── d"]);
     });
 
+    /**
+     * `mid` is reachable at depth 1 and depth 2; `deep` only below it. Drawing `mid` at
+     * depth 1 would strand `deep` — the dedup rule has to pick the DEEPEST placement, not
+     * the first one seen.
+     */
+    it("draws the whole subtree under the deepest placement", () => {
+        const graph = graphOf([
+            { id: "a", deps: ["mid", "b"] },
+            { id: "b", deps: ["mid"] },
+            { id: "mid", deps: ["deep"] },
+            { id: "deep" },
+        ]);
+        assert.deepEqual(render(graph.tree("a", options)), ["a", "└── b", "    └── mid", "        └── deep"]);
+    });
+
+    it("orders siblings of equal subtree depth by id", () => {
+        const graph = graphOf([
+            { id: "a", deps: ["c2", "c1", "c3"] },
+            { id: "c1" },
+            { id: "c2" },
+            { id: "c3" },
+        ]);
+        assert.deepEqual(render(graph.tree("a", options)), ["a", "├── c1", "├── c2", "└── c3"]);
+    });
+
     it("draws every path in full mode", () => {
         const graph = graphOf([
             { id: "a", deps: ["b", "d"] },
@@ -302,6 +394,22 @@ describe("DepGraph.tree", () => {
         assert.deepEqual(render(graphOf([{ id: "a", deps: ["ghost"] }]).tree("a", options)), ["a"]);
     });
 
+    /**
+     * `deps` is not deduped, so `b` appears twice among the children. Bash prints it once
+     * and — because the connector is chosen before the duplicate is dropped — keeps the
+     * `├──` of a non-last sibling. Measured against a copy of `ticket` with the delegation
+     * lists emptied.
+     */
+    it("prints a duplicated dependency once, keeping the branch connector", () => {
+        const graph = graphOf([{ id: "a", deps: ["b", "b"] }, { id: "b" }]);
+        assert.deepEqual(render(graph.tree("a", options)), ["a", "├── b"]);
+    });
+
+    it("prints a duplicated dependency twice in full mode", () => {
+        const graph = graphOf([{ id: "a", deps: ["b", "b"] }, { id: "b" }]);
+        assert.deepEqual(render(graph.tree("a", { full: true })), ["a", "├── b", "└── b"]);
+    });
+
     it("reports the depth of each row", () => {
         const graph = graphOf([{ id: "a", deps: ["b"] }, { id: "b", deps: ["c"] }, { id: "c" }]);
         assert.deepEqual(graph.tree("a", options).map((row) => row.depth), [0, 1, 2]);
@@ -312,6 +420,8 @@ describe("DepGraph relationships", () => {
     const graph = graphOf([
         { id: "target" },
         { id: "child", parent: "target" },
+        // Someone else's child: without it, "has a parent at all" would pass for "children".
+        { id: "other-child", parent: "elsewhere" },
         { id: "waiter", deps: ["target"] },
         { id: "done-waiter", status: "closed", deps: ["target"] },
     ]);
@@ -322,5 +432,26 @@ describe("DepGraph relationships", () => {
 
     it("lists only non-closed dependents", () => {
         assert.deepEqual(idsOf(graph.activeDependents("target")), ["waiter"]);
+    });
+
+    it("lists a dependent once however often it names the target", () => {
+        const twice = graphOf([{ id: "target" }, { id: "waiter", deps: ["target", "target"] }]);
+        assert.deepEqual(idsOf(twice.activeDependents("target")), ["waiter"]);
+    });
+});
+
+describe("DepGraph.blockerIdsOf", () => {
+    const graph = graphOf([
+        { id: "a", deps: ["open-dep", "closed-dep", "ghost"] },
+        { id: "open-dep" },
+        { id: "closed-dep", status: "closed" },
+    ]);
+
+    it("keeps the not-closed dependencies in deps order", () => {
+        assert.deepEqual(graph.blockerIdsOf("a"), ["open-dep", "ghost"]);
+    });
+
+    it("is empty for a ticket with no dependencies", () => {
+        assert.deepEqual(graph.blockerIdsOf("open-dep"), []);
     });
 });

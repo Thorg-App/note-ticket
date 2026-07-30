@@ -2,58 +2,22 @@
  * Thin entrypoint that renders `src/core` output in bash `./ticket`'s exact format,
  * so the parity checks can diff the two byte-for-byte. Not shipped: this is a test
  * fixture for the migration and gets deleted at T6 together with bash `ticket`.
+ *
+ * Only for commands the shipped CLI does NOT serve yet — once a command lands in
+ * `TS_COMMANDS`, its check switches to `dist/ticket.mjs` and its mode is deleted here,
+ * so the output format is never described in two places. `tree` and `cycle` went that way
+ * at T4.
+ *
+ * `slug` is the deliberate exception: `create` IS ported (T5), but its filename rule is a
+ * pure function on both sides, and diffing `title_to_filename` against `Slug.fromTitle`
+ * directly is finer-grained than driving `create` — which would also emit a random id and a
+ * timestamp, and could only be observed one title per repo. See scripts/parity/README.md.
  */
-import { DepGraph } from "../../src/core/dep-graph.js";
 import { Slug } from "../../src/core/slug.js";
-import { TicketStore } from "../../src/core/ticket-store.js";
 
-const [, , mode, arg1, arg2] = process.argv;
+const [, , mode, arg1] = process.argv;
 
-/** Every mode but `slug` reads the tickets dir the harness points us at. */
-function openStore(): TicketStore {
-    return new TicketStore(process.env["TICKETS_DIR"] as string);
-}
-
-function graph(): DepGraph {
-    return DepGraph.build(openStore().loadAll());
-}
-
-if (mode === "tree") {
-    const g = graph();
-    for (const row of g.tree(arg1 as string, { full: arg2 === "full" })) {
-        const t = g.get(row.id);
-        process.stdout.write(`${row.prefix}${row.connector}${row.id} [${t?.status}] ${t?.title}\n`);
-    }
-} else if (mode === "cycle") {
-    const g = graph();
-    const cycles = g.excludingClosed().cycles();
-    if (cycles.length === 0) {
-        process.stdout.write("No dependency cycles found\n");
-    } else {
-        cycles.forEach((c, i) => {
-            if (i > 0) process.stdout.write("\n");
-            process.stdout.write(`Cycle ${i + 1}: ${c.pathIds.join(" -> ")}\n`);
-            for (const id of c.memberIds) {
-                const t = g.get(id);
-                process.stdout.write(`  ${id.padEnd(8)} [${t?.status}] ${t?.title}\n`);
-            }
-        });
-    }
-} else if (mode === "ready") {
-    for (const t of graph().ready()) {
-        process.stdout.write(`${t.id.padEnd(8)} [P${t.priority}][${t.status}] - ${t.title}\n`);
-    }
-} else if (mode === "blocked") {
-    for (const b of graph().blocked()) {
-        process.stdout.write(
-            `${b.ticket.id.padEnd(8)} [P${b.ticket.priority}][${b.ticket.status}] - ${b.ticket.title} <- [${b.blockerIds.join(", ")}]\n`,
-        );
-    }
-} else if (mode === "query") {
-    for (const t of openStore().loadAll()) {
-        if (t.hasFrontmatterFields) process.stdout.write(`${JSON.stringify(t.toJsonRecord())}\n`);
-    }
-} else if (mode === "slug") {
+if (mode === "slug") {
     process.stdout.write(`${Slug.fromTitle(arg1 as string)}.md\n`);
 } else {
     process.stderr.write(`dump: unknown mode=[${mode}]\n`);

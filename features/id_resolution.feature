@@ -50,6 +50,38 @@ Feature: Ticket ID Resolution
     And the output should contain "id: abc"
     And the output should contain "Short ID ticket"
 
+  # DIVERGENCE from bash, confirmed by the owner (ticket nid_5g3eta9cf7yi6iukmscxma6wc_e):
+  # `dep tree` used to match its root by SUBSTRING only, so a full id contained in another
+  # ticket's id was "ambiguous" and that tree was unreachable. It now resolves through the
+  # same resolver as every other command, where an exact match beats a partial one.
+  Scenario: Dep tree resolves a full ID that is a substring of another ID
+    Given a ticket exists with ID "abc" and title "Short ID ticket"
+    And a ticket exists with ID "abc-1234" and title "Long ID ticket"
+    When I run "ticket dep tree abc"
+    Then the command should succeed
+    And the output should contain "abc [open] Short ID ticket"
+
+  # DIVERGENCE from bash, same decision: awk's `index(s, "")` is 1, so an EMPTY id matched
+  # every ticket and bash resolved it to the only one in a single-ticket repo. That made
+  # `tk show "$UNSET_VAR"` (and, once ported, `tk close "$UNSET_VAR"`) act on an arbitrary
+  # ticket. An empty id now matches nothing.
+  Scenario: An empty ID matches no ticket
+    Given a ticket exists with ID "abc-1234" and title "Only ticket"
+    When I run "ticket show \"\""
+    Then the command should fail
+    And stderr should contain "Error: ticket '' not found"
+
+  # The same rule on a WRITE, which is where it actually costs something: bash resolved the
+  # empty id to the only ticket in the repo and CLOSED it, so `tk close "$UNSET_VAR"` silently
+  # finished someone's work. Nothing may be mutated when the id matches nothing.
+  Scenario: An empty ID closes no ticket
+    Given a ticket exists with ID "abc-1234" and title "Only ticket"
+    When I run "ticket close \"\""
+    Then the command should fail
+    And stderr should contain "Error: ticket '' not found"
+    And ticket "abc-1234" should have field "status" with value "open"
+    And ticket "abc-1234" should not have field "closed_iso"
+
   Scenario: ID resolution works with status command
     Given a ticket exists with ID "test-9999" and title "Test ticket"
     When I run "ticket status 9999 in_progress"

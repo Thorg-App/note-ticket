@@ -51,14 +51,46 @@ Feature: Ticket Status Management
     And the output should contain "Error: invalid status 'invalid'"
     And the output should contain "open in_progress closed"
 
+  Scenario: Status command with no arguments prints usage and the valid statuses
+    When I run "ticket status"
+    Then the command should fail
+    And stderr should contain "status <id> <status>"
+    And stderr should contain "Valid statuses: open in_progress closed"
+
+  Scenario: Status command with an id but no status prints usage
+    When I run "ticket status test-0001"
+    Then the command should fail
+    And stderr should contain "status <id> <status>"
+    And ticket "test-0001" should have field "status" with value "open"
+
+  Scenario: Close command with no id prints usage
+    When I run "ticket close"
+    Then the command should fail
+    And stderr should contain "close <id>"
+
+  Scenario: An invalid status leaves the ticket untouched
+    When I run "ticket status test-0001 invalid"
+    Then the command should fail
+    And ticket "test-0001" should have field "status" with value "open"
+
   Scenario: Status of non-existent ticket
     When I run "ticket status nonexistent open"
     Then the command should fail
     And the output should contain "Error: ticket 'nonexistent' not found"
 
-  Scenario: Status command with partial ID
+  # The status is validated BEFORE the id is resolved, so the message names the mistake the
+  # user can actually see in their command line.
+  Scenario: An invalid status is reported even when the ticket does not exist
+    When I run "ticket status nonexistent invalid"
+    Then the command should fail
+    And the output should contain "Error: invalid status 'invalid'"
+
+  # The confirmation names the RESOLVED id, not the abbreviation typed: with an exact id the
+  # two strings coincide, so only a partial id can pin it.
+  Scenario: Status command with partial ID reports the full id
     When I run "ticket status 0001 in_progress"
     Then the command should succeed
+    And the output should be "Updated test-0001 -> in_progress"
     And ticket "test-0001" should have field "status" with value "in_progress"
 
   Scenario: Closing a ticket sets closed_iso timestamp

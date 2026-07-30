@@ -43,11 +43,34 @@ Feature: Ticket Creation
     Then the command should succeed
     And the created ticket should have field "external-ref" with value "JIRA-123"
 
-  Scenario: Create a ticket with parent
+  # The PARTIAL id is what pins this: `--parent` is stored EXPANDED, so passing the exact id
+  # would make "what the user typed" and "the full id" the same string and assert nothing.
+  Scenario: Create a ticket with parent given as a partial id
     Given a ticket exists with ID "parent-001" and title "Parent ticket"
-    When I run "ticket create 'Child ticket' --parent parent-001"
+    When I run "ticket create 'Child ticket' --parent 001"
     Then the command should succeed
     And the created ticket should have field "parent" with value "parent-001"
+
+  Scenario: Create a ticket with an unresolvable parent
+    Given a ticket exists with ID "parent-001" and title "Parent ticket"
+    When I run "ticket create 'Child ticket' --parent zzz"
+    Then the command should fail
+    And the output should contain "Error: ticket 'zzz' not found"
+    And no ticket file should exist with title "Child ticket"
+
+  # The assignee falls back to `git config user.name`. Repository-local config makes this
+  # deterministic; without the step the value would be the developer's or CI's global name.
+  Scenario: The assignee defaults to the configured git user name
+    Given the git user.name is "Golden Tester"
+    When I run "ticket create 'Unassigned ticket'"
+    Then the command should succeed
+    And the created ticket should have field "assignee" with value "Golden Tester"
+
+  Scenario: An explicit assignee overrides the configured git user name
+    Given the git user.name is "Golden Tester"
+    When I run "ticket create 'Assigned ticket' -a 'John Doe'"
+    Then the command should succeed
+    And the created ticket should have field "assignee" with value "John Doe"
 
   Scenario: Create a ticket with design notes
     When I run "ticket create 'Design ticket' --design 'Use microservices'"
@@ -60,6 +83,32 @@ Feature: Ticket Creation
     Then the command should succeed
     And the created ticket should contain "## Acceptance Criteria"
     And the created ticket should contain "Should pass all tests"
+
+  Scenario: Tags are stored as an inline array
+    When I run "ticket create 'Tagged ticket' --tags 'x,y'"
+    Then the command should succeed
+    And the created ticket should have field "tags" with value "[x, y]"
+
+  Scenario: Unknown option is rejected
+    When I run "ticket create 'Some ticket' --bogus"
+    Then the command should fail
+    And stderr should contain "Unknown option: --bogus"
+
+  # DIVERGENCE from bash: bash dereferenced "$2" under `set -u` and died with the shell's own
+  # `./ticket: line 308: $2: unbound variable`, which names a line of the script and tells the
+  # user nothing. Same exit code, actionable message.
+  Scenario: A flag given no value is rejected
+    When I run "ticket create 'Some ticket' --design"
+    Then the command should fail
+    And stderr should contain "Error: option '--design' requires a value"
+
+  # The TITLE is what pins this: the FILENAME would be `untitled.md` either way, because the
+  # slug of an empty string falls back on its own.
+  Scenario: An empty title falls back to Untitled
+    When I run "ticket create ''"
+    Then the command should succeed
+    And the created ticket should have field "title" with value "Untitled"
+    And a file named "untitled.md" should exist in tickets directory
 
   Scenario: Ticket has default status open
     When I run "ticket create 'New ticket'"

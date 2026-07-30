@@ -3,8 +3,11 @@
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
+import tempfile
+import time
 from pathlib import Path
 
 from behave import given, when, then, register_type, use_step_matcher
@@ -114,6 +117,31 @@ def extract_created_id(stdout):
         return output
 
 
+class ReportedCycle:
+    """One `Cycle N:` block of `dep cycle` output: its number and its member ids."""
+
+    def __init__(self, number):
+        self.number = number
+        self.members = set()
+
+
+def parse_reported_cycles(stdout):
+    """Parse `dep cycle` output into a list of `ReportedCycle`s (number + member ids).
+
+    Output shape: `Cycle N: a -> b -> a` followed by one indented row per member
+    (`  <id> [<status>] <title>`), with a blank line between cycles. Comparing member
+    SETS keeps assertions independent of which member a walk happens to start at.
+    """
+    cycles = []
+    for line in stdout.split('\n'):
+        header = re.match(r'^Cycle (\d+): ', line)
+        if header:
+            cycles.append(ReportedCycle(int(header.group(1))))
+        elif line.startswith('  ') and cycles:
+            cycles[-1].members.add(line.split()[0])
+    return cycles
+
+
 def _track_created_ticket(context, command, result):
     """Track ticket ID and path from create command JSON output."""
     if 'ticket create' not in command or result.returncode != 0:
@@ -144,6 +172,23 @@ def step_clean_tickets_directory(context):
         import shutil
         shutil.rmtree(tickets_dir)
     tickets_dir.mkdir(parents=True, exist_ok=True)
+
+
+@given(r'the git user\.name is "(?P<name>[^"]+)"')
+def step_git_user_name_is(context, name):
+    """Set `user.name` in the scenario's own repository.
+
+    Repository-local config beats the developer's/CI's global config, so the value the
+    command reads is fully determined by this step -- which is what makes asserting
+    `create`'s default assignee non-flaky.
+    """
+    subprocess.run(
+        ['git', 'config', 'user.name', name],
+        cwd=context.test_dir,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 @given(r'the tickets directory does not exist')
@@ -308,6 +353,45 @@ def step_ticket_has_hr_and_fake_frontmatter(context, ticket_id):
     content = ticket_path.read_text()
     content += '\nSome notes above the rule.\n\n---\n\nfake_field: leaked_value\n'
     ticket_path.write_text(content)
+
+
+@given(r'a raw ticket file "(?P<filename>[^"]+)" exists with content')
+def step_raw_ticket_file(context, filename):
+    """Write a file under _tickets/ verbatim from the scenario's docstring.
+
+    For shapes `create` can never produce -- notably a ticket with no usable 'id',
+    which every enumerating command must reject by name.
+    """
+    path = Path(context.test_dir) / '_tickets' / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(context.text + '\n')
+
+
+@given(r'ticket "(?P<ticket_id>[^"]+)" was modified (?P<seconds>\d+) seconds ago')
+def step_ticket_modified_seconds_ago(context, ticket_id, seconds):
+    """Pin a ticket file's mtime. `closed` orders by it, and files created microseconds
+    apart in a test would otherwise make the expected order a coin flip."""
+    path = find_ticket_file(context, ticket_id)
+    when = time.time() - int(seconds)
+    os.utime(path, (when, when))
+
+
+@given(r'ticket "(?P<ticket_id>[^"]+)" has a tab character in its title')
+def step_ticket_title_has_tab(context, ticket_id):
+    """Put a raw TAB inside the quoted title, which `create` happily writes.
+
+    A control character inside a JSON string must be escaped; bash's `query` emitted it raw
+    and produced JSONL that jq itself refuses to parse.
+    """
+    path = find_ticket_file(context, ticket_id)
+    lines = path.read_text().split('\n')
+    for index, line in enumerate(lines):
+        if line.startswith('title:'):
+            lines[index] = 'title: "tab\there"'
+            break
+    else:
+        raise AssertionError(f"no title line in {path}")
+    path.write_text('\n'.join(lines))
 
 
 @given(r'the test root is not a git repository')
@@ -509,6 +593,94 @@ def step_run_command_stdin_left_open(context, command):
     context.last_command = command
 
 
+def _path_without(binary_name):
+    """A PATH identical to the current one except that `binary_name` is not on it.
+
+    WHY the symlink farm: `query <filter>` must be exercised with jq genuinely absent, and
+    jq lives in the same directory as most of the tools the bash script needs (awk, sed,
+    find, git, node), so dropping directories from PATH is not an option. Every executable
+    on the real PATH is linked into one scratch dir, minus the one being hidden.
+
+    WHY-NOT an env var naming the binary: that is a test-only knob in shipped code.
+    """
+    farm = Path(tempfile.mkdtemp(prefix='path-without-%s-' % binary_name))
+    for directory in os.environ.get('PATH', '').split(os.pathsep):
+        if not directory or not os.path.isdir(directory):
+            continue
+        for name in os.listdir(directory):
+            if name == binary_name or (farm / name).exists():
+                continue
+            try:
+                (farm / name).symlink_to(Path(directory) / name)
+            except OSError:
+                pass
+    assert shutil.which(binary_name, path=str(farm)) is None, \
+        f"[{binary_name}] is still reachable on the stripped PATH"
+    return farm
+
+
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with (?P<binary>[a-z]+) missing from PATH')
+def step_run_command_without_binary(context, command, binary):
+    """Run a command with one external binary made unreachable."""
+    command = command.replace('\\"', '"')
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+    farm = _path_without(binary)
+    try:
+        env = os.environ.copy()
+        env['PATH'] = str(farm)
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=getattr(context, 'working_dir', context.test_dir),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            env=env
+        )
+    finally:
+        shutil.rmtree(farm, ignore_errors=True)
+
+    context.result = result
+    context.stdout = result.stdout.strip()
+    context.stderr = result.stderr.strip()
+    context.returncode = result.returncode
+    context.last_command = command
+
+
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with "(?P<piped>(?:[^"\\]|\\.)*)" on stdin')
+def step_run_command_with_stdin(context, command, piped):
+    """Run a command with text piped into its stdin.
+
+    WHY a dedicated runner: every other runner passes `stdin=DEVNULL`, which is readable and
+    at EOF, so `add-note`'s "read the note from stdin" arm is exercised but always with an
+    EMPTY note. `\\n` in the step text is a real newline, so trailing-newline handling can be
+    asserted.
+    """
+    command = command.replace('\\"', '"')
+    piped = piped.replace('\\n', '\n').replace('\\"', '"')
+
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+    cwd = getattr(context, 'working_dir', context.test_dir)
+
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        input=piped,
+        env=os.environ.copy(),
+    )
+
+    context.result = result
+    context.stdout = result.stdout.strip()
+    context.stderr = result.stderr.strip()
+    context.returncode = result.returncode
+    context.last_command = command
+
+
 @when(r'I run "(?P<command>(?:[^"\\]|\\.)+)"')
 def step_run_command(context, command):
     """Run a ticket CLI command."""
@@ -560,6 +732,13 @@ def step_command_fail(context):
         f"Command succeeded but was expected to fail\nstdout: {context.stdout}"
 
 
+@then(r'the exit code should be (?P<code>\d+)')
+def step_exit_code_is(context, code):
+    """Assert an EXACT exit code, for the codes that are themselves the contract."""
+    assert context.returncode == int(code), \
+        f"Expected exit code {code} but got {context.returncode}\nstderr: {context.stderr}"
+
+
 @then(r'the output should be "(?P<expected>[^"]*)"')
 def step_output_equals(context, expected):
     """Assert output exactly matches expected string."""
@@ -578,6 +757,13 @@ def step_output_contains(context, text):
     """Assert output contains text."""
     output = context.stdout + context.stderr
     assert text in output, f"Expected output to contain '{text}'\nActual output: {output}"
+
+
+@then(r'stderr should contain "(?P<text>[^"]+)"')
+def step_stderr_contains(context, text):
+    """Assert the text went to STDERR specifically, not merely to one of the streams."""
+    assert text in context.stderr, \
+        f"Expected stderr to contain '{text}'\nActual stderr: {context.stderr}"
 
 
 @then(r'the output should not contain "(?P<text>[^"]+)"')
@@ -637,6 +823,18 @@ def step_ticket_file_exists_with_title(context, title):
     # Title is now in frontmatter, not body
     assert re.search(rf'^title:\s*"?{re.escape(title)}"?\s*$', content, re.MULTILINE), \
         f"Ticket does not have title '{title}' in frontmatter\nContent: {content}"
+
+
+@then(r'no ticket file should exist with title "(?P<title>[^"]+)"')
+def step_no_ticket_file_with_title(context, title):
+    """Assert NOTHING under _tickets/ carries that title -- i.e. the write never happened."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
+    pattern = rf'^title:\s*"?{re.escape(title)}"?\s*$'
+    matches = [
+        str(path) for path in tickets_dir.rglob('*.md')
+        if re.search(pattern, path.read_text(), re.MULTILINE)
+    ]
+    assert not matches, f"Expected no ticket titled '{title}', found: {matches}"
 
 
 @then(r'the tickets directory should exist')
@@ -787,6 +985,32 @@ def step_ticket_contains(context, ticket_id, text):
     assert text in content, f"Ticket does not contain '{text}'\nContent: {content}"
 
 
+@then(r'ticket "(?P<ticket_id>[^"]+)" should contain "(?P<text>[^"]+)" exactly (?P<count>\d+) time(?:s)?')
+def step_ticket_contains_count(context, ticket_id, text, count):
+    """Assert how OFTEN text occurs -- a second `## Notes` heading is a real bug."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    found = content.count(text)
+    assert found == int(count), \
+        f"'{text}' occurs {found} time(s), expected {count}\nContent: {content}"
+
+
+@then(r'ticket "(?P<ticket_id>[^"]+)" should end with the note "(?P<note>[^"]*)"')
+def step_ticket_ends_with_note(context, ticket_id, note):
+    """Assert the exact bytes `add-note` appends: a bold timestamp, a blank line, the note.
+
+    Anchored at the END of the file, so the blank lines and the trailing newline are pinned
+    too -- `should contain` cannot see any of that.
+    """
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    # `\n` in the step text is a real newline, so a multi-line note can be pinned.
+    pattern = (r'\n\*\*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\*\*\n\n'
+               + re.escape(note.replace('\\n', '\n')) + r'\n$')
+    assert re.search(pattern, content), \
+        f"File does not end with the note '{note}'\nContent: {content!r}"
+
+
 @then(r'ticket "(?P<ticket_id>[^"]+)" should contain a timestamp in notes')
 def step_ticket_has_timestamp_in_notes(context, ticket_id):
     """Assert ticket has a timestamp in notes section."""
@@ -878,6 +1102,33 @@ def step_dep_tree_order(context, first_id, second_id):
     assert second_line != -1, f"'{second_id}' not found in output:\n{output}"
     assert first_line < second_line, \
         f"Expected '{first_id}' (line {first_line + 1}) before '{second_id}' (line {second_line + 1})\nOutput:\n{output}"
+
+
+@then(r'the output should report exactly (?P<count>\d+) dependency cycles?')
+def step_cycle_count(context, count):
+    """Assert `dep cycle` reported exactly this many cycles (no bogus, none missed).
+
+    Zero is rejected: empty output would satisfy it, so the no-cycle arm must keep asserting
+    the `No dependency cycles found` text instead.
+    """
+    expected = int(count)
+    assert expected > 0, "Use 'the output should be \"No dependency cycles found\"' for zero cycles"
+    cycles = parse_reported_cycles(context.stdout)
+    assert len(cycles) == expected, \
+        f"Expected {expected} cycles but got {len(cycles)}\nOutput:\n{context.stdout}"
+    # The headings are numbered 1..N, so a renderer that loses the counter is caught too.
+    numbers = [cycle.number for cycle in cycles]
+    assert numbers == list(range(1, expected + 1)), \
+        f"Expected cycles numbered {list(range(1, expected + 1))} but got {numbers}\nOutput:\n{context.stdout}"
+
+
+@then(r'the output should report a dependency cycle with members "(?P<members>[^"]+)"')
+def step_cycle_with_members(context, members):
+    """Assert one of the reported cycles has exactly this comma-separated member set."""
+    expected = {member.strip() for member in members.split(',')}
+    reported = [cycle.members for cycle in parse_reported_cycles(context.stdout)]
+    assert expected in reported, \
+        f"No reported cycle has members {sorted(expected)}\nReported: {[sorted(c) for c in reported]}\nOutput:\n{context.stdout}"
 
 
 @then(r'the output should have "(?P<first>[^"]+)" before "(?P<second>[^"]+)"')

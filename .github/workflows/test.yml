@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # The suites run thousands of subprocesses with no per-call timeout, and this repo has a
+    # known "awk reads stdin and hangs forever" class -- fail in minutes, not on the 6h default.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -20,3 +23,15 @@ jobs:
       # `make test` builds dist/ticket.mjs first (bash `ticket` delegates TS_COMMANDS to it)
       - name: Run tests
         run: make test
+
+      # MIGRATION-ONLY -- DELETE AT T6 together with scripts/parity/ (see its README
+      # "Lifetime"). The differential harness is the only check that a ported command is
+      # byte-identical to bash: of 14 measured mutations of dist/ticket.mjs it catches, 6 are
+      # invisible to `make test`, so those regressions would ship green without this step.
+      # Needs python3 + jq (both preinstalled on ubuntu-latest); the harness fails loudly
+      # rather than vacuously if either is missing.
+      # `!cancelled()`: run even when `make test` failed, so one push reports both signals.
+      # This is NOT continue-on-error -- a parity diff still fails the job.
+      - name: Run bash-vs-TS parity harness
+        if: ${{ !cancelled() }}
+        run: make parity

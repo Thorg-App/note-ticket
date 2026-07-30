@@ -117,10 +117,18 @@ export class DepGraph {
             .sort(TicketOrder.byPriorityThenId);
     }
 
+    /**
+     * Dependency ids of `id` that are not closed, in `deps` order — what still holds it up.
+     * An unknown id is kept: a dangling reference blocks (see the module doc).
+     */
+    blockerIdsOf(id: string): readonly string[] {
+        return this.depsOf(id).filter((dep) => !this.isClosed(dep));
+    }
+
     /** Open/in_progress tickets with at least one dependency that is not closed. */
     blocked(): readonly BlockedTicket[] {
         return this.activeTickets()
-            .map((ticket) => ({ ticket, blockerIds: ticket.deps.filter((dep) => !this.isClosed(dep)) }))
+            .map((ticket) => ({ ticket, blockerIds: this.blockerIdsOf(ticket.id) }))
             .filter((blocked) => blocked.blockerIds.length > 0)
             .sort((left, right) => TicketOrder.byPriorityThenId(left.ticket, right.ticket));
     }
@@ -310,7 +318,11 @@ class TreeLayout {
         const children = this.printableChildren(id, depth, path);
         children.forEach((child, index) => {
             const isLast = index === children.length - 1;
-            // Re-checked here because an earlier sibling's subtree may have printed it.
+            // Re-checked because `deps` is NOT deduped (DepGraph.depsOf returns the raw
+            // frontmatter list), so `deps: [b, b]` puts the same id in `children` twice and
+            // the first push already marked it printed. Bash re-checks at pop time for the
+            // same reason; without this, the duplicate prints an extra row. `--full` keeps
+            // both rows because isPrintable ignores `printed` there — as bash does.
             if (!this.isPrintable(child, depth + 1, path)) {
                 return;
             }
