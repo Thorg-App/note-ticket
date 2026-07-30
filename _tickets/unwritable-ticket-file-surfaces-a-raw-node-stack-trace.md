@@ -1,16 +1,16 @@
 ---
 id: nid_xioefs6t2rcs1gyl2mpcb1oyf_e
-title: "Unwritable ticket file surfaces a raw node stack trace"
-status: open
+title: Unwritable ticket file surfaces a raw node stack trace
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-07-30T14:06:38Z
-status_updated_iso: 2026-07-30T14:06:38Z
+created_iso: '2026-07-30T14:06:38Z'
+status_updated_iso: '2026-07-30T20:18:35Z'
 type: bug
 priority: 3
 assignee: CC_WITH-nickolaykondratyev
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 A ticket file that cannot be written (e.g. `chmod 444 _tickets/foo.md`) makes the TypeScript CLI
 print a raw node stack trace (`Error: EACCES ... at Object.writeFileSync`) instead of the
 `Error: <message>` + exit 1 shape every other failure uses.
@@ -27,4 +27,3 @@ human message naming the path.
 
 `chmod 444` on a ticket then `tk close <id>` prints `Error: ...` naming the path and exits 1,
 with no stack trace; covered by a unit test.
-
