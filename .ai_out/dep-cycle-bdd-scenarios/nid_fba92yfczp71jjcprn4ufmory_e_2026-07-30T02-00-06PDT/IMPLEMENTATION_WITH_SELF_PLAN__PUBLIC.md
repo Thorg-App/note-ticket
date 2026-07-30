@@ -1,5 +1,62 @@
 # PUBLIC — dep cycle BDD scenarios (nid_fba92yfczp71jjcprn4ufmory_e)
 
+## Iteration 1 (post-review, on top of b0f7f1b)
+
+All three reviewer items ACCEPTED and implemented; none rejected.
+
+**1. Order-robust shapes (was: non-vacuous only by accident of slug order).** Took the
+reviewer's preferred robust fix, not the comment-only one, plus a WHY comment on each:
+- points-into-a-cycle now has TWO in-pointers (`task-0001 -> task-0002`, `task-0004 ->
+  task-0003`). After the buggy abort there is always an in-pointer left to be entered,
+  whichever file is enumerated first.
+- the overlapping scenario is now a THREE-way overlap on `task-0002`
+  (`task-0001↔task-0002`, `task-0002↔task-0003`, `task-0002↔task-0004`), renamed to
+  `Cycle detection finds every cycle overlapping in one ticket`, asserting 3 cycles and all
+  three member sets.
+
+Proof of order-independence: `order_check.py` (kept next to this file) rebuilds both shapes
+under **all 24 filename permutations** each — the file name decides enumeration order — and
+applies the scenarios' own assertions:
+
+```
+python3 .tmp/order_check.py .            # clean:  scenario-assertion failures: 0 / 48
+cd .tmp/mutant && python3 ../order_check.py .   # mutant (a): failures: 48 / 48
+```
+
+So the shapes discriminate at EVERY entry order; a Background title rename cannot
+un-discriminate them.
+
+**2. Dedup guard now covered.** New unit test `reports a cycle once when a duplicated dep
+walks the same back edge twice` — `a deps [b]`, `b deps [a, a]` ⇒ exactly one cycle
+`["a","b"]`, with a WHY comment tying it to `depsOf()` returning `deps` verbatim. (BDD would
+be the wrong layer: `tk dep` is idempotent and cannot create the duplicate.)
+
+**3. Cycle numbering pinned.** `parse_reported_cycles()` now returns `ReportedCycle` objects
+(number + members) and `step_cycle_count` asserts the headings are numbered `1..N`. It also
+now REJECTS an expected count of 0 (empty output would satisfy it) and says to use
+`the output should be "No dependency cycles found"` for that arm — the reviewer's second
+blind spot.
+
+### Mutation matrix (iteration 1) — each mutation produces a failure
+
+| Mutation (in `$PWD/.tmp/mutant`, rebuilt) | Unit tests | BDD | 24×2 order check |
+|---|---|---|---|
+| (a) `CycleFinder.visit` aborts DFS on first cycle (bash) | `fail 3` | both target scenarios fail (`Expected 1 cycles but got 3`, `Expected 3 cycles but got 2`) | 48/48 fail |
+| (b) `seen` dedup guard deleted from `record` | `fail 1` — the new dedup test, and ONLY it | full suite still green (as the reviewer found) | n/a |
+| (c) renderer always prints `Cycle 1:` | `fail 0` | 1 scenario fails: `Expected cycles numbered [1, 2, 3] but got [1, 1, 1]` | n/a |
+
+Unmutated: `make test` exit 0 (`215 scenarios, 0 failed`; unit `pass 295, fail 0`),
+`make parity` exit 0 (graph/query/slug OK, whitelisted `bash bogus cycles=19` unchanged).
+Logs: `.tmp/mut-{a,b,c}-{unit,bdd}.log`, `.tmp/order-{clean,…}.log`, `.tmp/make-test-r2.log`,
+`.tmp/parity-r2.log`. The mutant tree was deleted afterwards.
+
+Unit fixture reorders from iteration 0 left alone, as the reviewer advised. Docs unchanged in
+this iteration (both edits were reviewed as accurate); CHANGELOG still needs nothing.
+
+---
+
+## Iteration 0
+
 ## Result
 All three acceptance criteria met. `make test` (215 BDD scenarios, 294 unit tests) and
 `make parity` are green. Nothing committed; ticket left open.

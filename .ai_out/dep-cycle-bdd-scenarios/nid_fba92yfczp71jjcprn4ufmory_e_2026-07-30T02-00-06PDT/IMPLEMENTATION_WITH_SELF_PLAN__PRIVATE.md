@@ -47,6 +47,24 @@ Must prove non-vacuity by MUTATION under `$PWD/.tmp/` copy.
       had the Fixed entry — nothing added.
 - [x] `make test` exit 0 (215 scenarios, 294 unit tests), `make parity` exit 0.
 
+## Iteration 1 (post-review of commit b0f7f1b) — DONE
+Reviewer items 1/2/3 all accepted, nothing rejected.
+- Feature shapes made order-robust: points-into-cycle gained a 2nd in-pointer (task-0004 ->
+  task-0003); overlapping scenario became a 3-way overlap on task-0002 and was renamed
+  `Cycle detection finds every cycle overlapping in one ticket`. Both scenarios now create
+  task-0004 in their Given ("Fourth task").
+- `parse_reported_cycles` returns `ReportedCycle` (number + members); `step_cycle_count`
+  asserts numbering `1..N` and rejects an expected count of 0.
+- New unit test for the `seen` dedup guard: `b deps ["a","a"]`.
+- `order_check.py` (copied into OUT_DIR, also at `.tmp/order_check.py`): rebuilds both shapes
+  under all 24 filename permutations, runs `TICKETS_DIR=<dir> ./ticket dep cycle`, applies the
+  scenarios' assertions. Clean 0/48 failures; bash-abort mutant 48/48. Needs the real env
+  (`dict(os.environ, TICKETS_DIR=…)`) — a stripped PATH loses `node` and yields empty output.
+- Mutation matrix (a) abort-on-first-cycle → unit fail 3 + both scenarios; (b) dedup guard
+  deleted → unit fail 1 (only the new test), whole BDD suite green; (c) renderer always
+  `Cycle 1:` → 1 scenario fails on numbering. Final: `make test` 215 scenarios / unit 295 pass,
+  `make parity` green.
+
 ## Key learning (for a clone)
 The mutation is order-sensitive: the abort-on-first-cycle bug leaves the stack populated, so
 entering the graph at the WRONG node makes the buggy algorithm produce the right answer. My

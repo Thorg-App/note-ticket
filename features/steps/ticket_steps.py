@@ -117,6 +117,14 @@ def extract_created_id(stdout):
         return output
 
 
+class ReportedCycle:
+    """One `Cycle N:` block of `dep cycle` output: its number and its member ids."""
+
+    def __init__(self, number):
+        self.number = number
+        self.members = set()
+
+
 def parse_reported_cycles(stdout):
     """Parse `dep cycle` output into a list of member-id sets, one per reported cycle.
 
@@ -126,10 +134,11 @@ def parse_reported_cycles(stdout):
     """
     cycles = []
     for line in stdout.split('\n'):
-        if re.match(r'^Cycle \d+: ', line):
-            cycles.append(set())
+        header = re.match(r'^Cycle (\d+): ', line)
+        if header:
+            cycles.append(ReportedCycle(int(header.group(1))))
         elif line.startswith('  ') and cycles:
-            cycles[-1].add(line.split()[0])
+            cycles[-1].members.add(line.split()[0])
     return cycles
 
 
@@ -1009,19 +1018,29 @@ def step_dep_tree_order(context, first_id, second_id):
 
 @then(r'the output should report exactly (?P<count>\d+) dependency cycles?')
 def step_cycle_count(context, count):
-    """Assert `dep cycle` reported exactly this many cycles (no bogus, none missed)."""
+    """Assert `dep cycle` reported exactly this many cycles (no bogus, none missed).
+
+    Zero is rejected: empty output would satisfy it, so the no-cycle arm must keep asserting
+    the `No dependency cycles found` text instead.
+    """
+    expected = int(count)
+    assert expected > 0, "Use 'the output should be \"No dependency cycles found\"' for zero cycles"
     cycles = parse_reported_cycles(context.stdout)
-    assert len(cycles) == int(count), \
-        f"Expected {count} cycles but got {len(cycles)}\nOutput:\n{context.stdout}"
+    assert len(cycles) == expected, \
+        f"Expected {expected} cycles but got {len(cycles)}\nOutput:\n{context.stdout}"
+    # The headings are numbered 1..N, so a renderer that loses the counter is caught too.
+    numbers = [cycle.number for cycle in cycles]
+    assert numbers == list(range(1, expected + 1)), \
+        f"Expected cycles numbered {list(range(1, expected + 1))} but got {numbers}\nOutput:\n{context.stdout}"
 
 
 @then(r'the output should report a dependency cycle with members "(?P<members>[^"]+)"')
 def step_cycle_with_members(context, members):
     """Assert one of the reported cycles has exactly this comma-separated member set."""
     expected = {member.strip() for member in members.split(',')}
-    cycles = parse_reported_cycles(context.stdout)
-    assert expected in cycles, \
-        f"No reported cycle has members {sorted(expected)}\nReported: {[sorted(c) for c in cycles]}\nOutput:\n{context.stdout}"
+    reported = [cycle.members for cycle in parse_reported_cycles(context.stdout)]
+    assert expected in reported, \
+        f"No reported cycle has members {sorted(expected)}\nReported: {[sorted(c) for c in reported]}\nOutput:\n{context.stdout}"
 
 
 @then(r'the output should have "(?P<first>[^"]+)" before "(?P<second>[^"]+)"')

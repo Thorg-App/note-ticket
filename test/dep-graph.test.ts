@@ -224,6 +224,17 @@ describe("DepGraph.cycles", () => {
         assert.equal(cycles.length, 1);
     });
 
+    /**
+     * `depsOf()` returns `deps` VERBATIM, never deduped, so a hand-edited `deps: [a, a]` walks
+     * the same back edge twice. Only the member-set dedup in `record` stops the cycle from
+     * being reported twice — a second ENTRY POINT cannot exercise it, because the `done`
+     * marking already prevents re-recording.
+     */
+    it("reports a cycle once when a duplicated dep walks the same back edge twice", () => {
+        const cycles = graphOf([{ id: "a", deps: ["b"] }, { id: "b", deps: ["a", "a"] }]).cycles();
+        assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"]]);
+    });
+
     it("reports one cycle regardless of which member is reached first", () => {
         const cycles = graphOf([
             { id: "z", deps: ["y"] },
