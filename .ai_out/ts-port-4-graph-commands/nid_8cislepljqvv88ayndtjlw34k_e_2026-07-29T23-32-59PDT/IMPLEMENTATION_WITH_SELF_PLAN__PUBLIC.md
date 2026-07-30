@@ -259,3 +259,73 @@ rather than trusting the review. Six user-visible changes belong in the entry:
 all four gates green. Remaining, both owned elsewhere: the CHANGELOG entry
 (TOP_LEVEL_AGENT, content above) and human sign-off on divergence #8's dedup
 (`nid_qxt3z5unr9k220aqttbw84a6a_e`).
+
+---
+
+# Round 3 — the blocking regression, fixed
+
+The confirmation review was RIGHT and my round-2 reasoning was WRONG. I reproduced the
+break myself before changing anything.
+
+## What broke, measured
+
+Round 2 deleted the `isPrintable` re-check in `TreeLayout.layoutChildren` on an argument
+that it was unreachable. It is not. `deps` is **never deduplicated** — `DepGraph.depsOf()`
+returns `Ticket.deps` verbatim and `printableChildren()` only filters and sorts — so
+frontmatter `deps: [b, b]` puts `b` in the children list twice. The first push marks it
+printed; the deleted re-check was what suppressed the second.
+
+Fixture: `id: aaa, deps: [bbb, bbb]` + `id: bbb`. Reference: a copy of `ticket` with both
+delegation lists emptied.
+
+| | `dep tree aaa` | `dep tree --full aaa` |
+|---|---|---|
+| bash | `aaa` / `├── bbb` | `aaa` / `├── bbb` / `└── bbb` |
+| HEAD `4604477` | `aaa` / `├── bbb` / `└── bbb` — **extra row** | matches bash |
+| after this fix | **byte-identical to bash** | **byte-identical to bash** |
+
+(The surviving row keeps the `├──` branch connector because `isLast` is computed against
+the unfiltered children list — bash behaves the same way, and the test asserts it.)
+
+## The fix — three parts, each mutation-verified
+
+1. **Guard restored** in `src/core/dep-graph.ts`, with a comment naming the real reason
+   (duplicate `deps` entries), not the old misleading one.
+2. **Unit tests** in `test/dep-graph.test.ts`: duplicate dep printed once in default mode,
+   twice in `--full`. **Mutation:** deleting the guard again ⇒ `make unit-test` rc=2 with
+   exactly the default-mode test red. Restored ⇒ 291/291.
+3. **Harness gap closed — I took the preferred option, not a follow-up ticket.**
+   `scripts/parity/harness.py` gains two `FIXED_SCENARIOS`: `duplicate-dep` and
+   `duplicate-dep-with-subtree`. Reason for choosing this over a ticket: `random_scenarios`
+   builds `deps` from distinct ids and structurally *cannot* emit a duplicate, so the shape
+   has to be a fixed fixture — and that is two tuples of work. **Mutation:** with the guard
+   deleted, `make parity PARITY_ARGS="--random 0"` now FAILS with
+   `MISMATCH … check=[dep tree a]` on both new scenarios. Previously it stayed green through
+   a real break; that is exactly the hole that let this ship.
+
+   One consequence, measured not guessed: the new scenarios first tripped the *generic*
+   `show` comparator on whitelisted divergence #8 (bash emits one `## Blocking` row per
+   matching `deps` entry, TS one per ticket). `_show_mismatches` now compares rows within a
+   section as a true set rather than a sorted list. The divergence itself stays pinned by
+   COUNT in `_check_show_duplicate_blocking` (bash 2, TS 1), and a genuinely missing row
+   still fails. Recorded in `scripts/parity/README.md` #8.
+
+Nothing else was touched: CHANGELOG.md untouched, divergence #8 labelling untouched, no
+other round-1/2 cleanup revisited.
+
+## Verification (actual exit codes)
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | **0** | `dist/ticket.mjs` 61.5 kb |
+| `make unit-test` | **0** | **291** pass, 0 fail, 0 skipped (289 before; +2) |
+| `make test` | **0** | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | **0** | graph OK **scenarios=71** (69 before), failures=0; query OK; slug OK |
+
+`.tmp/` is gitignored, so the reproduction fixtures are not stray tracked files; nothing
+needed removing from the tree. Working tree clean after commit.
+
+## Readiness
+
+**READY.** The regression is fixed and byte-verified against bash, and it is now guarded at
+two levels (unit + parity), both proven by mutation rather than by argument.

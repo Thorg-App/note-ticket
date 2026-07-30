@@ -117,3 +117,53 @@ comparisons — a strict improvement).
   exercised anywhere. Very low value; T6 makes it moot.
 - Edge: bash prints a bare `## Linked` heading when `links:` is non-empty but every entry
   is empty (e.g. `links: [,]`); TS omits it. Not worth a ticket.
+
+---
+
+# CONFIRMATION PASS (fresh instance, commit `4604477`)
+
+## Gates I ran myself — ALL FOUR EXIT 0
+
+`make build` 0 / `make unit-test` 0 (289 pass) / `make test` 0 (12 features, 214
+scenarios, 1420 steps) / `make parity` 0 (graph 69 scenarios, 0 failures, 19 whitelisted).
+Logs: `.tmp/cnf_{build,unit,test,parity}.log`, summary `.tmp/cnf_results.txt`.
+
+## MY PREDECESSOR (me) WAS WRONG ABOUT THE `layoutChildren` RE-CHECK
+
+The unreachability proof covered only the cross-sibling-subtree case. It **missed
+duplicate `deps` entries**: `depsOf` returns `Ticket.deps` verbatim (no dedup),
+`printableChildren` only filters+sorts, so `deps: [b, b]` puts `b` in `children` TWICE.
+First push does `printed.add(b)`; the deleted re-check was what suppressed the second.
+
+Empirically reproduced (`.tmp/duptest`, bash ref `.tmp/ticket_bash` = both TS lists
+emptied):
+- `ticket_bash dep tree aaa` → ONE `├── bbb` row.
+- `./ticket dep tree aaa` @ 4604477 → TWO rows (`├──` + `└──`). DIVERGENCE.
+- `.tmp/verify/ticket` (built from `c0b49c2` via `git archive`) → ONE row, matches bash.
+- `--full` matches on both sides (isPrintable IS state-independent there — that half of
+  the argument holds).
+
+Lesson: my earlier mutation run "parity stayed green" was NOT evidence of unreachability —
+the parity graph generator never emits duplicate `deps`. **Do not infer unreachability
+from a green differential harness whose generator you have not read.** Should have checked
+`Ticket.deps` for dedup before asserting a snapshot list has distinct elements.
+
+Also worth a follow-up ticket: parity generator gap (no duplicate `deps`).
+
+## Corrections to my earlier findings
+
+- IMPORTANT #1 (CHANGELOG untouched) was **WRONG**: `git diff d86f193 HEAD -- CHANGELOG.md`
+  shows 7 insertions covering all six items. (`git log <range> -- CHANGELOG.md` printed
+  nothing for me — do not trust it here, diff the trees.)
+
+## Items 2 and 3 — genuinely clean
+
+- `scripts/parity/README.md:103-106` + `migration-to-ts-high-level.md:115-120` carry an
+  explicit "shipped but PENDING HUMAN SIGN-OFF" block naming
+  `nid_qxt3z5unr9k220aqttbw84a6a_e`. Grep for `approved` leaves only the #9 mention, which
+  is accurate. Ticket file exists, `status: open`, `tags: [decide, ts-port]`.
+- `paddedIdentified` added, `idColumn` private, sole external caller now passes a raw id.
+- Test renamed to "omits a dangling dependency…"; awk comment moved to the `show` test.
+- `src/core/id.ts` pointer and `CLAUDE.md` both-lists wording correct.
+
+## Verdict: NOT READY — 1 blocking (restore the re-check + regression test).

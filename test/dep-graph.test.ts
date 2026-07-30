@@ -362,6 +362,22 @@ describe("DepGraph.tree", () => {
         assert.deepEqual(render(graphOf([{ id: "a", deps: ["ghost"] }]).tree("a", options)), ["a"]);
     });
 
+    /**
+     * `deps` is not deduped, so `b` appears twice among the children. Bash prints it once
+     * and — because the connector is chosen before the duplicate is dropped — keeps the
+     * `├──` of a non-last sibling. Measured against a copy of `ticket` with the delegation
+     * lists emptied.
+     */
+    it("prints a duplicated dependency once, keeping the branch connector", () => {
+        const graph = graphOf([{ id: "a", deps: ["b", "b"] }, { id: "b" }]);
+        assert.deepEqual(render(graph.tree("a", options)), ["a", "├── b"]);
+    });
+
+    it("prints a duplicated dependency twice in full mode", () => {
+        const graph = graphOf([{ id: "a", deps: ["b", "b"] }, { id: "b" }]);
+        assert.deepEqual(render(graph.tree("a", { full: true })), ["a", "├── b", "└── b"]);
+    });
+
     it("reports the depth of each row", () => {
         const graph = graphOf([{ id: "a", deps: ["b"] }, { id: "b", deps: ["c"] }, { id: "c" }]);
         assert.deepEqual(graph.tree("a", options).map((row) => row.depth), [0, 1, 2]);

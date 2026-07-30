@@ -167,3 +167,70 @@ Measured this round (throwaway repo under `.tmp/vrepo`, built bundle):
 CHANGELOG is still NOT written here (TOP_LEVEL_AGENT owns it); the exact seven-item content
 list is in the PUBLIC file. Note the reviewer misattributed the missing-`id` command list to
 README — it is `CHANGELOG.md:13`; README has no per-command enumeration.
+
+---
+
+## Round 3 — REGRESSION FIX. The round-2 deletion was WRONG.
+
+**Do not delete `TreeLayout.layoutChildren`'s `isPrintable` re-check. Ever.**
+
+Round 2 removed it on a REASONED unreachability argument. The argument only covered the
+cross-sibling-subtree case. It missed the one that matters: **`deps` is not deduplicated.**
+`DepGraph.depsOf()` returns `Ticket.deps` verbatim and `printableChildren()` only filters
+and sorts, so `deps: [b, b]` puts `b` in `children` TWICE; the first push marks it printed
+and the re-check is what drops the second.
+
+Measured myself before touching anything (fixture `.tmp/duptest`, bash = `.tmp/ticket_bash`
+with both delegation lists emptied):
+
+| | `dep tree aaa` | `dep tree --full aaa` |
+|---|---|---|
+| bash | `aaa`, `├── bbb` | `aaa`, `├── bbb`, `└── bbb` |
+| HEAD `4604477` | `aaa`, `├── bbb`, `└── bbb` ← EXTRA ROW | same as bash |
+| after fix | byte-identical to bash | byte-identical to bash |
+
+Note the `├──` on the surviving row: `isLast` is computed against the UNFILTERED children
+list, so the only child still gets a branch connector. bash does the same. That quirk is
+asserted in the unit test — do not "clean it up".
+
+Restored with a comment naming the real reason (duplicate `deps` entries), not the old
+"an earlier sibling's subtree may have printed it".
+
+### Guards added, each MUTATION-verified
+
+1. `test/dep-graph.test.ts` — two tests: duplicate dep printed once (default, `├──`) and
+   twice (`--full`). Deleting the guard ⇒ `make unit-test` rc=2, exactly the default-mode
+   test red (291 tests, 1 fail). Restored ⇒ 291/291.
+2. `scripts/parity/harness.py` — TWO new `FIXED_SCENARIOS`: `duplicate-dep` and
+   `duplicate-dep-with-subtree`. This is item 3 of the brief and I took the PREFERRED
+   option (teach the generator) rather than filing a follow-up: `random_scenarios` builds
+   `deps` by a set-like comprehension over distinct ids, so it structurally cannot emit a
+   duplicate — the shape has to be a fixed fixture, and adding two tuples costs nothing.
+   Verified by mutation: with the guard deleted, `make parity PARITY_ARGS="--random 0"`
+   FAILS with `MISMATCH ... check=[dep tree a]` on both new scenarios. **That is the proof
+   the earlier mutation runs never had.**
+3. `scripts/parity/check_graph._show_mismatches` — the new scenarios first tripped the
+   generic `show` comparator on whitelisted divergence #8 (bash emits one `## Blocking`
+   row per matching `deps` ENTRY, so `deps: [b, b]` gives two identical rows; TS gives
+   one). Measured, not guessed. Rows within a section are now compared as a true SET
+   (`sorted(set(...))`) instead of a sorted list. This does NOT weaken the pin: the count
+   difference is still pinned exactly by `_check_show_duplicate_blocking` (bash 2, TS 1),
+   and a genuinely missing row still fails. Documented in `scripts/parity/README.md` #8.
+
+### Round-3 verification (actual)
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | 0 | `dist/ticket.mjs` 61.5 kb |
+| `make unit-test` | 0 | 291 pass, 0 fail, 0 skipped (was 289; +2) |
+| `make test` | 0 | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | 0 | graph OK **scenarios=71** (was 69), failures=0; query OK; slug OK |
+
+`.tmp/` is gitignored, so the reproduction fixtures were left in place (nothing stray is
+tracked). Logs: `.tmp/f_{build,unit,test,parity}.log`, mutation logs
+`.tmp/r2_unit_mutated.log` and `.tmp/f_parity_mut.log`.
+
+### Lesson to carry
+An unreachability proof about tree layout is only worth what it is measured against. The
+input class was already staring at us — divergence #8 exists *because* duplicate `deps`
+entries are real.

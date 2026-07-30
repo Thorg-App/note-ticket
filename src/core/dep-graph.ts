@@ -318,10 +318,14 @@ class TreeLayout {
         const children = this.printableChildren(id, depth, path);
         children.forEach((child, index) => {
             const isLast = index === children.length - 1;
-            // WHY-NOT re-testing isPrintable here (bash re-checks at pop time): it cannot
-            // change between the two points. A child is listed only when
-            // maxDepth[child] === depth + 1, and an earlier sibling's subtree only prints
-            // at depths >= depth + 2, so it can never have been printed in between.
+            // Re-checked because `deps` is NOT deduped (DepGraph.depsOf returns the raw
+            // frontmatter list), so `deps: [b, b]` puts the same id in `children` twice and
+            // the first push already marked it printed. Bash re-checks at pop time for the
+            // same reason; without this, the duplicate prints an extra row. `--full` keeps
+            // both rows because isPrintable ignores `printed` there — as bash does.
+            if (!this.isPrintable(child, depth + 1, path)) {
+                return;
+            }
             const connector = isLast ? CONNECTOR_LAST : CONNECTOR_MIDDLE;
             this.output.push({ id: child, depth: depth + 1, prefix, connector });
             if (!this.options.full) {

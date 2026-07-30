@@ -219,6 +219,13 @@ FIXED_SCENARIOS = [
     ([("a", "done", [], "2"), ("b", "open", ["a"], "2"), ("c", "closed", ["a"], "1")], "legacy-done"),
     ([("a", "open", ["b", "c"], "2"), ("b", "open", ["d"], "2"), ("c", "open", [], "2"),
       ("d", "open", [], "2")], "uneven"),
+    # `deps` is never deduplicated, so a hand-edited ticket can list the same id twice.
+    # `dep tree` must then print it ONCE (bash re-checks at pop time) while `--full` prints
+    # it twice. `random_scenarios` cannot produce this shape -- without these two fixtures
+    # deleting that re-check left `make parity` green while `dep tree` really had regressed.
+    ([("a", "open", ["b", "b"], "2"), ("b", "open", [], "2")], "duplicate-dep"),
+    ([("a", "open", ["b", "b", "c"], "2"), ("b", "open", ["d"], "2"), ("c", "open", [], "2"),
+      ("d", "open", [], "2")], "duplicate-dep-with-subtree"),
 ]
 
 

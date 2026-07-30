@@ -348,8 +348,9 @@ SHOW_ROW_PREFIX = "- "
 def _split_show(out):
     """`show` output -> (echoed file, {heading: [rows]}).
 
-    The echoed file is a byte-for-byte contract. The section ROWS are too, but their ORDER
-    is not: bash iterates an awk associative array for Blocking and Children.
+    The echoed file is a byte-for-byte contract. The section ROWS are too, but neither their
+    ORDER nor their MULTIPLICITY is: bash iterates an awk associative array for Blocking and
+    Children, and repeats a row per matching `deps` entry (divergence #8).
     """
     echoed, sections, heading = [], {}, None
     for line in out.split("\n"):
@@ -384,7 +385,12 @@ def _show_mismatches(repo, scenario):
             problems.append(("show %s (sections)" % tid, str(list(bash_sections)), str(list(ts_sections))))
             continue
         for heading, bash_rows in bash_sections.items():
-            if sorted(bash_rows) != sorted(ts_sections[heading]):
+            # Compared as a SET, not a sorted list: repeated identical rows are exactly
+            # whitelisted divergence #8 (bash emits one Blocking row per matching `deps`
+            # ENTRY, TS one per ticket), and the duplicate-dep scenarios would otherwise
+            # fail here. The count difference itself stays pinned by
+            # `_check_show_duplicate_blocking`; a genuinely missing row still fails.
+            if sorted(set(bash_rows)) != sorted(set(ts_sections[heading])):
                 problems.append(
                     ("show %s (%s rows)" % (tid, heading), str(sorted(bash_rows)),
                      str(sorted(ts_sections[heading])))
