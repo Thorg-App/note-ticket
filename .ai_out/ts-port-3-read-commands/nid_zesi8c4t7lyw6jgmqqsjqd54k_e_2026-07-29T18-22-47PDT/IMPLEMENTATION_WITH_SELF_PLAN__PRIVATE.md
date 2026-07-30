@@ -270,3 +270,97 @@ All three re-mutations now fail the harness.
   Phase A's note "query will flip the last of the parity whitelist" was wrong — the entry is still
   needed, it is just now about the shipped CLI rather than `dump.mjs`.
 - The ticket is left OPEN for the orchestrator to close (git history shows the flow does that).
+
+---
+
+# ITERATION round 2 (Phase B review response) — commit `6b9b020`
+
+Review: `IMPLEMENTATION_REVIEW_PHASE_B__PUBLIC.md`, verdict READY, no BLOCKING. All 11
+findings (5 SHOULD-FIX + 6 NIT) INCORPORATED; two adapted, and one reviewer claim corrected.
+Dispositions in `IMPLEMENTATION_ITERATION_PHASE_B__PUBLIC.md`. What a successor must know:
+
+## The SIGPIPE family is WIDER than the review said — and only half of it is honourable
+
+The reviewer flagged `query <filter> | head -1` (bash 141, TS 1). I measured the whole family
+and found `ls | head -1` diverges too (bash 141, TS 0), which nobody had noticed. Then I
+measured WHY, and the two halves need opposite treatment:
+
+- **jq case — exact parity, fixed.** jq is a real child killed by a real signal.
+  `spawnSync` reports **BOTH** `signal: "SIGPIPE"` **and** `error: EPIPE` for that death (the
+  EPIPE is our own failed write to a corpse). The old code checked `error` FIRST, so every
+  `query <filter> | head` became `Error: jq could not be run`, exit 1. Order is now
+  status → signal → error. If you ever touch `Jq.select`, keep that order.
+- **our-own-stdout case — declared, NOT honourable.** bash's code there is a function of
+  OUTPUT SIZE, not of the command: awk writes in ~4 KB chunks and dies as soon as `head`
+  exits. Measured with `ls | head -1`: 2 / 50 / 120 tickets ⇒ bash 0; 200 / 400 ⇒ bash 141,
+  TS 0; 3000 ⇒ both 141 (node fails only past the 64 KB pipe buffer). Matching bash in the
+  4 KB–64 KB band would mean reproducing awk's internal write chunking. So `BrokenPipe`
+  reports 141 on EPIPE (Unix convention, matches bash at both ends, and replaces node's
+  accidental unhandled-error 1 for >64 KB), and the band is whitelist #7.
+
+WHY-NOT swallowing EPIPE into a deterministic 0: it matches bash NOWHERE above 4 KB and is
+not what any other tool does.
+
+## The vacuous test I wrote, and how it was caught
+
+My first N1 test (nanosecond mtime) SURVIVED the `mtimeNs → mtimeMs` mutation: the two files
+were 250 µs apart, but I had named the newer one `aaa-newer.md`, so when ms-truncation made
+them a tie the path tie-break put it first anyway — the expected order by accident. Fixed by
+naming the newer file `zzz-newer.md`, so the tie-break disagrees with the truth. Lesson for
+any recency test in this repo: the path order MUST contradict the expected order, or the
+tie-break silently supplies the right answer.
+(`utimesSync` with fractional seconds does reach nanosecond resolution — measured
+1700000000000250101n vs 1700000000000499963n — so no `touch -d` shell-out is needed.)
+
+## Mutation battery: 9 mutations, 9 caught, 0 survivors
+
+lstat→stat (parity AND unit), mtimeNs→mtimeMs (unit), jq signal→FAILURE (parity),
+BrokenPipe handler removed (parity), `tickets.length === 0` → `if (false)` (parity AND BDD),
+default limit 20→25 (parity), limit parsed after the store read (unit).
+Method: mutate SOURCE (not the bundle) and let `make parity`/`make test` rebuild the mutant —
+simpler than patching `dist/ticket.mjs` and immune to a stale bundle.
+**TRAP:** `timeout N python3 .tmp/mutate_round3.py` killed the script mid-mutation and left
+`src/cli/commands/query.ts` mutated on disk (the `finally` never ran). Always `git diff src/`
+after a mutation run; batch the mutations so each batch fits the timeout.
+
+## Testing a missing external binary without a test-only knob
+
+The missing-`jq` branch is now BDD-covered by `_path_without("jq")`: a scratch dir with a
+symlink to every executable on the real PATH except `jq` (~1840 links, ~100 ms). WHY the farm
+and not dropping PATH entries: jq shares `/usr/bin` with awk/sed/find/git/node, which the bash
+script needs. WHY-NOT an env var naming the binary: a test-only knob in shipped code (same
+reason the parity harness uses a sed'd copy of `ticket`).
+Verified non-vacuous: against `TICKET_SCRIPT=.tmp/ticket-bash-only` the scenario fails on
+`Install jq` while still matching bash's rc 127 and `jq: command not found` — i.e. the divergence
+really is the message alone.
+
+## Where I disagreed with the reviewer
+
+- **N5 was called "imprecise"; the existing sentence was actually CORRECT.** Measured: a
+  colon-less line `nocolon` does become bash key `"nocolon":""`. The reviewer's `title:` case is
+  a SECOND shape (bash key `"title:"`), not a correction of the first. The note now lists both.
+- **S2 was framed as jq-only.** It is not; see above.
+
+## Design notes worth keeping
+
+- `ListOptions.rowLimit` parses on ACCESS, deliberately. Eager validation in `ListOptions.parse`
+  would make `ls --limit=abc` fail, where bash lists happily (no `--limit` arm in those loops).
+  `ClosedCommand.renderTickets`'s third parameter defaults to `options.rowLimit` so the 8
+  existing call sites stay 2-arg and the knowledge stays in one place.
+- `ExitCode.BROKEN_PIPE` is `SIGNALLED_BASE + os.constants.signals.SIGPIPE`, not a literal 141.
+
+## Still open / deliberately not done
+
+- CI does not run `make parity` (`nid_94f11043dhpk198dj9e6gr6pn_e`, now **P1**, with a note
+  listing the 6-of-14 mutations that `make test` cannot see). Out of scope here by instruction.
+- CRLF follow-up `nid_z10hpj927zqilxcpl9ycpe0ad_e` untouched.
+- No unit test for `Jq` itself (it would have to spawn or fake the binary); BDD now covers both
+  the real-jq and the no-jq paths, which is strictly more than before.
+- T3 ticket left OPEN and no `change_log` entry: the orchestrator owns both.
+
+## Final numbers (my own runs, after `6b9b020`)
+
+`make typecheck` 0 · `make unit-test` **251 tests / 42 suites / 0 fail** (was 245) ·
+`make test` **12 features, 208 scenarios, 1368 steps, 0 failed** (was 205) ·
+`make parity` graph **69 / 0** with **7** pinned checks OK, query OK (5 checks incl. 2 new),
+slug OK 13.

@@ -143,3 +143,100 @@ Other checks: `tk ls | head -2` over 300 tickets → no EPIPE crash, exit 0, emp
 READY for convergence. No BLOCKING findings. Four SHOULD-FIX (pipe-title declaration +
 test, parity generator hostile titles, single error channel, CRLF follow-up ticket) and
 three NITs. Full text in `IMPLEMENTATION_REVIEW__PUBLIC.md`.
+
+---
+
+# PHASE B review (commits `10e663f`, `4dfe08e`, `ec89845`; diff 3486848..HEAD)
+
+Read-only for sources. `dist/ticket.mjs` was mutated 14 times and restored from
+`.tmp/rv_dist.bak`; verified **byte-identical to a fresh `npm run build`** afterwards and
+`git status` clean. Scratch: `.tmp/rv_probe.py`, `.tmp/rv_mutate.py`, `.tmp/rv_*.log|out`
+(gitignored). `.tmp/rv_bash_ref` (pinned bash copy, `TS_COMMANDS=""`) deleted at the end.
+
+## 1. Suites — my own runs (all numbers reproduce the implementer's exactly)
+
+| Command | Result |
+|---|---|
+| `make typecheck` | exit 0 |
+| `make unit-test` | **245 tests / 38 suites, 0 fail** |
+| `make test` | 12 features, **205 scenarios passed, 0 failed**, 1353 steps |
+| `make parity` | graph **OK 69 / 0 failures** (19 whitelisted bogus cycles) + 4 pinned checks; query OK (8 invocations, 33 lines) + 2 pinned; slug OK 13 |
+
+Logs `.tmp/rv_{typecheck,unit,test,parity}.log`.
+
+## 2. Bash contract re-derived line by line
+
+`ticket:219-271` (`_file_to_jsonl`), `ticket:928-987` (`cmd_closed`), `ticket:1486-1506`
+(`cmd_query`), `ticket:69` (dep resolution), `ticket:193-204` (`update_yaml_field`).
+Confirmed matching in TS: `ls -t | head -n 100` cap on FILES before filtering; `head -n
+"$limit"` (default 20) on ROWS after; row `%-8s [%s] - %s` with the file's own status text;
+`closed` has no `--status=` case and honours `-a`/`--assignee=`/`-T`/`--tag=`; no id
+de-duplication; `query` filter = LAST positional (no flag handling); JSONL = frontmatter key
+order, `full_path` appended last, surrounding quotes stripped for non-arrays only, array items
+NOT quote-stripped; empty dir returns 0 before `head`/`jq`.
+
+`isFinished` vs `isClosed` is CORRECT, not a convenience: `cmd_closed` selects
+`status=="closed" || status=="done"` (`ticket:978`) while `cmd_ready`'s dep test is
+`statuses[dep] != "closed"` (`ticket:69`). `TICKET_STATUS_DONE` was correctly kept OUT of
+`VALID_TICKET_STATUSES`. `hasFrontmatterFields` really was unused — its only caller was the
+`dump.ts` `query` mode, deleted in the same commit.
+
+## 3. The five declared divergences — each verified real
+
+- **`--limit=0` racy exit code: CONFIRMED, and it is a strong claim that holds.** 60 bash runs
+  on identical input with 6 closed tickets: `{141: 35, 0: 25}`. With 0 closed tickets: `{0: 40}`
+  over 40 runs (awk writes nothing ⇒ no SIGPIPE). The "cap keeps output under the pipe buffer so
+  `--limit>0` never races" reasoning also holds (single buffered awk flush ≤ 100 rows).
+- `--limit=` head syntax: measured bash rc/stdout for `0 abc "" -1 2k +3 " 3" "3 " 1e2`.
+  `-1`, `2k`, `+3`, `" 3"` all rc=0 printing rows; `abc`, `""`, `"3 "`, `1e2` rc=1. TS rejects
+  all non-`[0-9]+`. Real, TS is better, whitelist #4 + BDD + unit tests.
+- Bad `--limit=` on an empty dir: bash rc=0 silent, TS rc=1. Real. Pinned by
+  `_empty_repo_limit_problems` + a BDD scenario. (Not separately in CHANGELOG, but the CHANGELOG
+  statement is unconditional so it covers it.)
+- Control characters in `query`: bash emits a raw tab ⇒ invalid JSON ⇒ its own `query .id` dies
+  in jq. Reproduced through real `create $'a\tb'`. Whitelist #5 + BDD + unit test.
+- `|`-in-title (Phase A): unchanged, still pinned.
+
+## 4. Mutation battery — 14 mutations of `dist/ticket.mjs`
+
+CAUGHT by parity: `SCANNED_FILE_LIMIT`→1e9, →3, mtime tie reversed, mtime order reversed,
+`full_path` first, `--limit` before filter, `isFinished`→`isClosed`, filter first-arg-wins,
+control-char escaping removed, `WHOLE_NUMBER` loosened. (My first pass mis-scored four of these
+as survivors because `tail -6` truncated the multi-line `graph FAIL` summary — the implementer's
+claim that it closed the scan-cap and tie-break holes is CORRECT.)
+
+GENUINE SURVIVORS (nothing anywhere catches them):
+1. `if (tickets.length === 0) return 0` in `query.ts` removed → parity + BDD + unit all green,
+   yet it is load-bearing (`query 'syntax((('` in an empty dir: bash 0, TS would be 3).
+2. `DEFAULT_ROW_LIMIT` 20→100 → parity + BDD green; only a unit test asserts 20.
+3. `mtimeNs`→`mtimeMs` → everything green; no fixture has sub-ms mtime spacing.
+4. mtime tie-break → `return 0` → green (implementer disclosed this honestly; V8 stable sort
+   over already byte-ordered input).
+
+BDD alone missed 6 of 14 that parity caught — and CI runs only `make test`.
+
+## 5. My own undeclared-divergence hunt
+
+- **Symlinked ticket file ⇒ `closed` order differs.** GNU `ls -t` uses **lstat** for operands
+  (no `-L`/`-H`), so bash sorts by the SYMLINK's mtime; TS `statSync` follows to the target.
+  Measured: symlink mtime 2030 → target 2020, sibling 2025 ⇒ bash `sym1, dir1`, TS `dir1, sym1`.
+  README documents symlinked ticket files as supported. Fix is one line: `lstatSync`.
+- **`query <filter> | head -1` ⇒ bash 141, TS 1.** `jq.ts:13` `SIGNALLED_EXIT_CODE = 1` with a
+  comment that admits bash says 128+signal. Comment-only declaration, no CHANGELOG/whitelist/test.
+- Missing `jq`: verified by hand with a jq-free `PATH` — rc 127, `Error: jq: command not found` +
+  hint, and the no-filter path still works. Correct, but declared only in a code comment.
+- 17 hostile frontmatter fixtures × 10 `query` invocations: the ONLY diff was `title:` /
+  `status:` with no `: ` separator (bash key becomes `"title:"`, value `""`). Hand-edit-only —
+  `update_yaml_field`/`create` always write `": "`. Already the declared family, but
+  `Frontmatter.parseLine`'s doc says "no colon" where it means "no `: `".
+- Byte-identical: 13 titles through real bash `create`, nested dirs, `.hidden.md`, arrays,
+  quoted array items, unquoted/half-quoted/padded/unicode titles, body `---` HRs, duplicate
+  ids, legacy `done`, every `closed` filter combination, the cap boundary at index 98..101,
+  `closed`/`query` on empty and missing dirs, `query --flag .id` orderings.
+- `query | head -1` (no filter) rc 0, empty stderr, matches bash. `closed | head -1` rc 0.
+
+## 6. Verdict recorded
+
+READY. No BLOCKING. 5 SHOULD-FIX (symlink mtime, jq SIGPIPE code, unpinned empty-dir guard,
+missing-jq/SIGPIPE not in CHANGELOG+whitelist, parity-not-in-CI now load-bearing) and 6 NITs.
+Full text in `IMPLEMENTATION_REVIEW_PHASE_B__PUBLIC.md`.

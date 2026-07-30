@@ -16,10 +16,20 @@ Five commands in one agent risks compaction. Split so each phase + its review fi
 3. [done] Phase A: IMPLEMENTATION_ITERATION round 1 — CONVERGED, both roles READY.
    Commits f165d98, 736fd10, 3486848. One reasoned rejection accepted by orchestrator: keep `limitText`
    (Phase B's `closed` is its immediate consumer; delete-and-re-add would be churn).
-4. [in progress] Phase B: IMPLEMENTATION_WITH_SELF_PLAN (closed, query)
-5. [ ] Phase B: IMPLEMENTATION_REVIEWER → iteration until convergence (max 4)
-6. [ ] commit
+4. [done] Phase B: IMPLEMENTATION_WITH_SELF_PLAN (closed, query) — commits 10e663f, 4dfe08e, ec89845.
+   All five commands now TS-served.
+5. [done] Phase B: IMPLEMENTATION_REVIEWER — READY, no blocking; 5 SHOULD-FIX + 6 NIT.
+6. [in progress] Phase B: IMPLEMENTATION_ITERATION (round 1 of max 4)
 7. [ ] change_log entry (single entry for the whole flow), close ticket
+
+## Divergence ledger (must be identical in whitelist + CHANGELOG + a pinning test)
+1. `|` in title — bash truncates on its `prio|id|status|title` sort key; TS correct.
+2. `--limit=` plain count only — bash inherited `head -n`'s `+N`/`2k`/negative syntax.
+3. `--limit=0` — bash exit code RACY (reviewer measured 60 runs: 35×141, 25×0); TS deterministic 0.
+4. Bad `--limit=` reported even on an empty tickets dir.
+5. `query` escapes control chars — fixes a real bug (bash's own `query .id` died inside jq).
+(+ under iteration: `| head -1` exit 1 vs bash 141, and the missing-`jq` 127 path, both previously
+declared only in a code comment.)
 
 ## Log
 - Marked ticket `in_progress`.
