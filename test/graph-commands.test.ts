@@ -167,6 +167,18 @@ describe("ShowCommand.render", () => {
         assert.ok(shown.endsWith("\n## Linked\n\n- other [open] Other\n"));
     });
 
+    // `deps`/`links` are NOT deduplicated, and bash prints one row per ENTRY. Only the
+    // computed `## Blocking` section drops duplicates (divergence #8).
+    it("repeats a dependency listed twice under Blockers", () => {
+        const shown = shownFor([{ id: "a", deps: ["dup", "dup"] }, { id: "dup", title: "Twice" }]);
+        assert.ok(shown.endsWith("\n## Blockers\n\n- dup [open] Twice\n- dup [open] Twice\n"));
+    });
+
+    it("repeats a link listed twice under Linked", () => {
+        const shown = shownFor([{ id: "a", links: ["dup", "dup"] }, { id: "dup", title: "Twice" }]);
+        assert.ok(shown.endsWith("\n## Linked\n\n- dup [open] Twice\n- dup [open] Twice\n"));
+    });
+
     it("orders the sections Blockers, Blocking, Children, Linked", () => {
         const shown = shownFor([
             { id: "a", deps: ["dep"], links: ["link"] },

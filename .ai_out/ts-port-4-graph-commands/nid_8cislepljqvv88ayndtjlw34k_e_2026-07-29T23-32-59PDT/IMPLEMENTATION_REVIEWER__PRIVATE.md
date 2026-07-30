@@ -167,3 +167,77 @@ Also worth a follow-up ticket: parity generator gap (no duplicate `deps`).
 - `src/core/id.ts` pointer and `CLAUDE.md` both-lists wording correct.
 
 ## Verdict: NOT READY — 1 blocking (restore the re-check + regression test).
+
+---
+
+# CONFIRMATION PASS 2 (fresh instance, commit `2176db8`)
+
+Narrow scope by instruction: the fix for my blocking finding, the non-vacuity of the new
+guards, the `_show_mismatches` set-comparison judgement call, and the four gates.
+
+## Gates, measured on the untouched tree (`git status` clean)
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | **0** | `dist/ticket.mjs` |
+| `make unit-test` | **0** | tests 291 / pass 291 / fail 0 / skipped 0 |
+| `make test` | **0** | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | **0** | graph OK scenarios=71 failures=0 (19 whitelisted), query OK, slug OK |
+
+Logs `.tmp/c2_g_{build,unit,test,parity}.log`. Matches the implementer's round-3 table exactly.
+
+## 1. Regression IS fixed — verified byte-wise, not taken on faith
+
+Fixture `.tmp/c2/repo` (`aaa` deps `[bbb, bbb]`, `bbb` deps `[ddd]`, `ccc` deps `[aaa]`),
+reference `.tmp/c2/ticket_bash` = `ticket` with BOTH `TS_COMMANDS` and `TS_DEP_SUBCOMMANDS`
+sed-emptied. `diff -u` bash vs `./ticket` for `dep tree {aaa,ccc}` and `dep tree --full
+{aaa,ccc}`: **all four IDENTICAL, rc 0/0**. Default prints `├── bbb` once; `--full` prints
+both. Guard is back at `src/core/dep-graph.ts:326-328` with a comment naming duplicate
+`deps` as the reason.
+
+## 2. New guards are NON-VACUOUS — proven by my own mutation
+
+Throwaway `git archive HEAD` copy at `.tmp/mut2` (symlinked `node_modules`); real tree never
+touched.
+
+- Guard deleted ⇒ `make unit-test` **rc=2**, pass 290 / fail 1, and the ONE red test is
+  *"prints a duplicated dependency once, keeping the branch connector"* (actual
+  `['a','├── b','└── b']`). Exactly as claimed.
+- Guard deleted ⇒ `make parity` **rc=2**, `failures=2`: `MISMATCH scenario=[duplicate-dep]
+  check=[dep tree a]` and `scenario=[duplicate-dep-with-subtree]`. The harness hole is closed.
+
+## 3. THE JUDGEMENT CALL — the set comparison DOES weaken `_show_mismatches`. FINDING.
+
+Reasoning first (all sound): a genuinely MISSING row is still caught (its content drops to
+zero occurrences on one side, so the sets differ); MANGLED content is caught (different set
+element); WRONG SECTION is caught (source set loses it, destination set gains it, plus the
+`list(bash_sections) != list(ts_sections)` heading check). Only **MULTIPLICITY** differences
+are now invisible.
+
+But the dedup was applied to ALL FOUR headings while divergence #8 covers only `## Blocking`.
+Measured bash behavior on `.tmp/c2/showrepo` (`tgt` with `deps: [d1, d1, ghost, ghost]`,
+`links: [l1, l1, nolink, nolink]`): bash prints **two** `- d1`, **two** `- ghost []`, **two**
+`- l1`, **two** `- nolink []`. TS matches today (diff shows ONLY the known `## Blocking` row).
+So Blockers/Linked multiplicity is real contracted behavior that nothing checks any more.
+
+**Concrete regression that now slips through, executed not argued.** In `.tmp/mut2`, one
+plausible line in `src/cli/commands/show.ts:109` — `[...new Set(ids)].map(...)`, i.e. "list
+each ticket once", the exact phrasing of #8's own comment — dedupes every section. Result:
+`make unit-test` **rc=0** and `make parity` **rc=0, failures=0**. A silent divergence from
+bash in `## Blockers` and `## Linked` ships green. No unit test covers it either
+(`test/graph-commands.test.ts` Blockers/Linked tests use single-element fixtures).
+
+**Fix, verified end to end in `.tmp/mut2`:** dedupe only for `## Blocking`, e.g.
+```python
+dedupe = (lambda rows: sorted(set(rows))) if heading == "## Blocking" else sorted
+if dedupe(bash_rows) != dedupe(ts_sections[heading]):
+```
+- with the show-dedup mutation ⇒ parity **rc=2**, `MISMATCH … check=[show a (## Blockers
+  rows)]` on BOTH new duplicate-dep scenarios. Caught.
+- with clean sources ⇒ parity **rc=0**. No false positive from divergence #8.
+
+So the new fixtures already carry the duplicate `deps` needed to make the narrow comparator
+bite; the broad dedup is what throws that coverage away. Same failure shape as the round-2
+regression: a guard weakened by argument instead of measured.
+
+## Verdict: NOT READY — 1 blocking (harness-only, one line + a README wording tweak).

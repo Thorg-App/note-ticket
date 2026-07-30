@@ -143,3 +143,93 @@ Three of the four follow-up items are clean. The fourth — the one flagged as r
 turned a correct, load-bearing guard into a behavior divergence on an input class this
 change itself already recognises. Restore the guard (with a corrected comment) plus a
 regression test, and this is ready.
+
+---
+
+# Confirmation pass 2 — commit `2176db8` (narrow scope)
+
+Scope by instruction: (1) is the blocking regression really fixed, (2) are the new guards
+non-vacuous, (3) the judgement call the implementer flagged — the `show` set comparison,
+(4) re-run the four gates. Nothing already cleared was re-opened.
+
+## Gates — ACTUAL exit codes, run by me on the untouched tree
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | **0** | `dist/ticket.mjs` built |
+| `make unit-test` | **0** | tests 291 / pass 291 / fail 0 / skipped 0 |
+| `make test` | **0** | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | **0** | graph OK scenarios=71 failures=0 (19 whitelisted), query OK, slug OK |
+
+Working tree clean. The implementer's round-3 table is accurate.
+
+## 1. Regression fixed — CONFIRMED byte-wise against pinned bash
+
+Reference = `ticket` with BOTH `TS_COMMANDS` and `TS_DEP_SUBCOMMANDS` emptied. Fixture:
+`aaa` with `deps: [bbb, bbb]`, `bbb → ddd`, plus `ccc → aaa` so the duplicate also sits one
+level down. `diff -u` bash vs `./ticket`, rc 0/0, for all four invocations
+(`dep tree aaa`, `dep tree ccc`, and both with `--full`): **byte-identical**. Default emits
+`├── bbb` once, `--full` emits both. The report's table holds.
+
+## 2. New guards — CONFIRMED non-vacuous by my own mutation
+
+In a throwaway `git archive HEAD` copy (real tree untouched), deleting the guard again:
+
+- `make unit-test` → **rc=2**, 290 pass / 1 fail, the red one being exactly *"prints a
+  duplicated dependency once, keeping the branch connector"*.
+- `make parity` → **rc=2**, `failures=2`, `MISMATCH … check=[dep tree a]` on both
+  `duplicate-dep` and `duplicate-dep-with-subtree`.
+
+## 3. JUDGEMENT CALL — 🚨 the set comparison is TOO BROAD (blocking, harness-only)
+
+Answering the four questions directly: a **missing** row is still caught, **mangled content**
+is still caught, and a row in the **wrong section** is still caught (both sets change, and
+the heading list is still compared in order). Only **multiplicity** is now invisible — and
+that is broader than divergence #8, which is `## Blocking` ONLY.
+
+Measured bash behavior (fixture `tgt` with `deps: [d1, d1, ghost, ghost]`,
+`links: [l1, l1, nolink, nolink]`): bash prints each of those rows **twice** under
+`## Blockers` and `## Linked`, and TS matches today — the only diff is the known
+`## Blocking` row. That duplicate-preserving behavior is now unguarded.
+
+**Concrete input that slips through (executed, not argued):** change
+`src/cli/commands/show.ts:109` to `[...new Set(ids)].map(...)` — a one-line "list each ticket
+once" cleanup, the exact phrasing of #8's own comment. Result: `make unit-test` **rc=0**,
+`make parity` **rc=0, failures=0**. A silent `## Blockers`/`## Linked` divergence from bash
+ships green. The unit tests do not cover it either: the Blockers and Linked tests in
+`test/graph-commands.test.ts` use single-element fixtures.
+
+**Fix — one line, and I verified BOTH directions in the throwaway copy:**
+
+```python
+# in _show_mismatches, replace the unconditional `sorted(set(...))`
+dedupe = (lambda rows: sorted(set(rows))) if heading == "## Blocking" else sorted
+if dedupe(bash_rows) != dedupe(ts_sections[heading]):
+```
+
+- with the `show` dedup mutation ⇒ parity **rc=2**, `MISMATCH … check=[show a (## Blockers
+  rows)]` on both new duplicate-dep scenarios → caught.
+- with clean sources ⇒ parity **rc=0** → no false positive from divergence #8.
+
+The two new fixtures already contain the duplicate `deps` that make this bite; the broad
+dedup is precisely what discards that coverage. Please also narrow the `check_graph.py`
+comment and the `scripts/parity/README.md` #8 wording to say the dedup applies to
+`## Blocking` only.
+
+This is the same failure shape as the round-2 regression — a guard weakened by argument
+rather than by measurement — which is why it is called blocking rather than a suggestion,
+despite being harness-only and cheap.
+
+## Not findings
+
+Shipped behavior is correct and byte-verified; no test or scenario was removed; the round-1
+and round-2 items stay clean.
+
+# FINAL READINESS: **NOT READY**
+
+Blocking list (1 item, harness-only):
+
+1. `scripts/parity/check_graph.py` `_show_mismatches` — restrict the set (dedup) comparison
+   to `## Blocking`; keep the multiset (`sorted`) comparison for `## Blockers`,
+   `## Children`, `## Linked`. Update the adjacent comment and `scripts/parity/README.md`
+   divergence #8 wording to match. Fix verified above in both directions.

@@ -12,8 +12,8 @@ Two commands cannot be byte-compared and are checked semantically instead:
   just pin a bug, so every cycle the TS side reports must be a real closed walk, and no
   cyclic graph may come back empty. bash's bogus cycles are counted and reported.
 * `show` -- bash builds its Blocking and Children sections by iterating an awk associative
-  array, whose order is UNSPECIFIED. The echoed file is byte-compared; the computed
-  sections are compared as sorted row sets.
+  array, whose order is UNSPECIFIED. The echoed file is byte-compared; the section rows are
+  compared as sorted MULTISETS, except `## Blocking` (sorted set -- divergence #8).
 """
 import os
 
@@ -343,6 +343,8 @@ def _check_broken_pipe_exit_code():
 # The computed sections `show` appends after the ticket file itself.
 SHOW_SECTION_HEADINGS = ("## Blockers", "## Blocking", "## Children", "## Linked")
 SHOW_ROW_PREFIX = "- "
+# The one section whose row COUNT diverges (divergence #8); see `_show_mismatches`.
+BLOCKING_HEADING = "## Blocking"
 
 
 def _split_show(out):
@@ -385,12 +387,15 @@ def _show_mismatches(repo, scenario):
             problems.append(("show %s (sections)" % tid, str(list(bash_sections)), str(list(ts_sections))))
             continue
         for heading, bash_rows in bash_sections.items():
-            # Compared as a SET, not a sorted list: repeated identical rows are exactly
-            # whitelisted divergence #8 (bash emits one Blocking row per matching `deps`
-            # ENTRY, TS one per ticket), and the duplicate-dep scenarios would otherwise
-            # fail here. The count difference itself stays pinned by
-            # `_check_show_duplicate_blocking`; a genuinely missing row still fails.
-            if sorted(set(bash_rows)) != sorted(set(ts_sections[heading])):
+            # `## Blocking` ONLY is compared as a SET: repeated identical rows there are
+            # whitelisted divergence #8 (bash emits one row per matching `deps` ENTRY, TS
+            # one per ticket), which the duplicate-dep scenarios would otherwise trip; the
+            # count difference itself stays pinned by `_check_show_duplicate_blocking`.
+            # Every other section is a MULTISET comparison, because `deps`/`links` are not
+            # deduplicated and both sides really do repeat the row -- deduplicating here
+            # hid a `[...new Set(ids)]` regression in `show`'s row rendering (measured).
+            dedupe = (lambda rows: sorted(set(rows))) if heading == BLOCKING_HEADING else sorted
+            if dedupe(bash_rows) != dedupe(ts_sections[heading]):
                 problems.append(
                     ("show %s (%s rows)" % (tid, heading), str(sorted(bash_rows)),
                      str(sorted(ts_sections[heading])))
@@ -451,13 +456,14 @@ def _check_show_duplicate_blocking():
 
     bash appended a row for every `deps` entry naming the target, so a ticket that lists it
     twice was printed twice. Pinned rather than byte-compared, so the day either side changes
-    its mind the harness says so. (The ORDER of these sections is bash's awk hash order and
-    is not pinnable at all -- `_show_mismatches` compares them as sets for that reason.)
+    its mind the harness says so. (The ORDER of this section is bash's awk hash order and is
+    not pinnable at all -- `_show_mismatches` compares `## Blocking` as a set for that
+    reason, and ONLY that section.)
     """
     with TempRepo("parity-show-duplicate-") as repo:
         repo.write_scenario(SHOW_DUPLICATE_SCENARIO)
-        bash_rows = _split_show(repo.bash("show", "tgt"))[1].get("## Blocking", [])
-        ts_rows = _split_show(repo.ts_cli("show", "tgt"))[1].get("## Blocking", [])
+        bash_rows = _split_show(repo.bash("show", "tgt"))[1].get(BLOCKING_HEADING, [])
+        ts_rows = _split_show(repo.ts_cli("show", "tgt"))[1].get(BLOCKING_HEADING, [])
         if len(bash_rows) != EXPECTED_BASH_BLOCKING_ROWS or len(ts_rows) != EXPECTED_TS_BLOCKING_ROWS:
             return False, "show duplicate-blocking divergence changed: bash=%r ts=%r" % (bash_rows, ts_rows)
         return True, "show lists a duplicate dependent once, bash twice (as designed)"

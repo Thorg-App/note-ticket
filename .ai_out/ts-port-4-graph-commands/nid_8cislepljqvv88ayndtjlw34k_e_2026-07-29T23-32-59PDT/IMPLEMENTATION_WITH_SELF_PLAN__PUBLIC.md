@@ -329,3 +329,68 @@ needed removing from the tree. Working tree clean after commit.
 
 **READY.** The regression is fixed and byte-verified against bash, and it is now guarded at
 two levels (unit + parity), both proven by mutation rather than by argument.
+
+---
+
+# Round 4 — the `show` row-comparison dedup, narrowed (harness-only)
+
+The confirmation review was right and my round-3 judgement call was wrong. I loosened
+`_show_mismatches` to compare rows as a SET for all four headings, when only `## Blocking`
+carries divergence #8. `deps` and `links` are never deduplicated and **both** bash and TS
+repeat the row under `## Blockers` / `## Linked`, so that parity had become invisible.
+
+## I confirmed the hole myself before changing the harness
+
+Mutation: `src/cli/commands/show.ts:109` → `[...new Set(ids)].map(...)`, the exact "list each
+ticket once" cleanup #8's own comment invites; `section()` is shared by all four sections.
+
+| State | `make parity` | What it printed |
+|---|---|---|
+| mutation + round-3 harness | **rc=0** | `graph OK scenarios=71 failures=0` — a real `show` regression ships green |
+| mutation + this fix | **rc=2** | `failures=2`; `MISMATCH scenario=[duplicate-dep] check=[show a (## Blockers rows)]`, likewise `duplicate-dep-with-subtree` |
+| clean sources + this fix | **rc=0** | no false positive from divergence #8 |
+
+## The fix
+
+`scripts/parity/check_graph.py::_show_mismatches` picks the comparison per heading:
+
+    dedupe = (lambda rows: sorted(set(rows))) if heading == BLOCKING_HEADING else sorted
+
+`## Blocking` stays a sorted SET (its row COUNT legitimately differs, and that difference is
+still pinned exactly by `_check_show_duplicate_blocking`: bash 2, TS 1). Every other section
+is a sorted MULTISET again, so duplicate rows must match one-for-one. `BLOCKING_HEADING` is a
+new module constant, also replacing the two `"## Blocking"` literals in
+`_check_show_duplicate_blocking`.
+
+Narrowed wording: the `check_graph.py` module docstring, the comment at the comparison,
+`_check_show_duplicate_blocking`'s docstring, and `scripts/parity/README.md` divergence #8 —
+all now say the dedup applies to `## Blocking` only, and #8 records *why* (the measured
+regression) so nobody widens it again. The migration doc does not describe the harness's
+comparison mechanism, so it needed no edit.
+
+## Unit fixture — ADDED, mutation-verified
+
+The reviewer left this to my judgement; I added it rather than relying on parity alone. Six
+lines in `test/graph-commands.test.ts` ("repeats a dependency listed twice under Blockers",
+"repeats a link listed twice under Linked") move the failure to the 2-second gate instead of
+the multi-minute one. Under the same `new Set` mutation: `make unit-test` **rc=2, tests 293,
+pass 291, fail 2**, and the two failures are exactly these tests. Clean: 293/293.
+
+## Verification (actual exit codes)
+
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | **0** | `dist/ticket.mjs` built |
+| `make unit-test` | **0** | tests 293 / pass 293 / fail 0 / skipped 0 (291 before; +2) |
+| `make test` | **0** | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | **0** | graph OK scenarios=71 failures=0 (19 whitelisted); query OK; slug OK |
+
+No shipped behaviour changed: `src/cli/commands/show.ts` and `src/core/dep-graph.ts` are
+byte-identical to the reviewed commit (the mutation was reverted with `git checkout --` and
+re-verified absent before the final run). CHANGELOG.md untouched. Working tree clean.
+
+## Readiness
+
+**READY.** The one blocking item is fixed, and — unlike the two rounds before it — the
+loosened-vs-narrow comparison is settled by measurement in both directions, at two gate
+levels.

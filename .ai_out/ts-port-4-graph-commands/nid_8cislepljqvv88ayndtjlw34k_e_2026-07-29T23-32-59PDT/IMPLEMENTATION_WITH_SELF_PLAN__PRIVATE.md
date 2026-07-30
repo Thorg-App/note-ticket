@@ -234,3 +234,59 @@ tracked). Logs: `.tmp/f_{build,unit,test,parity}.log`, mutation logs
 An unreachability proof about tree layout is only worth what it is measured against. The
 input class was already staring at us — divergence #8 exists *because* duplicate `deps`
 entries are real.
+
+---
+
+## Round 4 — narrow the `show` row dedup in the parity harness (harness-only)
+
+The round-3 judgement call was WRONG in the same shape as round 2: I widened
+`_show_mismatches` to `sorted(set(...))` for ALL FOUR headings by reasoning, when only
+`## Blocking` has the divergence. `deps`/`links` are not deduplicated and BOTH sides repeat
+the row for `## Blockers` / `## Linked`, so multiplicity there is real parity that went
+unguarded.
+
+### Fix
+`scripts/parity/check_graph.py::_show_mismatches`:
+
+    dedupe = (lambda rows: sorted(set(rows))) if heading == BLOCKING_HEADING else sorted
+    if dedupe(bash_rows) != dedupe(ts_sections[heading]):
+
+`BLOCKING_HEADING = "## Blocking"` is a new module constant next to `SHOW_ROW_PREFIX`, also
+used by `_check_show_duplicate_blocking` (it had the literal twice). Comments narrowed in
+the module docstring, at the comparison, in `_check_show_duplicate_blocking`'s docstring, and
+in `scripts/parity/README.md` #8. The migration doc says nothing about the harness's
+comparison mechanism, so it needed no change.
+
+### BOTH mutation directions, reproduced by ME (not taken on trust)
+Mutation = `src/cli/commands/show.ts:109` → `[...new Set(ids)].map(...)` (the plausible
+"list each ticket once" cleanup; `section()` is shared by all four sections).
+
+| State | `make parity` | Evidence |
+|---|---|---|
+| mutation + OLD harness | **rc=0**, `graph OK scenarios=71 failures=0` | the hole, confirmed first |
+| mutation + NEW harness | **rc=2**, `failures=2` | `MISMATCH scenario=[duplicate-dep] check=[show a (## Blockers rows)]` and the same for `duplicate-dep-with-subtree` |
+| clean sources + NEW harness | **rc=0** | no false positive from divergence #8 |
+
+### Unit fixture decision: ADDED (not deferred)
+The reviewer left it optional. Two tests in `test/graph-commands.test.ts`
+("repeats a dependency listed twice under Blockers" / "…link… under Linked") — six lines,
+and they make the regression fail at the fast gate instead of only in the 3-minute parity
+run. Mutation-verified: with the `new Set` mutation `make unit-test` → **rc=2, tests 293,
+pass 291, fail 2**, and the two red ones are exactly the new ones. Clean → 293/293.
+
+### Round-4 verification (actual)
+| Gate | rc | Result |
+|---|---|---|
+| `make build` | 0 | `dist/ticket.mjs` built |
+| `make unit-test` | 0 | tests 293 / pass 293 / fail 0 / skipped 0 (291 before; +2) |
+| `make test` | 0 | 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | 0 | graph OK scenarios=71 failures=0; query OK; slug OK |
+
+Logs: `.tmp/r3_f_{build,unit,test,parity}.log`; mutation logs `.tmp/r3_parity_mutA.log`
+(hole), `.tmp/r3_parity_mutB.log` (caught), `.tmp/r3_unit_mut.log`.
+
+### Lesson (third time, same shape)
+Twice now a guard was widened/removed on an argument and shipped a hole. Rule for this
+repo: **any comparison that is loosened must be accompanied, in the same change, by the
+mutation that proves it still bites.** If the mutation cannot be constructed, the loosening
+is too broad.

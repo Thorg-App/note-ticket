@@ -97,10 +97,13 @@ instead, so the harness still fails if either side changes its mind.
    appends one Blocking row per matching `deps` ENTRY, so a ticket naming the target twice is
    printed twice. TS uses enumeration (path) order and lists each ticket once.
    `check_graph._show_mismatches` therefore byte-compares the echoed FILE and the section
-   HEADINGS in order, but compares the rows within a section as sorted sets — deduplicated,
-   so the `duplicate-dep*` scenarios do not trip it; `_check_show_duplicate_blocking` pins
-   the duplicate-row difference by COUNT. The `Blockers` and
-   `Linked` sections are `deps`/`links` order on both sides.
+   HEADINGS in order, and compares the rows within a section as a sorted MULTISET —
+   except `## Blocking`, the only section with the count divergence, which is compared as a
+   sorted SET so the `duplicate-dep*` scenarios do not trip it; `_check_show_duplicate_blocking`
+   pins that duplicate-row difference by COUNT. Deduplicating every section instead was
+   measured to hide a real `show` regression (a `[...new Set(ids)]` row dedup shipped green),
+   so keep the dedup narrow. The `Blockers` and `Linked` sections are `deps`/`links` order on
+   both sides, duplicate entries included — both sides repeat the row.
    **Approval status:** the ORDER half needs none (bash's order is unspecified, so any
    implementation must pick one). The DUPLICATE-ROW REMOVAL is a deliberate behavior change
    that is **shipped but PENDING HUMAN SIGN-OFF** — ticket `nid_qxt3z5unr9k220aqttbw84a6a_e`
