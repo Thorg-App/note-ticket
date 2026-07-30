@@ -168,9 +168,22 @@ Feature: Ticket Dependencies
     And ticket "task-0003" depends on "task-0002"
     When I run "ticket dep cycle"
     Then the command should succeed
-    And the output should contain "Cycle 1:"
-    And the output should not contain "Cycle 2:"
+    And the output should report exactly 1 dependency cycle
+    And the output should report a dependency cycle with members "task-0002, task-0003"
     And the output should not contain "task-0001"
+
+  # Two cycles sharing task-0002. bash MISSED one of them: the first cycle aborted the DFS,
+  # so the second back edge out of task-0002 was never walked.
+  Scenario: Cycle detection finds both of two overlapping cycles
+    Given ticket "task-0001" depends on "task-0002"
+    And ticket "task-0002" depends on "task-0001"
+    And ticket "task-0002" depends on "task-0003"
+    And ticket "task-0003" depends on "task-0002"
+    When I run "ticket dep cycle"
+    Then the command should succeed
+    And the output should report exactly 2 dependency cycles
+    And the output should report a dependency cycle with members "task-0001, task-0002"
+    And the output should report a dependency cycle with members "task-0002, task-0003"
 
   Scenario: Cycle detection ignores closed tickets
     Given ticket "task-0001" depends on "task-0002"

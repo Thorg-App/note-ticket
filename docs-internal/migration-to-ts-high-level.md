@@ -113,6 +113,10 @@ Verify these while porting — they are contractual even where scenarios are thi
   input trimmed, empty matches nothing) instead of bash's own substring scan, which called a
   full id contained in another id "ambiguous" (whitelisted divergence #9; approved in
   `nid_5g3eta9cf7yi6iukmscxma6wc_e`). bash's `dep tree`-specific error wording is kept.
+- `dep cycle`: bash aborted its DFS at the first cycle and left the entered nodes marked
+  "visiting", so it printed walks that are not cycles and missed real ones. TS records every
+  back edge and dedups by member set (whitelisted divergence #1 — an intentional bug fix,
+  pinned by BDD scenarios for both halves: bogus extra cycle and missed overlapping cycle).
 - `show`: bash's Blocking/Children order is an awk hash order, i.e. unspecified, and it
   printed one Blocking row per matching `deps` entry; TS uses enumeration order and one row
   per ticket (whitelisted divergence #8). The order half needs no approval; the duplicate-row

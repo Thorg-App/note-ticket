@@ -117,6 +117,22 @@ def extract_created_id(stdout):
         return output
 
 
+def parse_reported_cycles(stdout):
+    """Parse `dep cycle` output into a list of member-id sets, one per reported cycle.
+
+    Output shape: `Cycle N: a -> b -> a` followed by one indented row per member
+    (`  <id> [<status>] <title>`), with a blank line between cycles. Comparing member
+    SETS keeps assertions independent of which member a walk happens to start at.
+    """
+    cycles = []
+    for line in stdout.split('\n'):
+        if re.match(r'^Cycle \d+: ', line):
+            cycles.append(set())
+        elif line.startswith('  ') and cycles:
+            cycles[-1].add(line.split()[0])
+    return cycles
+
+
 def _track_created_ticket(context, command, result):
     """Track ticket ID and path from create command JSON output."""
     if 'ticket create' not in command or result.returncode != 0:
@@ -989,6 +1005,23 @@ def step_dep_tree_order(context, first_id, second_id):
     assert second_line != -1, f"'{second_id}' not found in output:\n{output}"
     assert first_line < second_line, \
         f"Expected '{first_id}' (line {first_line + 1}) before '{second_id}' (line {second_line + 1})\nOutput:\n{output}"
+
+
+@then(r'the output should report exactly (?P<count>\d+) dependency cycles?')
+def step_cycle_count(context, count):
+    """Assert `dep cycle` reported exactly this many cycles (no bogus, none missed)."""
+    cycles = parse_reported_cycles(context.stdout)
+    assert len(cycles) == int(count), \
+        f"Expected {count} cycles but got {len(cycles)}\nOutput:\n{context.stdout}"
+
+
+@then(r'the output should report a dependency cycle with members "(?P<members>[^"]+)"')
+def step_cycle_with_members(context, members):
+    """Assert one of the reported cycles has exactly this comma-separated member set."""
+    expected = {member.strip() for member in members.split(',')}
+    cycles = parse_reported_cycles(context.stdout)
+    assert expected in cycles, \
+        f"No reported cycle has members {sorted(expected)}\nReported: {[sorted(c) for c in cycles]}\nOutput:\n{context.stdout}"
 
 
 @then(r'the output should have "(?P<first>[^"]+)" before "(?P<second>[^"]+)"')
