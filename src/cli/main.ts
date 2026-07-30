@@ -146,4 +146,10 @@ class Cli {
 }
 
 BrokenPipe.reportAsSignalDeath();
+// WHY this assignment does not clobber the EPIPE exit code: `Cli.run` is fully SYNCHRONOUS,
+// so a failed stdout write inside it emits its `error` event only after this line has already
+// stored the command's code — the handler then overwrites it with 141, which is the intent.
+// Make any part of `Cli.run` async and that order flips: the handler would fire first and this
+// assignment would silently bury the broken-pipe code. Keep the entrypoint synchronous, or
+// have `run` return the code to write and stop writing `process.exitCode` from two places.
 process.exitCode = Cli.run(process.argv.slice(2));

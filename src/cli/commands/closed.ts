@@ -35,12 +35,14 @@ export class ClosedCommand {
     /**
      * The pure half: already-capped tickets in newest-first order to printable rows.
      *
-     * `--limit` is applied LAST, to the surviving rows — not to the files scanned.
+     * `--limit` is applied LAST, to the surviving rows — not to the files scanned. It is
+     * passed in rather than re-read off `options` so the parse stays where `render` puts it:
+     * before the store is touched.
      */
     static renderTickets(
         recentFirst: readonly Ticket[],
         options: ListOptions,
-        limit: RowLimit = options.rowLimit,
+        limit: RowLimit,
     ): string {
         // `--status` is ignored here, as in bash: `closed` fixes the status set itself.
         const filter = options.filterIgnoringStatus;

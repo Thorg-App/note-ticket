@@ -18,6 +18,10 @@ import parse
 use_step_matcher("re")
 
 
+# features/steps/ticket_steps.py -> features/steps -> features -> repo root
+REPO = Path(__file__).resolve().parent.parent.parent
+
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -616,8 +620,14 @@ def _path_without(binary_name):
     on the real PATH is linked into one scratch dir, minus the one being hidden.
 
     WHY-NOT an env var naming the binary: that is a test-only knob in shipped code.
+
+    WHY $REPO/.tmp and not the system temp dir: the links in the farm have to be
+    EXECUTED, and TMPDIR can be a noexec mount (/dev/shm on this machine).
+    scripts/parity/harness.py places its executable scratch copy there for the same reason.
     """
-    farm = Path(tempfile.mkdtemp(prefix='path-without-%s-' % binary_name))
+    scratch = REPO / '.tmp'
+    scratch.mkdir(parents=True, exist_ok=True)
+    farm = Path(tempfile.mkdtemp(prefix='path-without-%s-' % binary_name, dir=str(scratch)))
     for directory in os.environ.get('PATH', '').split(os.pathsep):
         if not directory or not os.path.isdir(directory):
             continue
