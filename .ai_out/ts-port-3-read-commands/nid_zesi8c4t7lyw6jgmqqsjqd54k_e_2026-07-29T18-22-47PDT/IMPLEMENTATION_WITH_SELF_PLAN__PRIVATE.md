@@ -89,6 +89,23 @@ Second change: the TS side of the `ready`/`blocked` comparison is now the **real
 added. That deleted the duplicated row-format strings from `dump.ts` (they existed only because the CLI
 had no `ready`/`blocked` yet). `dump.ts` keeps `tree`/`cycle`/`query`/`slug`, which the CLI still lacks.
 
+## The divergence my own unit test caught (read this before trusting a shared parser)
+
+I reasoned that one parser for the union of the four flag sets was observationally identical to
+bash's four loops. That is true of *consumption* but NOT of *use*: bash `cmd_ready` and
+`cmd_blocked` have no `--status=` arm at all, so `ready --status=closed` must IGNORE the status.
+My shared `TicketFilter` applied it. The unit test `"ignores --status, as bash does"` failed and
+exposed it; `make parity` did not, because the generated invocations had no `--status` on
+`ready`/`blocked`. Fixes:
+- `TicketFilter.ignoringStatus()` + `ListOptions.filterIgnoringStatus`, used by ready/blocked
+  (and by `closed` in Phase B — `closed` fixes its status to closed|done).
+- `["ready", "--status=closed"]` and `["blocked", "--status=closed"]` added to
+  `check_graph.CLI_INVOCATIONS`, with a comment saying what they exist to catch.
+
+Second harness bug found the same way: `make parity` did not depend on `make build`, so it
+diffed a stale `dist/ticket.mjs` and reported 101 failures for code I had already fixed.
+Makefile now has `parity: build`.
+
 ## Rejected approaches
 
 - Adding an env override for `TS_COMMANDS` in `./ticket` so the harness could disable it: production code
