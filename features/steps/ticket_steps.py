@@ -126,7 +126,7 @@ class ReportedCycle:
 
 
 def parse_reported_cycles(stdout):
-    """Parse `dep cycle` output into a list of member-id sets, one per reported cycle.
+    """Parse `dep cycle` output into a list of `ReportedCycle`s (number + member ids).
 
     Output shape: `Cycle N: a -> b -> a` followed by one indented row per member
     (`  <id> [<status>] <title>`), with a blank line between cycles. Comparing member

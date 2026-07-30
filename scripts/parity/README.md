@@ -52,7 +52,7 @@ instead, so the harness still fails if either side changes its mind.
    closed walk, and no cyclic graph may come back empty. T4 flipped `dep cycle` to TS and
    BDD scenarios in `features/ticket_dependencies.feature` now pin the TS behavior on both
    halves of the bug — the points-into-a-cycle shape (exactly one cycle, no bogus second) and
-   two overlapping cycles (both found). The whitelist stays until T6, because until then
+   three cycles overlapping in one ticket (all 3 found). The whitelist stays until T6, because until then
    there is still a buggy bash implementation on the other side of the diff.
 2. **A `.md` under `_tickets/` with no `id`** — bash silently skips it; the TS core
    fails naming the file (`nid_n6eavbm0h77twvna8k9nnpu2g_e`, an intentional behavior

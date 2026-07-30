@@ -1,130 +1,126 @@
 # IMPLEMENTATION REVIEW — dep cycle BDD scenarios (nid_fba92yfczp71jjcprn4ufmory_e)
 
-## Summary
+Round 1 reviewed `b0f7f1b`. Round 2 (this pass) reviews the iteration `aea4c27`
+(`git diff b0f7f1b..HEAD`). Round-1 findings are kept below with their resolution status.
 
-Commit `b0f7f1b` adds a BDD-level pin for the fixed `dep cycle` algorithm: one strengthened
-scenario (points-into-a-cycle ⇒ exactly one cycle) and one new scenario (two overlapping
-cycles ⇒ both found), backed by a `parse_reported_cycles()` helper and two `@then` steps that
-compare member-id SETS; plus one new unit test, one unit fixture reorder, and two doc edits.
+## Round 2 — confirmation pass
 
-All three acceptance criteria are met. I re-ran everything and rebuilt the mutation proof
-myself rather than trusting the report:
+### Green state, re-run by me
 
-- `make test` → exit 0 (`12 features, 215 scenarios, 1433 steps, 0 failed`) — `.tmp/rev-make-test.log`
-- `make parity` → exit 0 (graph/query/slug OK; whitelisted `bash bogus cycles=19`) — `.tmp/rev-parity.log`
-- Independent mutation of `CycleFinder.visit` to bash's abort-on-first-cycle in a throwaway
-  `.tmp/` copy: **3 unit tests fail and both target scenarios fail** (`Expected 1 cycles but
-  got 2`, `Expected 2 cycles but got 1`). The implementation's mutation report is accurate and
-  honest, including its self-reported vacuity catch.
+- `make test` → exit 0: `12 features, 215 scenarios, 1440 steps, 0 failed` (`.tmp/rev2-make-test.log`)
+- `make parity` → exit 0: `graph OK scenarios=71 failures=0 (whitelisted: bash bogus cycles=19)`,
+  `query OK`, `slug OK` (`.tmp/rev2-parity.log`) — the whitelisted bogus-cycle count is unchanged.
 
-Assessment: good, substantive test work with a genuine (self-found) vacuity fix. Two real
-test-strength gaps found with fresh eyes, both cheap to close, neither blocking.
+### Independent mutation matrix (my own mutant, fresh copy of HEAD in `.tmp/rev2-mutant`)
 
-## 🚨 CRITICAL Issues
+| mutation | unit | the 5 cycle scenarios |
+|---|---|---|
+| clean | pass | 5 passed |
+| `bash-abort` (DFS aborts on first cycle, stack never unwound) | fail 3 | **2 failed** (`Expected 1 cycles but got 3`, `Expected 3 cycles but got 2`) |
+| `no-dedup` (drop the `seen` guard) | **fail 1** — exactly `reports a cycle once when a duplicated dep walks the same back edge twice` | 5 passed |
+| `numbering` (renderer always emits `Cycle 1:`) | pass | **1 failed** (`Expected cycles numbered [1, 2, 3] but got [1, 1, 1]`) |
 
-None. No security surface, no functionality or use-case-focused test removed. The two deleted
-assertions (`contain "Cycle 1:"`, `not contain "Cycle 2:"`) were replaced by strictly stronger
-ones, and the `Cycle 1:` literal format is still pinned by
-`features/ticket_dependencies.feature:158` and `features/nested_folders.feature:167`.
+Every claim in the implementation's report reproduces. Nothing was taken on faith.
 
-## ⚠️ IMPORTANT Issues
+### `order_check.py` — audited, not trusted
 
-### 1. Both new BDD scenarios are non-vacuous only by accident of slug ordering — undocumented
+Read in full. It is a genuine check, not a proxy:
 
-**Claim.** The discriminating power of BOTH scenarios depends on `_tickets/` enumeration order
-(`another-task.md, dependency-task.md, main-task.md`, i.e. task-0003 first). A future,
-unrelated rename of a Background title silently turns both scenarios back into passing-against-
-the-bug tests. This is precisely the failure mode the repo's memory documents (`fixture named
-aaa-newer.md let a path tie-break supply the expected answer`).
+- It really varies enumeration order: files are written as `0.md`..`3.md` in permutation order, so
+  the byte-wise path sort the ticket store relies on yields exactly the requested order. All 24
+  permutations per shape.
+- It really drives the shipped CLI (`<root>/ticket dep cycle` with `TICKETS_DIR`), not a helper.
+- It really applies the scenarios' own assertions: cycle COUNT, each expected MEMBER SET, and the
+  `should not contain <id>` clauses. (It re-implements the small parser instead of importing the
+  step helper and does not check cycle numbering — acceptable for a throwaway script, and numbering
+  is covered by the step itself.)
 
-**Evidence.** I rebuilt both graph shapes with filenames making ticket-1 enumerate first and
-ran them against the bash-abort mutant:
+I re-ran it against a bash-abort mutant **I built myself**, and against clean HEAD:
 
 ```
-=== points-into-cycle, entry at t1 [MUTANT] ===   Cycle 1: t2 -> t3 -> t2        (correct → scenario PASSES against the bug)
-=== overlapping 1<->2,2<->3, entry at t1 [MUTANT] ===
-Cycle 1: t1 -> t2 -> t1
-Cycle 2: t2 -> t3 -> t2                            (both correct → scenario PASSES against the bug)
+scenario-assertion failures: 48 / 48   (bash-abort mutant)
+scenario-assertion failures:  0 / 48   (clean)
 ```
 
-The unit tests do NOT have this problem — their order is explicit in the fixture literal and
-carries WHY comments (`test/dep-graph.test.ts`, the `c, b, a` ordering). Only the feature file
-is silently order-dependent.
+### Is IMPORTANT 1 structurally closed? Yes.
 
-**Suggested fix (pick one).**
-- Cheap: a WHY comment on the two scenarios stating that the Background titles' slug order puts
-  `task-0003` first, which is what makes the shape discriminate, so renaming those titles
-  weakens the scenario. (`features/ticket_dependencies.feature`, around lines 162 and 177.)
-- Robust (preferred, still small): make the shapes discriminate at EVERY entry order.
-  - points-into-a-cycle: add a second in-pointer, `And ticket "task-0004" depends on "task-0003"`
-    — verified, the mutant then emits a bogus `Cycle 2: t3 -> t4 -> t3` even entering at t1.
-  - overlapping: use a three-way overlap (`task-0001↔task-0002`, `task-0002↔task-0003`,
-    `task-0002↔task-0004`) — verified, the mutant then emits a wrong 3-member cycle
-    `t2 -> t3 -> t4 -> t2` instead of `{task-0002, task-0004}` at the t1 entry order.
+Not just the 24/24 numbers — the shapes are robust by construction:
 
-### 2. The "each cycle reported once" dedup is entirely untested — a plausible mutation survives the full suite
+- **Two in-pointers** (`1→2`, `2↔3`, `4→3`): the buggy DFS stops at the first back edge and never
+  unwinds, so everything it entered stays `on-stack`. Tickets 1 and 4 are unreachable from each
+  other and from the cycle, so a single DFS root can consume at most ONE of them; the other is still
+  unvisited when `find()` continues, is entered, walks into an `on-stack` node and records a cycle
+  naming an in-pointer. That argument never mentions enumeration order, so no rename or slug change
+  can weaken it.
+- **Three-way overlap** (hub `task-0002` with `1↔2`, `2↔3`, `2↔4`): the abort walks only one of the
+  hub's three back edges; each leaf entered afterwards either yields a member set polluted by the
+  un-unwound stack or collapses into an already-seen set, so either the count or one member-set
+  assertion fails in every order. The three leaves are structurally interchangeable, so reordering
+  the `Given` lines (i.e. the hub's `deps` order) cannot weaken it either.
 
-**Claim.** `CycleFinder.record`'s `seen` guard (dedup by normalized member set) — the behavior
-the README and CHANGELOG advertise as "each reported once" — is not covered by any unit test,
-any scenario, or the parity harness.
+The only way to lose the property is to DELETE an in-pointer or an overlap arm — and the feature file
+now carries WHY comments saying exactly that. That is the right mitigation.
 
-**Evidence.** Mutation `no-dedup` (delete the `if (!this.seen.has(key))` guard): **all 294 unit
-tests and all cycle scenarios still pass.** The guard is nevertheless load-bearing on a live
-input class (hand-edited duplicate `deps`, the same class that already produced a shipped
-`dep tree` regression). With `a deps [b]`, `b deps [a, a]`:
+### The "BDD is the wrong layer for the dedup test" rationale — ACCEPTED
 
-```
-CLEAN                       NO-DEDUP MUTANT
-Cycle 1: aaa -> bbb -> aaa  Cycle 1: aaa -> bbb -> aaa
-                            Cycle 2: aaa -> bbb -> aaa   <- same cycle twice
-```
+`tk dep` is idempotent (`Dependency already exists`), so no sequence of CLI commands can produce
+`deps: [a, a]`. The only producer is a hand-edited file, and "`depsOf()` returns `deps` verbatim" is
+a `src/core/` data-model property — the same layer and the same reasoning as the existing
+`TreeLayout` duplicate-dep guard. A BDD scenario would need a new step that writes raw frontmatter
+to fabricate a state no user path reaches: more machinery, no additional coverage of anything
+user-reachable. The unit test is the correct 80/20 layer, and it is demonstrably non-vacuous — it is
+the *only* thing that fails under `no-dedup`.
 
-Note the pre-existing test `reports a cycle once however many entry points reach it` does NOT
-exercise dedup — the `done` marking means a second entry point never re-records; only a
-duplicated `deps` entry does.
+### Count-of-0 rejection — safe, nothing weakened
 
-**Suggested fix.** One unit test in `test/dep-graph.test.ts`:
-`graphOf([{ id: "a", deps: ["b"] }, { id: "b", deps: ["a", "a"] }]).cycles()` ⇒ one cycle
-`["a","b"]`, with a WHY comment tying it to `depsOf()` returning `deps` verbatim (mirroring the
-existing `TreeLayout` duplicate-dep comment). Cheaper and stronger than a BDD scenario, since
-`tk dep` is idempotent and cannot create the duplicate.
+`grep` over `features/` shows the step is used only with 1 and 3
+(`ticket_dependencies.feature:180,202`). Both legitimate no-cycle arms (`:151`, `:213`) assert
+`the output should be "No dependency cycles found"`, which is strictly stronger than a count of 0 and
+is untouched by this diff. The guard is a step-usage assertion that fails loudly if a future author
+reaches for `exactly 0`.
 
-## 💡 Suggestions
+### New in this diff
 
-1. **`parse_reported_cycles()` is robust enough, with two known blind spots.** It is not
-   silently swallowing anything material: a header that stops matching `^Cycle \d+: ` yields
-   count 0 and a loud failure, empty output yields 0, the blank separator is truly empty so it
-   cannot be mistaken for a member row, and member rows are keyed off the 2-space indent. Blind
-   spots worth closing while it is cheap:
-   - Cycle NUMBERING is unpinned: mutating the renderer to always print `Cycle 1:` survives the
-     whole suite. Capturing the digits and asserting they are `1..N` in `step_cycle_count` makes
-     the step strictly stronger for ~2 lines.
-   - `the output should report exactly 0 dependency cycles` would pass on completely empty
-     output (missing `No dependency cycles found`). No scenario uses 0 today; either reject 0 in
-     the step or keep using `the output should be "No dependency cycles found"` for that arm.
-2. **BDD convention:** GIVEN/WHEN/THEN shape is correct and the scenario titles match what they
-   assert. The overlapping scenario carries three assertions (count + two member sets), which is
-   the right trade here — one-assert-per-test would need three near-duplicate scenarios; no
-   change requested.
-3. `test/dep-graph.test.ts` fixture reorder is fine and NOT brittle: `graphOf` documents that
-   spec order is enumeration order, the order is visible in the literal, and both tests now
-   carry WHY comments explaining why the order is the discriminating one. Good.
+1. **`parse_reported_cycles()` docstring is now stale** (`features/steps/ticket_steps.py:126`): it
+   still says "Parse `dep cycle` output into a list of member-id sets", but it returns
+   `ReportedCycle` objects (number + members). One-line fix; worth doing because that docstring is
+   the contract for two step functions.
+2. **`scripts/parity/README.md:55` is now stale**: it still says the pinned half is "two overlapping
+   cycles (both found)" — the scenario became a three-way overlap (`Cycle detection finds every
+   cycle overlapping in one ticket`, asserting 3 cycles). One word to fix ("three overlapping
+   cycles (all found)"). `docs-internal/migration-to-ts-high-level.md:119` is still accurate.
+
+Neither is blocking; both are trivial and should be swept up rather than left to rot.
+
+Nothing else new. `ReportedCycle` as a small named class rather than a tuple matches the repo's
+"no `Pair`/`Triple`" rule; the scenario titles match what they assert; no pre-existing scenario or
+assertion was removed or weakened anywhere in the diff.
+
+## Round 1 findings — resolution status
+
+| # | Finding | Status |
+|---|---|---|
+| CRITICAL | none | — |
+| IMPORTANT 1 | Both new BDD scenarios were non-vacuous only by accident of slug ordering (verified: under a bash-abort mutant with ticket-1 enumerated first, both scenarios PASSED against the bug) | **CLOSED** — robust shapes adopted (two in-pointers / three-way overlap), verified structurally and 48/48 by mutation over all orderings, with WHY comments |
+| IMPORTANT 2 | "each cycle reported once" dedup guard untested; the `no-dedup` mutation survived the whole suite (`b deps [a, a]` printed the same cycle twice) | **CLOSED** — the new unit test is the exact and only failure under that mutation |
+| Suggestion | `Cycle N:` numbering unpinned (renderer always emitting `Cycle 1:` survived the suite) | **CLOSED** — `step_cycle_count` asserts `1..N`; mutation now caught |
+| Suggestion | `exactly 0 dependency cycles` would pass on empty output | **CLOSED** — 0 is rejected with a message pointing at the right step |
+| Suggestion | unit fixture reorder was NOT brittle (order explicit in the literal + WHY comments) | unchanged, still fine |
+
+Round-1 verification for the record: `make test` exit 0 (215 scenarios), `make parity` exit 0, and
+the bash-abort mutation reproduced 3 unit + 2 scenario failures — the implementation's original
+mutation report was honest, including its self-reported vacuity catch.
 
 ## Documentation Updates Needed
 
-None blocking. Both doc edits are accurate and succinct:
-- `scripts/parity/README.md` §1 correctly states both pinned halves and correctly keeps the
-  whitelist until T6 (a buggy bash implementation is still on the other side of the diff) — the
-  reasoning is sound.
-- `docs-internal/migration-to-ts-high-level.md` bullet matches the code and the
-  `DepCycleCommand.render` divergence comment.
-- CHANGELOG needed nothing: `dep cycle now reports every cycle exactly once` already exists
-  under Unreleased/Fixed (line 29).
+Only the two stale strings listed under "New in this diff" (`parse_reported_cycles` docstring,
+`scripts/parity/README.md:55`). CHANGELOG needs nothing — `dep cycle now reports every cycle exactly
+once` is already under Unreleased/Fixed. No CLAUDE.md change required.
 
 ## Verdict
 
-**READY.** All three ACs are met, the state is genuinely green, and the mutation proof holds up
-under independent reproduction. The two IMPORTANT items are test-strength hardening, not defects
-in the shipped behavior — either fold them into a short follow-up pass on this ticket (both are
-a handful of lines) or file one `ticket` for them; do not let #2 (dedup untested) be dropped
-silently, given this repo's history with exactly that input class.
+**READY.** All three round-1 items are genuinely closed — verified by independent mutation and by
+structural reasoning, not by trusting the report. `make test` and `make parity` are green here, and
+the order-independence proof holds when run against a mutant I built myself (48/48). The two stale
+doc strings are the only outstanding items and are one-liners; fix them on the way out rather than
+opening a follow-up ticket.

@@ -1,5 +1,43 @@
 # PRIVATE — IMPLEMENTATION_REVIEWER notes (nid_fba92yfczp71jjcprn4ufmory_e)
 
+## Round 2 (confirmation pass on `aea4c27`) — appended 2026-07-30
+
+Re-ran everything myself; verdict READY, all three round-1 items closed.
+
+- `make test` exit 0 (215 scenarios, 1440 steps) `.tmp/rev2-make-test.log`; `make parity` exit 0,
+  `bash bogus cycles=19` unchanged `.tmp/rev2-parity.log`.
+- Fresh mutant of HEAD in `.tmp/rev2-mutant` via `.tmp/rev-mutate.py` (repointed to rev2-mutant),
+  logs kept in `.tmp/rev2-mutant/log-*.txt`:
+  - `bash-abort` → 3 unit fails + both target scenarios (`Expected 1 got 3`, `Expected 3 got 2`)
+  - `no-dedup` → EXACTLY one unit failure, the new duplicate-dep test (my IMPORTANT 2 closed)
+  - `numbering` → 1 scenario fails on `Expected cycles numbered [1, 2, 3] but got [1, 1, 1]`
+  - TRAP I hit: my first rerun captured `DG_ORIG` from an already-mutated tree, so "clean"
+    restored the mutant. Recreated the copy from HEAD before trusting any row.
+- Read `order_check.py` line by line: permutes filenames `0.md`..`3.md` (real enumeration-order
+  variation), drives `<root>/ticket dep cycle` (real CLI), asserts count + each member set + the
+  `not contain` ids — i.e. the scenarios' own assertions, not a proxy. Ran it against a mutant I
+  built MYSELF: 48/48 failures; clean 0/48. Logs `.tmp/rev2-ordercheck-{mutant,clean}.log`.
+  It does NOT check numbering — fine, the step does.
+- Structural argument (independent of the 24/24 numbers) for why IMPORTANT 1 is really closed:
+  two in-pointers unreachable from each other means one DFS root can consume at most one, so the
+  other always gets entered after the abort → bogus cycle in EVERY order; three-way overlap leaves
+  the hub's remaining back edges unwalked in every order and pollutes member sets via the
+  un-unwound stack. Neither argument mentions file names, so renames cannot un-discriminate.
+- Accepted the BDD-is-wrong-layer rationale for the dedup test: `tk dep` is idempotent, duplicate
+  deps only come from hand-edited files, and that is a `src/core/` property (same as the
+  `TreeLayout` duplicate-dep guard).
+- Count-0 rejection: only 1 and 3 are used in features; both no-cycle arms assert the exact
+  `No dependency cycles found` text. Nothing weakened.
+- NEW (non-blocking, reported): `parse_reported_cycles()` docstring still says "list of member-id
+  sets" though it returns `ReportedCycle`; `scripts/parity/README.md:55` still says "two
+  overlapping cycles (both found)" though the scenario is now a three-way overlap.
+- Cleanup pending at write time: `.tmp/rev2-mutant` removed at end; `git status` clean; no source
+  modified; `order-check-work/` scratch dir removed from OUT_DIR.
+
+---
+
+## Round 1 (on `b0f7f1b`)
+
 ## What I did (independent verification, nothing taken on faith)
 
 1. Read commit `b0f7f1b` in full (`git diff b3914fe..HEAD`), plus `src/core/dep-graph.ts`,
