@@ -161,16 +161,48 @@ Feature: Ticket Dependencies
 
   # A ticket that merely POINTS INTO a cycle is not part of one. The bash implementation
   # aborted its DFS at the first cycle and left the nodes it had entered marked "visiting",
-  # so a later traversal through task-0001 reported it as a second, non-existent cycle.
+  # so a later traversal through an in-pointer reported it as a second, non-existent cycle.
+  #
+  # WHY TWO in-pointers (task-0001 and task-0004): with a single one, whether the buggy
+  # algorithm walks into a node left "visiting" depends on which ticket file is enumerated
+  # first — so an unrelated rename of a Background title could quietly turn this scenario into
+  # one that passes against the bug. With one in-pointer at each end of the cycle, EVERY
+  # enumeration order leaves an in-pointer to be entered after the abort (verified by mutation
+  # over all 24 orderings).
   Scenario: Cycle detection does not report a ticket that only points into a cycle
-    Given ticket "task-0001" depends on "task-0002"
+    Given a ticket exists with ID "task-0004" and title "Fourth task"
+    And ticket "task-0001" depends on "task-0002"
     And ticket "task-0002" depends on "task-0003"
     And ticket "task-0003" depends on "task-0002"
+    And ticket "task-0004" depends on "task-0003"
     When I run "ticket dep cycle"
     Then the command should succeed
-    And the output should contain "Cycle 1:"
-    And the output should not contain "Cycle 2:"
+    And the output should report exactly 1 dependency cycle
+    And the output should report a dependency cycle with members "task-0002, task-0003"
     And the output should not contain "task-0001"
+    And the output should not contain "task-0004"
+
+  # Three cycles sharing task-0002. bash MISSED cycles here: the first cycle aborted the DFS,
+  # so task-0002's remaining back edges were never walked.
+  #
+  # WHY THREE overlapping cycles rather than two: with two, the abort still happens to leave
+  # the right answer behind for some enumeration orders. Three make the buggy algorithm wrong
+  # in every order — either a cycle is missing or a member set is polluted by the stack it
+  # failed to unwind (verified by mutation over all 24 orderings).
+  Scenario: Cycle detection finds every cycle overlapping in one ticket
+    Given a ticket exists with ID "task-0004" and title "Fourth task"
+    And ticket "task-0001" depends on "task-0002"
+    And ticket "task-0002" depends on "task-0001"
+    And ticket "task-0002" depends on "task-0003"
+    And ticket "task-0003" depends on "task-0002"
+    And ticket "task-0002" depends on "task-0004"
+    And ticket "task-0004" depends on "task-0002"
+    When I run "ticket dep cycle"
+    Then the command should succeed
+    And the output should report exactly 3 dependency cycles
+    And the output should report a dependency cycle with members "task-0001, task-0002"
+    And the output should report a dependency cycle with members "task-0002, task-0003"
+    And the output should report a dependency cycle with members "task-0002, task-0004"
 
   Scenario: Cycle detection ignores closed tickets
     Given ticket "task-0001" depends on "task-0002"

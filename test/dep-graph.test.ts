@@ -224,6 +224,17 @@ describe("DepGraph.cycles", () => {
         assert.equal(cycles.length, 1);
     });
 
+    /**
+     * `depsOf()` returns `deps` VERBATIM, never deduped, so a hand-edited `deps: [a, a]` walks
+     * the same back edge twice. Only the member-set dedup in `record` stops the cycle from
+     * being reported twice — a second ENTRY POINT cannot exercise it, because the `done`
+     * marking already prevents re-recording.
+     */
+    it("reports a cycle once when a duplicated dep walks the same back edge twice", () => {
+        const cycles = graphOf([{ id: "a", deps: ["b"] }, { id: "b", deps: ["a", "a"] }]).cycles();
+        assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"]]);
+    });
+
     it("reports one cycle regardless of which member is reached first", () => {
         const cycles = graphOf([
             { id: "z", deps: ["y"] },
@@ -242,13 +253,34 @@ describe("DepGraph.cycles", () => {
         assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"], ["c", "d"]]);
     });
 
+    /**
+     * The two cycles SHARE `b`, so bash's abort-on-first-cycle never walked b's second back
+     * edge and missed a real cycle.
+     *
+     * WHY the graph is listed c, b, a: the walk must ENTER at `c` and record the {a,b} cycle
+     * first. Entering at `a` instead makes the aborting algorithm reach {b,c} anyway, through
+     * the stack it failed to unwind — verified by mutation, that spelling of the test passes
+     * against the bug.
+     */
+    it("finds both of two cycles overlapping in one ticket", () => {
+        const cycles = graphOf([
+            { id: "c", deps: ["b"] },
+            { id: "b", deps: ["a", "c"] },
+            { id: "a", deps: ["b"] },
+        ]).cycles();
+        assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["a", "b"], ["b", "c"]]);
+    });
+
     // WHY this case: the bash DFS aborted on the first cycle and left nodes marked
     // "visiting", so a later traversal into one of them reported a non-cycle.
+    // WHY `a` is listed LAST: it must be entered AFTER the {b,c} cycle has been found, which
+    // is what made bash walk into a node still marked "visiting". Listing it first makes even
+    // the aborting algorithm answer correctly — verified by mutation.
     it("does not invent a cycle for a node that merely points into a real cycle", () => {
         const cycles = graphOf([
-            { id: "a", deps: ["b"] },
-            { id: "b", deps: ["c"] },
             { id: "c", deps: ["b"] },
+            { id: "b", deps: ["c"] },
+            { id: "a", deps: ["b"] },
         ]).cycles();
         assert.deepEqual(cycles.map((cycle) => cycle.memberIds), [["b", "c"]]);
     });

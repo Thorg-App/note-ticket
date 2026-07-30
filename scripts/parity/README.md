@@ -50,7 +50,9 @@ instead, so the harness still fails if either side changes its mind.
    cycles over the default scenario set). Diffing bytes would pin a bug, so both sides
    are checked semantically instead: every cycle the TS core reports must be a real
    closed walk, and no cyclic graph may come back empty. T4 flipped `dep cycle` to TS and
-   BDD scenarios now pin the TS behavior; the whitelist stays until T6, because until then
+   BDD scenarios in `features/ticket_dependencies.feature` now pin the TS behavior on both
+   halves of the bug — the points-into-a-cycle shape (exactly one cycle, no bogus second) and
+   three cycles overlapping in one ticket (all 3 found). The whitelist stays until T6, because until then
    there is still a buggy bash implementation on the other side of the diff.
 2. **A `.md` under `_tickets/` with no `id`** — bash silently skips it; the TS core
    fails naming the file (`nid_n6eavbm0h77twvna8k9nnpu2g_e`, an intentional behavior
