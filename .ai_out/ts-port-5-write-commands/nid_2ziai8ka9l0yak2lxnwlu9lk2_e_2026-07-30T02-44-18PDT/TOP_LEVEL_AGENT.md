@@ -152,7 +152,26 @@ Code-modifying agents run SERIALLY.
       coverage. SF#2: CHANGELOG TS-port bullet is factually wrong, must be REWRITTEN (TOP's job).
 - [x] PHASE_C iteration spawned (SF#1 + nits; SF#2 explicitly reserved for TOP)
 
-## ⚠ TOP's remaining obligations before closing
+- [x] PHASE_C iteration DONE: SF#1 incorporated — the predecessor's M6 row mutated
+      `Editor.configured` (the chooser), NOT the spawn site where the risk lives. Two new tests
+      drive the REAL spawnSync (`/bin/touch` on a backdated file ⇒ child got the resolved path;
+      `/bin/true --flag` ⇒ exit 127 ⇒ whole string looked up as one filename). Both of the
+      reviewer's survivors now die, each killing exactly one test, no collateral.
+      Rejected spawn-injection (moves the seam rather than closing it) and the recorder-script
+      alternative (measured: os.tmpdir() is /dev/shm, noexec). Corrected the 3 over-claims.
+      NIT#3 rejected (direct process.env is the house pattern), NIT#4 fixed, NIT#5 filed as
+      nid_xioefs6t2rcs1gyl2mpcb1oyf_e, NIT#6 deferred by mutual agreement.
+- [x] PHASE_C gates re-verified BY TOP: typecheck/test/parity rc=0; 247 scenarios 0 failed;
+      parity graph 71 | query OK | slug 13 | write 136/0.
+- [x] PHASE_C COMMITTED → 712c151
+- [x] CHANGELOG TS-port bullet REWRITTEN (not appended) + write-command behavior changes added.
+- [x] Ticket nid_2ziai8ka9l0yak2lxnwlu9lk2_e CLOSED with a resolution note
+      (closed using the newly ported TS `add-note` + `close` — a live smoke test).
+- [x] Single change_log entry written: rp3wk35bh7o9fn74m4s2j05mi
+
+## DONE — flow complete
+
+## ⚠ Superseded: TOP's obligations (all discharged)
 1. Rewrite (NOT append to) the factually-wrong CHANGELOG TS-port bullet + add the single flow
    entry. Phase B and Phase C PUBLIC.md each carry verbatim replacement text — use both.
 2. Close ticket nid_2ziai8ka9l0yak2lxnwlu9lk2_e with a resolution.
