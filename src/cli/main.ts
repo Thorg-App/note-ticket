@@ -8,11 +8,14 @@ import { ClosedCommand } from "./commands/closed.js";
 import { CreateCommand } from "./commands/create.js";
 import { DepCommand } from "./commands/dep.js";
 import { HelpCommand } from "./commands/help.js";
+import { LinkCommand } from "./commands/link.js";
 import { LsCommand } from "./commands/ls.js";
 import { QueryCommand } from "./commands/query.js";
 import { ReadyCommand } from "./commands/ready.js";
 import { ShowCommand } from "./commands/show.js";
 import { STATUS_WRAPPERS, StatusCommand, type StatusWrapper } from "./commands/status.js";
+import { UndepCommand } from "./commands/undep.js";
+import { UnlinkCommand } from "./commands/unlink.js";
 import { ExitCode } from "./exit-codes.js";
 import { ListOptions } from "./list-options.js";
 import { StoreResolver } from "./store-resolver.js";
@@ -66,10 +69,10 @@ class Cli {
                 // Not Cli.read: `query` may hand its output to jq and exit with jq's code,
                 // so it owns its own writing.
                 return QueryCommand.run(StoreResolver.forReadCommand(), args);
-            // Only the read-only `tree`/`cycle` subcommands reach us; bash still serves
-            // `dep <id> <dep-id>`, which is a write. See TS_DEP_SUBCOMMANDS in ./ticket.
+            // One resolution serves all three `dep` forms: `dep <id> <dep-id>` writes while
+            // `tree`/`cycle` only read, but bash applies the identical rule to every form.
             case "dep":
-                return DepCommand.run(StoreResolver.forReadCommand(), args);
+                return DepCommand.run(StoreResolver.forWriteCommand(), args);
             // Write commands. `create` is the only one allowed to create the tickets
             // directory (bash WRITE_COMMANDS); the rest require an existing one.
             case "create":
@@ -82,6 +85,12 @@ class Cli {
                 return Cli.setStatus(args, environment, STATUS_WRAPPERS.close);
             case "reopen":
                 return Cli.setStatus(args, environment, STATUS_WRAPPERS.reopen);
+            case "undep":
+                return UndepCommand.run(StoreResolver.forWriteCommand(), args);
+            case "link":
+                return LinkCommand.run(StoreResolver.forWriteCommand(), args);
+            case "unlink":
+                return UnlinkCommand.run(StoreResolver.forWriteCommand(), args);
             case "show":
                 // Not Cli.read: `show` takes an id rather than list filters, and may hand its
                 // output to a pager and exit with the pager's code.

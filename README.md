@@ -37,6 +37,17 @@ once (`Cycle 1: a -> b -> a` plus one row per member), and prints
 `No dependency cycles found` when there is none. A ticket that merely points INTO a cycle
 is not part of one and is not listed.
 
+`dep <id> <dependency-id>`, `undep`, `link <id> <id> [id...]` and `unlink` treat `deps` and
+`links` as arrays of whole ids: `undep`/`unlink` remove exactly the id you name and never a
+similar-looking neighbour, and a ticket that has no `deps:`/`links:` field yet gains one.
+`link` is symmetric — every named ticket gains every other one — so it counts one link per
+side (2 tickets = 2 links, 3 tickets = 6), appends new ids in the order you named them, and
+counts a repeated id once, and refuses an argument list in which every id turns out to be the
+same ticket, because a link to itself is data nothing can act on. A self-*dependency* is
+recorded, by contrast: `tk dep a a` is a graph error `dep cycle` reports. `undep` prints `Dependency not found` and `unlink` prints
+`Link not found` on stdout, with exit 1, when there was nothing to remove; `unlink` decides
+that from the FIRST ticket's links and then clears both sides.
+
 `show <id>` prints the ticket file as it is on disk — with the parent's title appended to
 the `parent:` line — followed by the sections `## Blockers` (dependencies that are not
 closed), `## Blocking` (non-closed tickets that depend on this one), `## Children`

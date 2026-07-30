@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Differential parity for the WRITE commands: `create`, `status`/`start`/`close`/`reopen`.
+"""Differential parity for the WRITE commands: `create`, the `status` family, `dep`/`undep`
+and `link`/`unlink`.
 
 Every other check in this harness reads: the fixtures are written by Python and only the
 printed output is compared. A write command's real contract is the FILE BYTES it leaves
@@ -144,6 +145,37 @@ ALL_OPTIONS = ["create", "Full", "-d", "desc", "--design", "dsn", "--acceptance"
                "--tags", "a,b , c"]
 
 
+def _with(fixtures, relative, content):
+    """`fixtures` with one file replaced -- BASE stays the single description of the rest."""
+    return dict(fixtures, **{relative: content})
+
+
+# Hand-written ids where one is a SUBSTRING of another. Generated ids are all 29 bytes, so
+# only a hand-edited (or legacy) repo can reach bash's substring matching -- and this repo's
+# own `_tickets/` used exactly such ids before the `nid_` scheme.
+SUBSTRING_IDS = {
+    "_tickets/one.md": _fixture("t-1", "One", ["deps: [t-11]", "links: []"]),
+    "_tickets/eleven.md": _fixture("t-11", "Eleven", ["deps: []", "links: []"]),
+    "_tickets/nine.md": _fixture("t-9", "Nine", ["deps: [t-1, t-111]", "links: []"]),
+    "_tickets/hundred.md": _fixture("t-111", "Hundred", ["deps: []", "links: []"]),
+}
+
+# Three tickets already linked in a chain: a-b and b-c exist, a-c does not. WHY this shape:
+# `link a b c` then appends at most ONE id per file, which is the only multi-ticket case
+# whose result is order-independent and therefore comparable at all (see DIVERGENCE #18).
+LINK_CHAIN = {
+    "_tickets/one.md": _fixture("t-1", "One", ["deps: []", "links: [t-2]"]),
+    "_tickets/two.md": _fixture("t-2", "Two", ["deps: []", "links: [t-1, t-3]"]),
+    "_tickets/three.md": _fixture("t-3", "Three", ["deps: []", "links: [t-2]"]),
+}
+
+# A link recorded on ONE side only -- the state bash's `unlink` can leave behind.
+HALF_LINK = {
+    "_tickets/one.md": _fixture("t-1", "One", ["deps: []", "links: [t-2]"]),
+    "_tickets/two.md": _fixture("t-2", "Two", ["deps: []", "links: []"]),
+}
+
+
 class Case:
     """One command sequence run on both sides. `diverges` inverts the expectation."""
 
@@ -226,6 +258,56 @@ CASES = [
     Case("close ambiguous id", [["close", "nid_"]], BASE),
     Case("close id with surrounding whitespace", [["close", "  aaaaa  "]], BASE),
     Case("close with no tickets directory", [["close", "x"]]),
+    # --- dep / undep ---------------------------------------------------------------------
+    Case("dep add", [["dep", "aaaaa", "ccccc"]], BASE),
+    Case("dep add twice", [["dep", "aaaaa", "ccccc"], ["dep", "aaaaa", "ccccc"]], BASE),
+    Case("dep add a second dependency",
+         [["dep", "aaaaa", "ccccc"], ["dep", "aaaaa", "eeeee"]], BASE),
+    Case("dep on itself is allowed", [["dep", "aaaaa", "aaaaa"]], BASE),
+    Case("dep partial ids are reported expanded", [["dep", "aaaaa", "ccccc"]], BASE),
+    Case("dep exact id beats partial", [["dep", ALPHA_ID, GAMMA_ID]], BASE),
+    Case("dep id with surrounding whitespace", [["dep", "  aaaaa  ", "ccccc"]], BASE),
+    Case("dep rewrites a nested ticket in place", [["dep", "ccccc", "aaaaa"], ["ls"]], BASE),
+    Case("dep no args", [["dep"]], BASE),
+    Case("dep one arg", [["dep", "aaaaa"]], BASE),
+    Case("dep unknown subject", [["dep", "zzz", "aaaaa"], ["query"]], BASE),
+    Case("dep unknown dependency", [["dep", "aaaaa", "zzz"], ["query"]], BASE),
+    Case("dep ambiguous dependency", [["dep", "aaaaa", "nid_"], ["query"]], BASE),
+    Case("dep with no tickets directory", [["dep", "a", "b"]]),
+    Case("undep the only dependency",
+         [["dep", "aaaaa", "ccccc"], ["undep", "aaaaa", "ccccc"]], BASE),
+    Case("undep the first of two",
+         [["dep", "aaaaa", "ccccc"], ["dep", "aaaaa", "eeeee"], ["undep", "aaaaa", "ccccc"]],
+         BASE),
+    Case("undep the last of two",
+         [["dep", "aaaaa", "ccccc"], ["dep", "aaaaa", "eeeee"], ["undep", "aaaaa", "eeeee"]],
+         BASE),
+    Case("undep a dependency that is not there", [["undep", "aaaaa", "ccccc"]], BASE),
+    Case("undep no args", [["undep"]], BASE),
+    Case("undep one arg", [["undep", "aaaaa"]], BASE),
+    Case("undep unknown dependency", [["undep", "aaaaa", "zzz"]], BASE),
+    # --- link / unlink --------------------------------------------------------------------
+    Case("link two tickets", [["link", "aaaaa", "ccccc"]], BASE),
+    Case("link two tickets twice", [["link", "aaaaa", "ccccc"], ["link", "aaaaa", "ccccc"]],
+         BASE),
+    Case("link three tickets, one new pairing each", [["link", "t-1", "t-2", "t-3"]],
+         LINK_CHAIN),
+    Case("link no args", [["link"]], BASE),
+    Case("link one arg", [["link", "aaaaa"]], BASE),
+    Case("link aborts on an unresolvable id without mutating",
+         [["link", "aaaaa", "zzz"], ["query"]], BASE),
+    Case("link aborts on an unresolvable FIRST id", [["link", "zzz", "aaaaa"], ["query"]],
+         BASE),
+    Case("unlink what link created", [["link", "aaaaa", "ccccc"], ["unlink", "aaaaa", "ccccc"]],
+         BASE),
+    Case("unlink a link the subject alone records", [["unlink", "t-1", "t-2"]], HALF_LINK),
+    Case("unlink a link only the TARGET records", [["unlink", "t-2", "t-1"]], HALF_LINK),
+    Case("unlink a link that is not there", [["unlink", "aaaaa", "ccccc"]], BASE),
+    Case("unlink a ticket with no links field", [["unlink", "bbbbb", "aaaaa"]], BASE),
+    Case("unlink itself", [["unlink", "aaaaa", "aaaaa"]], BASE),
+    Case("unlink no args", [["unlink"]], BASE),
+    Case("unlink one arg", [["unlink", "aaaaa"]], BASE),
+    Case("unlink unknown target", [["unlink", "aaaaa", "zzz"]], BASE),
     # --- declared divergences (README.md "Whitelisted divergences") ----------------------
     # #10: bash dies with the shell's own `$2: unbound variable`.
     Case("DIVERGENCE #10 value flag ends the argument list", [["create", "x", "--design"]],
@@ -241,6 +323,44 @@ CASES = [
     Case("DIVERGENCE #5 tab in title", [["create", "tab\there"]], diverges=True),
     # #9: awk's `index(s, "")` is 1, so bash's empty id matched a ticket.
     Case("DIVERGENCE #9 empty id", [["close", ""]], BASE, diverges=True),
+    # #13: bash tested membership with `grep` and removed with `sed`, i.e. on the array TEXT.
+    # `t-11` is not among t-9's deps, but it OCCURS inside the recorded `t-111`.
+    Case("DIVERGENCE #13 dep whose id is a substring of a recorded one",
+         [["dep", "t-9", "t-11"]], SUBSTRING_IDS, diverges=True),
+    Case("DIVERGENCE #13 undep mangles a sibling id it is a substring of",
+         [["undep", "t-9", "t-1"]], SUBSTRING_IDS, diverges=True),
+    Case("DIVERGENCE #13 array text is re-serialized canonically",
+         [["dep", "aaaaa", "eeeee"]],
+         _with(BASE, "_tickets/alpha.md",
+               BASE["_tickets/alpha.md"].replace("deps: []", "deps: [%s,%s]" % (GAMMA_ID,
+                                                                               ALPHA_ID))),
+         diverges=True),
+    # #14: `yaml_field`'s grep finds nothing, and the failing pipeline trips `set -e`, so
+    # bash exits 1 having printed NOTHING at all.
+    Case("DIVERGENCE #14 dep on a ticket with no deps field", [["dep", "bbbbb", "aaaaa"]],
+         BASE, diverges=True),
+    Case("DIVERGENCE #14 undep on a ticket with no deps field", [["undep", "bbbbb", "aaaaa"]],
+         BASE, diverges=True),
+    # #15: bash's awk only ever REWROTE an existing `links:` line, so a ticket without one
+    # gained no link and contributed 0 to the count.
+    Case("DIVERGENCE #15 link a ticket with no links field", [["link", "aaaaa", "bbbbb"]],
+         BASE, diverges=True),
+    # #16: bash's `/^links:/` and `s/^deps:.*/` are not confined to the frontmatter block.
+    Case("DIVERGENCE #16 link with a links: line in the BODY", [["link", "aaaaa", "ccccc"]],
+         _with(BASE, "_tickets/alpha.md",
+               BASE["_tickets/alpha.md"].replace("Body.", "links: [ghost]\ntail")),
+         diverges=True),
+    Case("DIVERGENCE #16 dep with a deps: line in the BODY", [["dep", "aaaaa", "ccccc"]],
+         _with(BASE, "_tickets/alpha.md",
+               BASE["_tickets/alpha.md"].replace("Body.", "deps: [ghost]\ntail")),
+         diverges=True),
+    # #17: bash treated a repeated id as another ticket and linked it to itself.
+    Case("DIVERGENCE #17 link a ticket to itself", [["link", "aaaaa", "aaaaa"]], BASE,
+         diverges=True),
+    # DIVERGENCE #18 (link append ORDER) has no case on purpose: bash appends in awk's hash
+    # order, which is unspecified and differs between awk builds, so neither "agrees" nor
+    # "diverges" is a stable expectation here. TS's argument order is pinned by a unit test,
+    # and the only multi-ticket case above is the one where each file gains a single id.
 ]
 
 

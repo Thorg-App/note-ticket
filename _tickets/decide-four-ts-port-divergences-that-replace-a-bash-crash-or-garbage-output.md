@@ -1,6 +1,6 @@
 ---
 id: nid_r3mp6uylht7t77iwxtuqvhxv2_e
-title: "Decide: four TS-port divergences that replace a bash crash or garbage output"
+title: "Decide: TS-port divergences that replace a bash crash, garbage output or useless data"
 status: open
 deps: []
 links: []
@@ -11,6 +11,9 @@ priority: 2
 assignee: CC_WITH-nickolaykondratyev
 tags: [decide, ts-port]
 ---
+
+(A fifth item, #17, was appended as a note at the bottom after this ticket was written; it is a
+judgement call rather than a crash fix, and it needs a decision of its own.)
 
 The TS port of the CLI (docs-internal/migration-to-ts-high-level.md) has four declared divergences from bash that all belong to ONE class: bash either crashed with a shell-level message or wrote garbage, and the TS port does something sane instead. They shipped without human sign-off because each looked individually harmless; bundled here so one decision covers all four.
 
@@ -34,5 +37,25 @@ If approved, the README entries stay as documentation of what bash did (they are
 
 ## Acceptance Criteria
 
-Human records approve/reject per item (#6, #10, #11, #12) in a comment on this ticket, and any rejected item gets a follow-up implementation ticket.
+Human records approve/reject per item (#6, #10, #11, #12, and #17 in the appended note) in a comment on this ticket, and any rejected item gets a follow-up implementation ticket.
 
+
+## Notes
+
+**2026-07-30T12:41:08Z**
+
+#17 `tk link a a` (an argument list that names one ticket twice, so the whole set collapses to a single ticket).
+
+bash: recorded the ticket in its OWN `links` and printed `Added 1 link(s) between 2 tickets`.
+TS: refuses the command with a NEW message, `Error: nothing to link: every id resolves to ticket <id>`, exit 1, nothing written.
+
+This one is NOT in the same class as #6/#10/#11/#12 above: bash neither crashed nor wrote garbage, it did something merely useless. It is therefore a genuine judgement call, and it invents a user-visible error string.
+
+Consequence of the asymmetry you are being asked to accept: `tk dep a a` is UNCHANGED and still records a ticket as its own dependency (bash parity, verified). The reasoning: a `deps` self-edge is part of a graph the tool reasons about, so `dep cycle` reports it and `ready`/`blocked` act on it -- more useful to the user than a refusal at write time. A `links` entry carries no graph semantics, so a self-link is inert data no reader can act on. If you disagree, the two commands should be made to agree.
+
+Options:
+  (a) APPROVE as shipped: `link` refuses a collapsing set, `dep` records a self-dependency. WHY comments in src/cli/commands/link.ts and dep.ts already state this rationale; nothing to do.
+  (b) Revert `link` to bash behavior: drop the de-duplication in `LinkCommand.resolve` (~6 lines), delete whitelist divergence #17 and the two scenarios in features/ticket_links.feature. Also re-legitimises `tk link a a b` reporting `Added 3 link(s) between 3 tickets`.
+  (c) Extend the refusal to `dep`: `tk dep a a` would also fail, a SECOND new error string and a change to a command whose bash behavior is currently reproduced exactly.
+
+Pinned by: one `diverges=True` case in scripts/parity/check_write.py, and the scenarios "Linking a ticket to itself is refused" and "A repeated id is counted once when other tickets remain".

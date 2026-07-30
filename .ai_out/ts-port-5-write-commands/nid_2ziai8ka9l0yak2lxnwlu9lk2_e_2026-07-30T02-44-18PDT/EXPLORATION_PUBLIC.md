@@ -192,6 +192,7 @@ Consequences the TS port must be aware of:
 - Append: `[]` ⇒ `update_yaml_field deps "[$dep_id]"`; else `sed "s/\]/, $dep_id]/"` (inserts before the FIRST `]`) then update (`:802-808`).
 - stdout on success: `Added dependency: <full id of subject> -> <full dep id>` (`:810`).
 - **Bug to decide on:** a ticket with **no** `deps:` field yields `current_deps=""`, which is not `[]`, so `sed` on the empty string produces `""` and `update_yaml_field` writes a bare `deps: ` line. TS should write `deps: [<id>]`; flag as a fix + BDD scenario.
+  > **CORRECTION (Phase B, re-measured against pinned bash and independently confirmed by the Phase B reviewer):** bash writes **no** bare `deps: ` line. `current_deps=$(yaml_field …)` is a `sed|grep|sed` pipeline whose `grep` matches nothing, and under `set -euo pipefail` that failing pipeline aborts the function immediately: **exit 1, nothing printed on either stream, nothing written**. Same for `undep`. The accurate contract is whitelist divergence #14 in `scripts/parity/README.md`. Phase C: read that, not this bullet.
 
 `undep`:
 - <2 args ⇒ stderr `Usage: ticket undep <id> <dependency-id>`, exit 1 (`:1120-1123`).

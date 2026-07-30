@@ -753,8 +753,9 @@ cmd_dep_cycle() {
 }
 
 cmd_dep() {
-    # Read-only subcommands already ported to TypeScript (see TS_DEP_SUBCOMMANDS). The
-    # default `dep <id> <dependency-id>` form is a write and stays bash until T5.
+    # Unreachable since `dep` joined TS_COMMANDS: the top-level check delegates every form,
+    # including `dep <id> <dependency-id>`. Kept, like the rest of cmd_dep, so that removing
+    # `dep` from TS_COMMANDS is still a complete rollback (deleted at the T6 cutover).
     if _ts_serves "$TS_DEP_SUBCOMMANDS" "${1:-}"; then
         _exec_ts dep "$@"
     fi
@@ -1597,11 +1598,12 @@ EOF
 # TypeScript delegation (strangler-fig port; see docs-internal/migration-to-ts-high-level.md).
 # Commands listed here are served by the TS bundle. Removing a name from the list
 # instantly rolls that command back to the bash implementation below.
-TS_COMMANDS="help --help -h ls list ready blocked closed query show create status start close reopen"
+TS_COMMANDS="help --help -h ls list ready blocked closed query show create status start close reopen dep undep link unlink"
 
-# `dep` cannot be flipped as a whole: `dep tree` / `dep cycle` are read-only and ported,
-# while its default form `dep <id> <dependency-id>` is a WRITE still served by bash (T5).
-# cmd_dep consults this list for its first argument; emptying it rolls both back.
+# Every `dep` form is now served through TS_COMMANDS above, so cmd_dep's own delegation
+# never runs. This list is KEPT until the T6 cutover for two reasons: emptying it is half of
+# rolling `dep` back to bash, and scripts/parity/harness.py requires exactly one assignment
+# per delegation variable and fails loudly if either disappears.
 TS_DEP_SUBCOMMANDS="tree cycle"
 
 if _ts_serves "$TS_COMMANDS" "${1:-help}"; then

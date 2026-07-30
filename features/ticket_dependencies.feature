@@ -43,6 +43,58 @@ Feature: Ticket Dependencies
     Then the command should fail
     And the output should contain "Error: ticket 'nonexistent' not found"
 
+  # Ids are matched as whole array ELEMENTS. The bash implementation asked `grep` of the raw
+  # `deps:` text, so an id that merely occurred inside another one counted as present and a
+  # removal cut it out of the middle of its neighbour.
+  Scenario: A dependency id that only occurs inside a recorded id is still added
+    Given a ticket exists with ID "sub-1" and title "Sub one"
+    And a ticket exists with ID "sub-11" and title "Sub eleven"
+    And ticket "task-0001" depends on "sub-11"
+    When I run "ticket dep task-0001 sub-1"
+    Then the command should succeed
+    And the output should be "Added dependency: task-0001 -> sub-1"
+    And ticket "task-0001" should have field "deps" with value "[sub-11, sub-1]"
+
+  Scenario: Removing a dependency leaves a sibling id that contains it intact
+    Given a ticket exists with ID "sub-1" and title "Sub one"
+    And a ticket exists with ID "sub-11" and title "Sub eleven"
+    And ticket "task-0001" depends on "sub-1"
+    And ticket "task-0001" depends on "sub-11"
+    When I run "ticket undep task-0001 sub-1"
+    Then the command should succeed
+    And ticket "task-0001" should have field "deps" with value "[sub-11]"
+
+  Scenario: Adding a dependency to a ticket with no deps field creates the array
+    Given a raw ticket file "bare.md" exists with content
+      """
+      ---
+      id: bare-0001
+      title: "Bare ticket"
+      status: open
+      ---
+
+      Body.
+      """
+    When I run "ticket dep bare-0001 task-0002"
+    Then the command should succeed
+    And the output should be "Added dependency: bare-0001 -> task-0002"
+    And ticket "bare-0001" should have field "deps" with value "[task-0002]"
+
+  Scenario: Removing a dependency from a ticket with no deps field reports it as missing
+    Given a raw ticket file "bare.md" exists with content
+      """
+      ---
+      id: bare-0001
+      title: "Bare ticket"
+      status: open
+      ---
+
+      Body.
+      """
+    When I run "ticket undep bare-0001 task-0002"
+    Then the command should fail
+    And the output should be "Dependency not found"
+
   Scenario: View dependency tree
     Given ticket "task-0001" depends on "task-0002"
     And ticket "task-0002" depends on "task-0003"

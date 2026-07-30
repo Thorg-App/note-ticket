@@ -67,17 +67,25 @@ developer's or CI's global config.
 
 A case may declare `diverges=True`, which INVERTS the expectation: the two sides must differ,
 and the check fails loudly if they ever agree again. That is how the write-command entries of
-the whitelist below (#5, #9, #10, #11, #12) are pinned rather than merely described.
+the whitelist below (#5, #9, #10, #11, #12, #13, #14, #15, #16, #17) are pinned rather than
+merely described.
 
-Still not diffed: `dep <id> <dep-id>`, `undep`, `link`, `unlink`, `add-note` and `edit` —
-phases B and C of T5. Adding one is a `Case(...)` entry in `CASES`; nothing else.
+Still not diffed: `add-note` and `edit` — phase C of T5. Adding one is a `Case(...)` entry in
+`CASES`; nothing else.
 
 **A green run of this check only proves the LISTED cases agree.** Mutation-tested with 8
-breakages of the TS write path (`closed_iso` never written, a new frontmatter field appended
-instead of prepended, tags not re-spaced, the git-config assignee default dropped, `--parent`
-not expanded, `Updated <typed id>`, `.trim()` on git's output, slug collisions ignored) —
-all 8 turn the check red. Extend `CASES` when a fix depends on an input shape that is not
-there yet; that lesson was learned the expensive way with `dep tree` and duplicate `deps`.
+breakages of the `create`/`status` path (`closed_iso` never written, a new frontmatter field
+appended instead of prepended, tags not re-spaced, the git-config assignee default dropped,
+`--parent` not expanded, `Updated <typed id>`, `.trim()` on git's output, slug collisions
+ignored) and with 18 of the `dep`/`undep`/`link`/`unlink` path (table in
+`.ai_out/ts-port-5-write-commands/**/IMPLEMENTATION_PHASE_B__PUBLIC.md`) — all turn a gate
+red. Extend `CASES` when a fix depends on an input shape that is not there yet; that lesson
+was learned the expensive way with `dep tree` and duplicate `deps`.
+
+One shape is deliberately absent: `link a b c` on three UNLINKED tickets. bash appends the
+missing ids with awk's `for (id in need)`, i.e. in hash order, so the result is neither
+reliably equal to nor reliably different from TS's argument order (see #18). The multi-ticket
+case that IS compared is the one where every file gains exactly one id.
 
 ## Whitelisted divergences
 
@@ -185,6 +193,59 @@ instead, so the harness still fails if either side changes its mind.
    `Is a directory` at exit 1. TS's `TicketStore.topLevelFileExists` asks whether the NAME is
    taken at all, picks `<slug>-1.md` and succeeds. Pinned by `check_write`
    (`DIVERGENCE #12 …`) and commented on `topLevelFileExists`.
+
+13. **`deps` and `links` are id ARRAYS, not text** — bash tested membership with
+   `echo "$deps" | grep -q "$id"` and removed with `sed "s/, *$id//g; s/$id, *//g; s/$id//g"`,
+   i.e. on the raw array text. So an id that merely OCCURS inside a recorded one counted as
+   already present (`dep` refused to add it, `undep`/`unlink` claimed to find it), and a
+   removal cut the text out of the middle of its neighbour: `[t-1, t-111]` minus `t-1` became
+   `[11]`, silently destroying a dependency and inventing a dangling one. The id was also a
+   `grep`/`sed` REGEX, so a `.` in it matched any character. TS compares and removes whole
+   array elements and re-serializes the array canonically (`[a, b]`), which additionally
+   normalizes hand-written spacing. A NON-array scalar value is normalized the same way — TS
+   reads `deps: foo` as the single element `foo` and writes `deps: [foo, <id>]`, where bash
+   printed `Added dependency: …` and changed nothing at all, because its insert was
+   `sed "s/\]/, $dep_id]/"` and a scalar has no `]` to append before (measured). Reachable with hand-written or legacy ids — this repo's
+   own tickets used `task-0001`-style ids before the fixed-length `nid_` scheme. Pinned by
+   three `check_write` cases and by BDD scenarios in `ticket_dependencies.feature` /
+   `ticket_links.feature`.
+14. **`dep`/`undep` on a ticket with no `deps:` field** — bash read the field through
+   `yaml_field`, whose `grep` finds nothing, and that failing pipeline aborted the command
+   under `set -euo pipefail`: exit 1, no message on either stream, nothing written. TS treats
+   a missing field as an empty relation, so `dep` creates `deps: [<id>]` (as the first
+   frontmatter entry, where bash's own insert would have put it) and `undep` prints
+   `Dependency not found` with exit 1. Two `check_write` cases and two BDD scenarios.
+15. **`link` on a ticket with no `links:` field** — bash's awk only ever REWROTE an existing
+   `^links:` line, so such a ticket gained no link at all, contributed 0 to the count, and
+   `tk link a b` could report the flatly misleading `All links already exist`. TS creates the
+   field. One `check_write` case, one BDD scenario.
+16. **`link`/`dep`/`undep` edits are confined to the frontmatter block** — bash's awk matched
+   `/^links:/` and its `sed` matched `^deps:` ANYWHERE in the file, so a `links:`/`deps:` line
+   in the BODY (a note, a fenced example) was rewritten too, and for `link` even counted:
+   a body line made `tk link a b` report 3 added links instead of 2. Two `check_write` cases —
+   both `diverges=True`, which asserts only that the two sides DIFFER and can therefore never
+   pin what TS does; the TS side is pinned by the `ticket_links.feature` scenario "A links line
+   in the body is neither counted nor rewritten" (count stays 2, the body line stays
+   `links: [ghost]`). Kept honest by mutation: making the frontmatter block swallow the body
+   fails that scenario and only that scenario.
+17. **`link` with an argument list naming one ticket twice** — bash treated the repeat as
+   another ticket to link, so `tk link a a` recorded `a` in its own `links` and reported
+   `Added 1 link(s) between 2 tickets`. TS collapses arguments that resolve to the same
+   ticket and refuses a set that collapses to one, with
+   `Error: nothing to link: every id resolves to ticket <id>` at exit 1. A repeat that does NOT
+   collapse the set changes the reported counts instead of failing: `tk link a a b` is
+   `Added 2 link(s) between 2 tickets` here and was `Added 3 link(s) between 3 tickets` in bash.
+   One `check_write` case, two BDD scenarios (the refusal and the count).
+   WHY only `link` and not `dep`: a `links` entry has no graph semantics, so a ticket linked to
+   itself is inert data; a `deps` self-edge is a real graph error that `dep cycle` reports, so
+   `tk dep a a` is still recorded exactly as bash recorded it. Awaiting human sign-off on
+   ticket `nid_r3mp6uylht7t77iwxtuqvhxv2_e`.
+18. **The ORDER in which `link` appends missing ids** — bash appended them with awk's
+   `for (id in need)`, whose order is unspecified and differs between awk builds (measured
+   `[c, b]` for `link a b c` under this machine's awk). TS appends in the order the user named
+   the tickets. Not pinnable by the harness in either direction, for exactly that reason; the
+   TS order is pinned by a unit test on `LinkClosure` and by a BDD scenario asserting the
+   whole `links` value.
 
 Because of #3, `harness.HOSTILE_TITLES` — the titles every generated scenario cycles
 through so the byte-compare sees `"`, `\`, `:`, `[]`, non-ASCII and a trailing space —

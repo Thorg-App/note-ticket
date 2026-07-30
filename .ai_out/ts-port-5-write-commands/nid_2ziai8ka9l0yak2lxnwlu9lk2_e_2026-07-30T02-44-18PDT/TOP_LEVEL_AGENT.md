@@ -50,5 +50,44 @@ Code-modifying agents run SERIALLY.
       "13/13 mutations caught" table is untrustworthy. Applies to ALL later phases.
       ★ Reviewer BUILT the write-command differential harness the project lacks (diffs stdout/
       stderr/rc + every byte under _tickets/, ids+timestamps neutralised). Phases B/C need it.
-- [x] PHASE_A iteration spawned (fresh role instance; asked to promote the write-parity harness
-      into scripts/parity/ if clean, and to re-verify with unmasked exit codes)
+- [x] PHASE_A iteration DONE: 6 findings incorporated, 1 rejected on scope (CHANGELOG = TOP's job).
+      6/6 mutations caught with unmasked rc. I5 treated as a BUG not a doc fix (Git.output now
+      strips trailing newlines only, as `$( )` does). Divergences #11/#12 declared.
+      ★ Write-parity harness PROMOTED: `scripts/parity/check_write.py`, a 4th `make parity` row
+      (63 cases, transcript + every byte under _tickets/, `diverges=True` inverts the expectation
+      for declared divergences). Mutation-proven non-vacuous 8/8. Phases B/C extend it with one
+      `Case(...)` per command.
+- [x] PHASE_A gates re-verified BY TOP independently: typecheck/unit/test/parity all rc=0;
+      229 BDD scenarios 0 failed; parity graph 71 | query | slug 13 | write 63.
+- [x] PHASE_A COMMITTED → 6a5a349
+- [x] PHASE_B impl spawned (dep write form + finish dep dispatch, undep, link, unlink)
+      Warned: TS_DEP_SUBCOMMANDS= assignment must survive (harness.py), `_ts_serves` -n guard,
+      add_link_to_file is dead code, never pipe test cmds through tail (masks rc),
+      continue divergence numbering from #13.
+- [x] PHASE_B impl DONE (uncommitted): dep write form + `dep` flipped WHOLE into TS_COMMANDS
+      (TS_DEP_SUBCOMMANDS= assignment kept, with a comment on the harness coupling), undep,
+      link, unlink. New core class `src/core/ticket-relations.ts` owns add/remove/membership
+      for both id arrays (Phase C can reuse).
+      ⚠ EXPLORATION_PUBLIC.md §3.4 was WRONG: dep/undep on a ticket with no `deps:` field does
+      NOT write a bare `deps: ` line — bash exits 1 printing nothing (failing `yaml_field`
+      pipeline under `set -euo pipefail`). Phase B found this by probing pinned bash.
+      Divergences #13–#18 declared; #17 (`tk link a a` now refused) flagged for the human.
+      check_write.py 63 → 109 cases. Claims 18/18 mutations caught, unmasked rc;
+      typecheck 0, unit 365/365, behave 237 scenarios 0 failed, parity write 109/0.
+      Honest caveat reported: an inverted (diverges=True) parity case can NEVER pin the TS side
+      of a divergence → each divergence also needs a positive unit/BDD pin. Review must check this.
+- [x] PHASE_B review DONE: **READY, 0 BLOCKING**, 3 SHOULD-FIX + 4 NITs.
+      Reviewer independently reproduced all 4 gates, probed 51 hostile pinned-bash shapes,
+      ran 21 own mutations (20 killed; 1 survivor verified a semantically equivalent mutant).
+      CONFIRMED Phase B's contested finding: EXPLORATION §3.4 is WRONG about the bare `deps: `
+      line. No undeclared divergences. Shim intact (`-n "$2"` guard proven by running the
+      emptied-list copy with a bare `dep`).
+      SHOULD-FIX: (S1) divergence #16 has NO positive TS-side pin — both its parity cases are
+      `diverges=True`, which cannot pin TS; (S2) divergence #17 `tk link a a` refused is
+      user-visible, has no `decide` ticket, and is inconsistent with `tk dep a a` which still
+      records a self-dependency; (S3) CHANGELOG still says `dep <id> <dep-id>` stays bash — TOP's job.
+- [x] PHASE_B iteration spawned (S1+S2; S3 explicitly reserved for TOP)
+
+## ⚠ TOP's own outstanding obligation
+CHANGELOG.md currently claims `dep <id> <dep-id>` stays bash. MUST be corrected in the final
+single CHANGELOG entry for this flow. Phase B's PUBLIC.md will carry the verbatim correction.

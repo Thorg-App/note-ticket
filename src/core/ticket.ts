@@ -80,16 +80,27 @@ export class Ticket {
         return this.frontmatter.getString(TicketField.STATUS) ?? "";
     }
 
+    /**
+     * The inline id array under `key`, empty when the field is absent.
+     *
+     * WHY public: `TicketRelation` addresses `deps`/`links` by field name and MUST read them
+     * exactly as the accessors below do — two expressions of "an id array of this ticket"
+     * would drift the moment either side started normalizing.
+     */
+    arrayField(key: string): readonly string[] {
+        return this.frontmatter.getArray(key);
+    }
+
     get deps(): readonly string[] {
-        return this.frontmatter.getArray(TicketField.DEPS);
+        return this.arrayField(TicketField.DEPS);
     }
 
     get links(): readonly string[] {
-        return this.frontmatter.getArray(TicketField.LINKS);
+        return this.arrayField(TicketField.LINKS);
     }
 
     get tags(): readonly string[] {
-        return this.frontmatter.getArray(TicketField.TAGS);
+        return this.arrayField(TicketField.TAGS);
     }
 
     /** Raw priority text, defaulted — kept a string because it is echoed verbatim. */

@@ -125,8 +125,27 @@ Verify these while porting — they are contractual even where scenarios are thi
   removal is shipped but PENDING human sign-off in `nid_qxt3z5unr9k220aqttbw84a6a_e` — the
   closed decision ticket covers #9 only.
 - `dep` is ONE command name whose `tree`/`cycle` subcommands are reads and whose default form
-  is a write, so it is NOT in `TS_COMMANDS`: bash `cmd_dep` delegates those two branches via
-  a second list, `TS_DEP_SUBCOMMANDS`. The parity harness must empty BOTH lists.
+  is a write. T4 delegated the two read branches from inside bash `cmd_dep` via a second list,
+  `TS_DEP_SUBCOMMANDS`; T5 phase B put `dep` itself in `TS_COMMANDS`, which makes that inner
+  delegation unreachable. `TS_DEP_SUBCOMMANDS=` stays until T6 anyway: `scripts/parity/
+  harness.py` requires exactly one assignment per delegation variable and must keep emptying
+  BOTH lists, and emptying it is half of rolling `dep` back to bash.
+- `deps`/`links` are id ARRAYS. bash tested membership with `grep` and removed with `sed` over
+  the array TEXT, so a substring id read as present and a removal mangled the sibling it was
+  contained in (`[t-1, t-111]` minus `t-1` became `[11]`); TS matches and removes whole
+  elements (whitelisted divergence #13). A ticket with no `deps:`/`links:` field aborted bash
+  silently (`yaml_field`'s failing pipeline under `set -e`) or was quietly skipped by `link`'s
+  awk; TS creates the field (divergences #14, #15). bash's `^links:`/`^deps:` patterns also hit
+  the BODY; TS edits only the frontmatter block (#16).
+- `link` de-duplicates its arguments by resolved id and refuses a set that collapses to one
+  ticket, where bash's `link a a` linked a ticket to itself (#17); appended ids follow the
+  order the user named them, where bash used awk's unspecified hash order (#18).
+  `tk dep a a` deliberately stays bash-compatible (a self-dependency IS recorded): a `deps`
+  self-edge is a graph error `dep cycle` already reports, while a self-`link` is inert data.
+  Both halves of that judgement are on the `decide` ticket `nid_r3mp6uylht7t77iwxtuqvhxv2_e`.
+- `unlink` decides whether the link exists from the SUBJECT's `links` alone, then clears both
+  sides — a half link recorded only by the target reports `Link not found`. That is bash's
+  behavior and is kept.
 - `ready`/`blocked`: unknown dep IDs count as not-closed (blocking).
 - `ready`/`blocked`: bash packs its sort key as `prio|id|status|title`, so it TRUNCATES a
   title at the first `|`. Do NOT reproduce that; the TS row prints the title whole
