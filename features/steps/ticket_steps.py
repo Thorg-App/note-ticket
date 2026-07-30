@@ -5,6 +5,7 @@ import os
 import re
 import signal
 import subprocess
+import time
 from pathlib import Path
 
 from behave import given, when, then, register_type, use_step_matcher
@@ -320,6 +321,33 @@ def step_raw_ticket_file(context, filename):
     path = Path(context.test_dir) / '_tickets' / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(context.text + '\n')
+
+
+@given(r'ticket "(?P<ticket_id>[^"]+)" was modified (?P<seconds>\d+) seconds ago')
+def step_ticket_modified_seconds_ago(context, ticket_id, seconds):
+    """Pin a ticket file's mtime. `closed` orders by it, and files created microseconds
+    apart in a test would otherwise make the expected order a coin flip."""
+    path = find_ticket_file(context, ticket_id)
+    when = time.time() - int(seconds)
+    os.utime(path, (when, when))
+
+
+@given(r'ticket "(?P<ticket_id>[^"]+)" has a tab character in its title')
+def step_ticket_title_has_tab(context, ticket_id):
+    """Put a raw TAB inside the quoted title, which `create` happily writes.
+
+    A control character inside a JSON string must be escaped; bash's `query` emitted it raw
+    and produced JSONL that jq itself refuses to parse.
+    """
+    path = find_ticket_file(context, ticket_id)
+    lines = path.read_text().split('\n')
+    for index, line in enumerate(lines):
+        if line.startswith('title:'):
+            lines[index] = 'title: "tab\there"'
+            break
+    else:
+        raise AssertionError(f"no title line in {path}")
+    path.write_text('\n'.join(lines))
 
 
 @given(r'the test root is not a git repository')

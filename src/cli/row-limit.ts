@@ -10,13 +10,15 @@ const WHOLE_NUMBER = /^[0-9]+$/;
  *
  * DIVERGENCE (deliberate): bash hands the raw text to `head -n "$limit"`, which also accepts
  * `+N`, size suffixes (`--limit=2k` means 2048) and negative values meaning "all but the last
- * N", and which makes `--limit=0` exit **141** because `head` closes the pipe and `awk` dies of
- * SIGPIPE. All of those are accidents of the implementation rather than an interface anyone
- * would design, so only a plain decimal count is accepted here:
- *   - `--limit=0` prints nothing and exits 0 (bash: nothing, exit 141);
+ * N", and which makes `--limit=0` exit 0 **or** 141 depending on whether `awk` manages to write
+ * before `head` closes the pipe — measured flipping between the two on identical input. All of
+ * those are accidents of the implementation rather than an interface anyone would design, so
+ * only a plain decimal count is accepted here:
+ *   - `--limit=0` prints nothing and always exits 0 (bash: nothing, and a racy exit code);
  *   - anything not all-digits, `--limit=` included, is a usage error with bash's exit code 1
  *     (bash printed `head: invalid number of lines: 'abc'`, which is not a message about a
- *     flag the user typed).
+ *     flag the user typed) -- and it is reported even when there is nothing to list, where
+ *     bash returned before `head` ran and ignored the typo entirely.
  * Verified against ./ticket; see scripts/parity/README.md.
  */
 export class RowLimit {

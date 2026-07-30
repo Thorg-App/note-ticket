@@ -43,10 +43,6 @@ if (mode === "tree") {
             }
         });
     }
-} else if (mode === "query") {
-    for (const t of openStore().loadAll()) {
-        if (t.hasFrontmatterFields) process.stdout.write(`${JSON.stringify(t.toJsonRecord())}\n`);
-    }
 } else if (mode === "slug") {
     process.stdout.write(`${Slug.fromTitle(arg1 as string)}.md\n`);
 } else {

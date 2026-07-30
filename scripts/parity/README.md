@@ -19,8 +19,8 @@ make parity PARITY_ARGS="--seed 42"      # different graphs; failures are reprod
 |------|------|
 | `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format, for commands the shipped CLI does not serve yet; bundled to `dist-parity/dump.mjs` |
 | `harness.py` | Throwaway repo, command runners, scenario generators, pinned bash reference |
-| `check_graph.py` | `ls`/`ready`/`blocked` (every filter flag) + `dep tree[ --full]` byte-compare, `dep cycle` semantic check |
-| `check_query.py` | `query` JSONL byte-compare + the missing-`id` divergence |
+| `check_graph.py` | `ls`/`ready`/`blocked`/`closed` (every filter flag) + `dep tree[ --full]` byte-compare, `dep cycle` semantic check, pinned `closed` divergences |
+| `check_query.py` | `query` JSONL byte-compare (bare and through jq) + the missing-`id` and control-character divergences |
 | `check_slug.py` | `title_to_filename` vs `Slug.fromTitle` |
 | `run.py` | Runs all checks; exit 1 on any unexpected mismatch |
 
@@ -39,8 +39,8 @@ exactly this reason.
 
 ## Whitelisted divergences
 
-Byte-comparison is the default; the following are deliberate and are *pinned* instead, so
-the harness still fails if either side changes its mind.
+Byte-comparison is the default; the following five are deliberate and are *pinned*
+instead, so the harness still fails if either side changes its mind.
 
 1. **`dep cycle`** — bash aborts its DFS on the first cycle and leaves nodes marked
    "visiting", so it prints paths that are not cycles and misses real ones (19 bogus
@@ -58,9 +58,28 @@ the harness still fails if either side changes its mind.
    whole; `check_graph._check_pipe_title_divergence` pins both sides. `ls` is unaffected and
    IS byte-compared. Remove this whitelist at T6, when bash is gone.
 
+4. **`closed --limit=` with anything but a plain count** — bash forwarded the raw text to
+   `head -n`, so it accepted `+N`, size suffixes (`2k` = 2048) and negative values meaning
+   "all but the last N", reported `head: invalid number of lines` for a typo, and for
+   `--limit=0` exited **0 or 141 racily** (whether `awk` writes before `head` closes the
+   pipe; measured flipping on identical input). TS accepts a plain decimal count and rejects
+   the rest with exit 1 — including in an empty tickets dir, where bash returned before
+   `head` ever ran and so ignored the typo. `check_graph._check_closed_limit_divergences`
+   pins both sides.
+5. **A control character in a frontmatter value, for `query`** — bash's `json_escape`
+   handles `\` and `"` only, so a raw tab (reachable via `tk create $'a\tb'`) lands inside a
+   JSON string and makes the line unparseable; bash's own `query <filter>` then dies inside
+   jq. TS uses `JSON.stringify`. `check_query._check_control_character_divergence` pins that
+   bash's output stays invalid and TS's stays valid.
+
 Because of #3, `harness.HOSTILE_TITLES` — the titles every generated scenario cycles
 through so the byte-compare sees `"`, `\`, `:`, `[]`, non-ASCII and a trailing space —
-deliberately contains no `|`.
+deliberately contains no `|`. For the same reason it contains no tab (#5).
+
+Not whitelisted because it is unreachable in practice, but worth knowing: for ticket files
+with *identical* mtimes, bash `ls -t` breaks the tie with `strcoll`, i.e. the caller's
+locale, while TS compares bytes. The harness runs both sides under `LC_ALL=C`, where the two
+agree, and `check_graph._check_closed_mtime_tie` byte-compares that case.
 
 ## Lifetime
 

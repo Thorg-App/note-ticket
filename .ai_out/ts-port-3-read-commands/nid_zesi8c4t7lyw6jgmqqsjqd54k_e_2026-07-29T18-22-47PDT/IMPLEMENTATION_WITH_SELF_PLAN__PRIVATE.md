@@ -185,3 +185,19 @@ Phase B / T4 / T5: throw `CliError`, never print `Error:` yourself.
 
 `make typecheck` exit 0 · `make unit-test` 207 pass / 0 fail · `make test` 12 features,
 192 scenarios, 1272 steps, 0 failed · `make parity` graph 68/0, query OK, slug OK.
+
+---
+
+# PHASE B (closed / query) — plan and bash contract
+
+**Goal**: serve `closed` and `query` from the TS bundle, reusing Phase A's abstractions.
+
+**Steps**
+1. Probe bash `cmd_closed` / `cmd_query` / `_file_to_jsonl` empirically (DONE — see below).
+2. `src/core`: `TicketStore.loadRecent(maxFiles)` (mtime desc), `Ticket.isFinished`, `Ticket.toJsonText()`.
+3. `src/cli`: `RowLimit`, `Jq`, `commands/closed.ts`, `commands/query.ts`; `ListOptions.limitText`
+   becomes `string | undefined` so `--limit=` is distinguishable from absent.
+4. Flip `closed`, then `query`, into `TS_COMMANDS`; `make test` after each.
+5. Extend the parity harness: `closed` invocations (with fixed mtimes), `query` via the real CLI,
+   delete `dump.ts`'s `query` mode, pin the new divergences.
+6. Unit + BDD tests, mutation-test the guards, docs.

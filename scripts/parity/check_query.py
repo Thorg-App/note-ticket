@@ -4,6 +4,7 @@
 Tickets are created through bash `./ticket create` (so the frontmatter is exactly what
 bash writes) plus hand-written edge cases bash's create cannot produce.
 """
+import json
 import os
 import shutil
 
@@ -29,6 +30,60 @@ EDGE_FILES = {
 
 MISSING_ID_FILE = "nofm.md"
 
+# The bare command plus the jq passthrough: the filter is spawned as external `jq` on both
+# sides, so its output, its "nothing selected" empty success and its exit code 3 for a syntax
+# error must all match. The `--flag` cases pin bash's arg loop, where the LAST argument wins
+# and nothing is treated as a flag.
+QUERY_INVOCATIONS = [
+    ["query"],
+    ["query", ""],
+    ["query", '.status == "open"'],
+    ["query", ".tags | length > 0"],
+    ["query", ".nosuchfield"],
+    ["query", "syntax((("],
+    ["query", "--pretty", ".id"],
+    ["query", ".id", "--pretty"],
+]
+
+# A tab in a title: reachable through `tk create $'a\tb'`, and bash emits it RAW inside the
+# JSON string, which is invalid JSON that jq itself refuses to read.
+TAB_TITLE_FILE = "tabbed.md"
+TAB_TITLE_CONTENT = '---\nid: nid_tab_e\ntitle: "tab\there"\nstatus: open\n---\n'
+
+
+def _check_control_character_divergence():
+    """Whitelisted divergence: bash does not escape control characters, so its JSONL is invalid.
+
+    `json_escape` in bash's `_file_to_jsonl` handles `\\` and `"` only. TS uses
+    `JSON.stringify`, so the line parses. Pinned: bash's output must stay unparseable and TS's
+    must stay parseable, and bash's own `query <filter>` must keep failing where TS succeeds.
+    """
+    with TempRepo("parity-query-ctrl-") as repo:
+        with open(os.path.join(repo.tickets, TAB_TITLE_FILE), "w") as f:
+            f.write(TAB_TITLE_CONTENT)
+        bash, ts = repo.bash_result("query"), repo.ts_cli_result("query")
+        problems = []
+        if _parses_as_json(bash.stdout):
+            problems.append("bash JSONL now parses: [%r]" % bash.stdout)
+        if not _parses_as_json(ts.stdout):
+            problems.append("TS JSONL does NOT parse: [%r]" % ts.stdout)
+        if repo.bash_result("query", ".id").returncode == 0:
+            problems.append("bash `query .id` now succeeds on a raw control character")
+        if repo.ts_cli_result("query", ".id").returncode != 0:
+            problems.append("TS `query .id` now fails on a control character")
+        if problems:
+            return False, "control-character divergence changed: " + "; ".join(problems)
+        return True, "control chars: bash emits invalid JSON, TS escapes them (as designed)"
+
+
+def _parses_as_json(jsonl):
+    try:
+        for line in jsonl.splitlines():
+            json.loads(line)
+    except ValueError:
+        return False
+    return True
+
 
 def _check_missing_id_divergence():
     """Whitelisted divergence: a `.md` with no `id` is skipped by bash, fatal in TS.
@@ -41,8 +96,7 @@ def _check_missing_id_divergence():
         path = os.path.join(repo.tickets, MISSING_ID_FILE)
         with open(path, "w") as f:
             f.write("no frontmatter here\n")
-        bash = repo.bash_result("query")
-        ts = repo.ts_result("query")
+        bash, ts = repo.bash_result("query"), repo.ts_cli_result("query")
         # bash emits a bare blank line for such a file (no JSON record) -- hence strip().
         bash_skips = bash.returncode == 0 and bash.stdout.strip() == ""
         if bash_skips and ts.returncode != 0 and path in ts.stderr:
@@ -66,27 +120,32 @@ def _check_jsonl():
             with open(os.path.join(repo.tickets, name), "w") as f:
                 f.write(content)
 
-        bash, ts = repo.bash_result("query"), repo.ts_result("query")
-        if bash.returncode != ts.returncode:
-            return False, "query exit codes differ (bash=%d ts=%d, ts stderr=[%s])" % (
-                bash.returncode,
-                ts.returncode,
-                ts.stderr.strip()[:200],
-            )
-        bash_out, ts_out = bash.stdout, ts.stdout
-        if bash_out == ts_out:
-            return True, "query JSONL identical (%d lines)" % len(bash_out.splitlines())
-
-        for bash_line, ts_line in zip(bash_out.splitlines(), ts_out.splitlines()):
-            if bash_line != ts_line:
-                print("MISMATCH query\n  --- bash ---\n%s\n  --- ts ---\n%s" % (bash_line, ts_line))
-        return False, "query JSONL differs (bash=%d lines ts=%d lines)" % (
-            len(bash_out.splitlines()),
-            len(ts_out.splitlines()),
-        )
+        lines = 0
+        for args in QUERY_INVOCATIONS:
+            bash, ts = repo.bash_result(*args), repo.ts_cli_result(*args)
+            if bash.returncode != ts.returncode:
+                return False, "query %r exit codes differ (bash=%d ts=%d, ts stderr=[%s])" % (
+                    args,
+                    bash.returncode,
+                    ts.returncode,
+                    ts.stderr.strip()[:200],
+                )
+            bash_out, ts_out = bash.stdout, ts.stdout
+            if bash_out != ts_out:
+                for bash_line, ts_line in zip(bash_out.splitlines(), ts_out.splitlines()):
+                    if bash_line != ts_line:
+                        print("MISMATCH query %r\n  --- bash ---\n%s\n  --- ts ---\n%s"
+                              % (args, bash_line, ts_line))
+                return False, "query %r JSONL differs (bash=%d lines ts=%d lines)" % (
+                    args,
+                    len(bash_out.splitlines()),
+                    len(ts_out.splitlines()),
+                )
+            lines += len(bash_out.splitlines())
+        return True, "query identical over %d invocations (%d lines)" % (len(QUERY_INVOCATIONS), lines)
 
 
 def run():
-    results = [_check_jsonl(), _check_missing_id_divergence()]
+    results = [_check_jsonl(), _check_missing_id_divergence(), _check_control_character_divergence()]
     ok = all(passed for passed, _summary in results)
     return ok, "; ".join(summary for _passed, summary in results)

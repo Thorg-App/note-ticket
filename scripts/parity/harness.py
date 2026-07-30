@@ -74,6 +74,12 @@ HOSTILE_TITLES = [
 # A title that trips bash's `|`-packed sort key. Used only by the pinned divergence check.
 PIPE_TITLE = "Pipe %s | tail"
 
+# Modification times for generated tickets: a fixed epoch plus a stride coprime with the
+# spread, so the mtime order `closed` uses is deterministic and is NOT the path order.
+MTIME_BASE = 1700000000
+MTIME_SHUFFLE_STEP = 7919
+MTIME_SPREAD = 1000
+
 
 class TempRepo:
     """A git-initialized throwaway repo with a `_tickets/` dir, removed on exit."""
@@ -98,15 +104,24 @@ class TempRepo:
         real, non-trivial subsets instead of always matching everything. Titles cycle over
         HOSTILE_TITLES for the same reason: a fixture whose titles are all `T <id>` cannot
         catch a metacharacter bug. `title_template` pins one title for every ticket instead.
+
+        Modification times are set explicitly and NOT in path order: `closed` sorts by mtime,
+        so files written in ascending name order would let a path-ordered implementation pass.
         """
         for index, (tid, status, deps, prio) in enumerate(scenario):
             template = title_template or HOSTILE_TITLES[index % len(HOSTILE_TITLES)]
-            with open(os.path.join(self.tickets, tid + ".md"), "w") as f:
+            path = os.path.join(self.tickets, tid + ".md")
+            with open(path, "w") as f:
                 f.write(
                     '---\nid: %s\ntitle: "%s"\nstatus: %s\ndeps: [%s]\npriority: %s\n'
                     'assignee: u%d\ntags: [t%d, common]\n---\n'
                     % (tid, template % tid, status, ", ".join(deps), prio, index % 2, index % 3)
                 )
+            self.set_mtime(path, MTIME_BASE + (index * MTIME_SHUFFLE_STEP) % MTIME_SPREAD)
+
+    @staticmethod
+    def set_mtime(path, seconds):
+        os.utime(path, (seconds, seconds))
 
     def bash(self, *args):
         return self.bash_result(*args).stdout
@@ -128,7 +143,12 @@ class TempRepo:
         return self._run(["node", TS_CLI] + list(args))
 
     def _run(self, cmd):
-        env = dict(os.environ, TICKETS_DIR=self.tickets)
+        # LC_ALL=C: bash `closed` breaks equal-mtime ties with `ls`, whose secondary key is
+        # `strcoll`, i.e. locale-dependent. The TS side orders byte-wise, which is `ls` under
+        # the C locale, so the harness pins the locale instead of comparing two orderings that
+        # are both "right". (Byte-vs-collation ordering of equal-mtime files is noted as a
+        # divergence in README.md rather than pinned here.)
+        env = dict(os.environ, TICKETS_DIR=self.tickets, LC_ALL="C")
         return subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=self.tickets)
 
 
@@ -150,6 +170,10 @@ FIXED_SCENARIOS = [
     ([("a", "open", ["a"], "2")], "selfloop"),
     ([("a", "open", ["b"], "2"), ("b", "open", ["c"], "2"), ("c", "open", ["b"], "2")], "tail-into-cycle"),
     ([("a", "open", ["ghost"], "2")], "dangling"),
+    # The legacy `done` status: `closed` lists it, but a `done` dependency still BLOCKS,
+    # because bash's dep resolution compares against "closed" alone. Without this shape the
+    # two notions are indistinguishable.
+    ([("a", "done", [], "2"), ("b", "open", ["a"], "2"), ("c", "closed", ["a"], "1")], "legacy-done"),
     ([("a", "open", ["b", "c"], "2"), ("b", "open", ["d"], "2"), ("c", "open", [], "2"),
       ("d", "open", [], "2")], "uneven"),
 ]

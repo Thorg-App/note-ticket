@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -32,6 +32,11 @@ class TicketsTree {
 
     relativeNames(paths: readonly string[]): readonly string[] {
         return paths.map((path) => relative(this.root, path));
+    }
+
+    /** Pins a file's mtime, so recency-ordered expectations do not depend on write speed. */
+    setModifiedAt(relativePath: string, seconds: number): void {
+        utimesSync(join(this.root, relativePath), seconds, seconds);
     }
 
     remove(): void {
@@ -107,6 +112,77 @@ describe("TicketStore.collectFiles", () => {
 
     it("exposes the ticket id of a loaded file", () => {
         assert.equal(store.load(join(tree.root, "top.md")).id, "nid_1");
+    });
+});
+
+/**
+ * `loadRecent` is bash `cmd_closed`'s `ls -t "${TICKET_FILES[@]}" | head -n N`: newest first,
+ * capped by FILE COUNT before anything is filtered.
+ */
+describe("TicketStore.loadRecent", () => {
+    const tree = new TicketsTree();
+    let store: TicketStore;
+
+    before(() => {
+        // Ids spell the expected recency order; the mtimes deliberately disagree with the
+        // path order, so a path-ordered implementation cannot pass.
+        tree.ticket("aaa.md", "third");
+        tree.ticket("sub/mmm.md", "first");
+        tree.ticket("zzz.md", "second");
+        tree.setModifiedAt("aaa.md", 1700000100);
+        tree.setModifiedAt("sub/mmm.md", 1700000300);
+        tree.setModifiedAt("zzz.md", 1700000200);
+        store = new TicketStore(tree.root);
+    });
+
+    after(() => tree.remove());
+
+    it("orders the newest modification first", () => {
+        assert.deepEqual(
+            store.loadRecent(10).map((ticket) => ticket.id),
+            ["first", "second", "third"],
+        );
+    });
+
+    it("caps the number of FILES read, keeping the newest", () => {
+        assert.deepEqual(
+            store.loadRecent(2).map((ticket) => ticket.id),
+            ["first", "second"],
+        );
+    });
+
+    it("reads nothing for a cap of zero", () => {
+        assert.deepEqual(store.loadRecent(0), []);
+    });
+
+    it("returns nothing for a missing tickets dir", () => {
+        assert.deepEqual(new TicketStore(join(tree.root, "nope")).loadRecent(10), []);
+    });
+});
+
+/** `ls -t` breaks equal modification times with the file name; so must this. */
+describe("TicketStore.loadRecent with equal modification times", () => {
+    const tree = new TicketsTree();
+    let store: TicketStore;
+
+    before(() => {
+        tree.ticket("zzz.md", "z");
+        tree.ticket("aaa.md", "a");
+        tree.ticket("Bbb.md", "B");
+        for (const name of ["zzz.md", "aaa.md", "Bbb.md"]) {
+            tree.setModifiedAt(name, 1700000000);
+        }
+        store = new TicketStore(tree.root);
+    });
+
+    after(() => tree.remove());
+
+    // Byte order, i.e. LC_ALL=C: 'B' < 'a' < 'z'.
+    it("falls back to ascending byte-wise path order", () => {
+        assert.deepEqual(
+            store.loadRecent(10).map((ticket) => ticket.id),
+            ["B", "a", "z"],
+        );
     });
 });
 

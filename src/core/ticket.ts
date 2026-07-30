@@ -113,11 +113,6 @@ export class Ticket {
         return this.document.body();
     }
 
-    /** False for files that have no frontmatter fields at all; `query` skips those. */
-    get hasFrontmatterFields(): boolean {
-        return this.frontmatter.entries().length > 0;
-    }
-
     hasTag(tag: string): boolean {
         return this.tags.includes(tag);
     }

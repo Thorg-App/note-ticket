@@ -1,15 +1,17 @@
 /**
- * The listing commands (`ls`, `ready`, `blocked`) and the CLI-layer pieces they share.
+ * The listing commands (`ls`, `ready`, `blocked`, `closed`) and the CLI-layer pieces they share.
  * Every expected string here was captured from bash `./ticket`; see also `make parity`.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BlockedCommand } from "../src/cli/commands/blocked.js";
+import { ClosedCommand } from "../src/cli/commands/closed.js";
 import { LsCommand } from "../src/cli/commands/ls.js";
 import { ReadyCommand } from "../src/cli/commands/ready.js";
 import { CliError } from "../src/cli/cli-error.js";
 import { ListOptions } from "../src/cli/list-options.js";
+import { RowLimit } from "../src/cli/row-limit.js";
 import { TicketRow } from "../src/cli/ticket-row.js";
 import { Ticket } from "../src/core/ticket.js";
 
@@ -247,5 +249,114 @@ describe("BlockedCommand", () => {
 
     it("filters by assignee", () => {
         assert.equal(BlockedCommand.render(TICKETS, ListOptions.parse(["-a", "ann"])), "");
+    });
+});
+
+describe("RowLimit", () => {
+    it("defaults to bash's 20 rows when --limit= is absent", () => {
+        const rows = Array.from({ length: 25 }, (_unused, index) => `row${index}`);
+        assert.equal(RowLimit.parse(undefined).applyTo(rows).length, 20);
+    });
+
+    it("keeps the first N rows", () => {
+        assert.deepEqual(RowLimit.parse("2").applyTo(["a", "b", "c"]), ["a", "b"]);
+    });
+
+    it("keeps nothing for --limit=0", () => {
+        assert.deepEqual(RowLimit.parse("0").applyTo(["a", "b"]), []);
+    });
+
+    it("accepts a zero-padded count, as head did", () => {
+        assert.deepEqual(RowLimit.parse("03").applyTo(["a", "b", "c", "d"]), ["a", "b", "c"]);
+    });
+
+    // DIVERGENCE: bash forwarded the text to `head -n`, so these were accepted with head's
+    // own meanings (`-1` = all but the last, `2k` = 2048). Here they are usage errors.
+    it("rejects an empty --limit=, as bash's head did", () => {
+        assert.throws(() => RowLimit.parse(""), (error: unknown) => error instanceof CliError);
+    });
+
+    it("rejects a non-numeric limit naming the flag", () => {
+        assert.throws(() => RowLimit.parse("abc"), { message: "--limit must be a whole number of rows, got 'abc'" });
+    });
+
+    it("rejects a negative limit rather than meaning 'all but the last'", () => {
+        assert.throws(() => RowLimit.parse("-1"), (error: unknown) => error instanceof CliError);
+    });
+
+    it("rejects head's size suffixes", () => {
+        assert.throws(() => RowLimit.parse("2k"), (error: unknown) => error instanceof CliError);
+    });
+});
+
+/**
+ * `ClosedCommand.renderTickets` is handed tickets ALREADY in newest-first order (the store
+ * does the mtime sort), so these cases are about selection, row format and `--limit`.
+ */
+describe("ClosedCommand", () => {
+    const RECENT_FIRST = ticketsOf([
+        { id: "cc3", title: "Gamma", status: "closed", assignee: "ann", tags: ["ui"] },
+        { id: "aa1", title: "Alpha", status: "done", assignee: "bob" },
+        { id: "bb2", title: "Beta", status: "open", assignee: "bob" },
+        { id: "dd4", title: "Delta", status: "closed", deps: ["cc3"], assignee: "bob" },
+    ]);
+
+    it("prints closed tickets in the order given, with no priority and no deps", () => {
+        assert.equal(
+            ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS),
+            "cc3      [closed] - Gamma\naa1      [done] - Alpha\ndd4      [closed] - Delta\n",
+        );
+    });
+
+    it("counts the legacy `done` status as closed", () => {
+        assert.match(ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS), /aa1 {6}\[done\] - Alpha/);
+    });
+
+    it("excludes open and in-progress tickets", () => {
+        assert.doesNotMatch(ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS), /bb2/);
+    });
+
+    it("applies --limit to the surviving rows, not to the tickets scanned", () => {
+        assert.equal(
+            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["--limit=2"])),
+            "cc3      [closed] - Gamma\naa1      [done] - Alpha\n",
+        );
+    });
+
+    it("filters by assignee", () => {
+        assert.equal(
+            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["-a", "ann"])),
+            "cc3      [closed] - Gamma\n",
+        );
+    });
+
+    it("filters by tag", () => {
+        assert.equal(
+            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["--tag=ui"])),
+            "cc3      [closed] - Gamma\n",
+        );
+    });
+
+    it("ignores --status, as bash does", () => {
+        assert.equal(
+            ClosedCommand.renderTickets(RECENT_FIRST, ListOptions.parse(["--status=open"])),
+            ClosedCommand.renderTickets(RECENT_FIRST, NO_OPTIONS),
+        );
+    });
+
+    it("prints one row per file, without de-duplicating ids", () => {
+        const twice = ticketsOf([
+            { id: "aa1", title: "First copy", status: "closed" },
+            { id: "aa1", title: "Second copy", status: "closed" },
+        ]);
+        assert.equal(
+            ClosedCommand.renderTickets(twice, NO_OPTIONS),
+            "aa1      [closed] - First copy\naa1      [closed] - Second copy\n",
+        );
+    });
+
+    it("keeps a title containing a pipe whole (no sort key is packed here)", () => {
+        const piped = ticketsOf([{ id: "aa1", title: "Ship it | phase 2", status: "closed" }]);
+        assert.equal(ClosedCommand.renderTickets(piped, NO_OPTIONS), "aa1      [closed] - Ship it | phase 2\n");
     });
 });
