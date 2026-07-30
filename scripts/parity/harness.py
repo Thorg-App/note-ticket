@@ -142,6 +142,23 @@ class TempRepo:
     def ts_cli_result(self, *args):
         return self._run(["node", TS_CLI] + list(args))
 
+    def bash_head_rc(self, *args):
+        return self._head_rc([BashReference.path()] + list(args))
+
+    def ts_cli_head_rc(self, *args):
+        return self._head_rc(["node", TS_CLI] + list(args))
+
+    def _head_rc(self, cmd):
+        """Exit code of `<cmd> | head -1`, i.e. what the pipeline sees when the reader leaves.
+
+        `${PIPESTATUS[0]}` and not `$?`: `$?` is head's status, which is always 0 and would
+        make a broken-pipe comparison vacuous.
+        """
+        shell = "%s | head -1 >/dev/null; exit ${PIPESTATUS[0]}" % " ".join(
+            "'%s'" % arg for arg in cmd
+        )
+        return self._run(["bash", "-c", shell]).returncode
+
     def _run(self, cmd):
         # LC_ALL=C: bash `closed` breaks equal-mtime ties with `ls`, whose secondary key is
         # `strcoll`, i.e. locale-dependent. The TS side orders byte-wise, which is `ls` under

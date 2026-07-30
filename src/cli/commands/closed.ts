@@ -1,7 +1,7 @@
 import type { Ticket } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
 import type { ListOptions } from "../list-options.js";
-import { RowLimit } from "../row-limit.js";
+import type { RowLimit } from "../row-limit.js";
 import { TicketRow } from "../ticket-row.js";
 
 /**
@@ -21,8 +21,15 @@ const SCANNED_FILE_LIMIT = 100;
  * file, as in bash.
  */
 export class ClosedCommand {
+    /**
+     * WHY the limit is parsed BEFORE the store is touched: an unusable `--limit=` is a typo
+     * in the argv the user just typed, and reporting it must not depend on stat'ing and
+     * reading up to 100 files first — that would also make the message the user sees depend
+     * on whether the repo happens to hold a file with no `id`.
+     */
     static render(store: TicketStore, options: ListOptions): string {
-        return ClosedCommand.renderTickets(store.loadRecent(SCANNED_FILE_LIMIT), options);
+        const limit = options.rowLimit;
+        return ClosedCommand.renderTickets(store.loadRecent(SCANNED_FILE_LIMIT), options, limit);
     }
 
     /**
@@ -30,10 +37,13 @@ export class ClosedCommand {
      *
      * `--limit` is applied LAST, to the surviving rows — not to the files scanned.
      */
-    static renderTickets(recentFirst: readonly Ticket[], options: ListOptions): string {
+    static renderTickets(
+        recentFirst: readonly Ticket[],
+        options: ListOptions,
+        limit: RowLimit = options.rowLimit,
+    ): string {
         // `--status` is ignored here, as in bash: `closed` fixes the status set itself.
         const filter = options.filterIgnoringStatus;
-        const limit = RowLimit.parse(options.limitText);
         const rows = recentFirst
             .filter((ticket) => ticket.isFinished && filter.matches(ticket))
             .map((ticket) => TicketRow.withStatus(ticket));

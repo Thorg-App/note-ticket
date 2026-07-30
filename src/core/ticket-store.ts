@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import {
     existsSync,
+    lstatSync,
     mkdirSync,
     readFileSync,
     readdirSync,
@@ -132,7 +133,8 @@ export class TicketStore {
      * files is invisible to `closed` no matter what `--limit` says. Verified against ./ticket.
      *
      * Files that cannot be stat'ed (removed mid-run, broken permissions) are dropped, as
-     * `ls -t 2>/dev/null` drops them.
+     * `ls -t 2>/dev/null` drops them. A symlinked ticket is ordered by the LINK's own mtime
+     * — see `modifiedAtOrUndefined`.
      */
     loadRecent(maxFiles: number): readonly Ticket[] {
         const stamped: TimestampedFile[] = [];
@@ -250,10 +252,18 @@ export class TicketStore {
         }
     }
 
-    /** Modification time in nanoseconds, or undefined when the file cannot be stat'ed. */
+    /**
+     * Modification time in nanoseconds, or undefined when the file cannot be stat'ed.
+     *
+     * WHY `lstatSync`: GNU `ls -t` does not dereference a symlink given as an operand (it
+     * has no `-L`/`-H` here), so bash `closed` orders a symlinked ticket by the LINK's own
+     * mtime, not the target's. Verified against ./ticket: a link stamped 2030 pointing at a
+     * file stamped 2020 sorts FIRST in bash. Following the link here would reorder the
+     * listing for the symlinked layout README documents as supported.
+     */
     private static modifiedAtOrUndefined(path: string): bigint | undefined {
         try {
-            return statSync(path, { bigint: true }).mtimeNs;
+            return lstatSync(path, { bigint: true }).mtimeNs;
         } catch {
             return undefined;
         }

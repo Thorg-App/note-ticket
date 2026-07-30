@@ -1,9 +1,9 @@
 import type { Ticket } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
+import { ExitCode } from "../exit-codes.js";
 import { Jq } from "../jq.js";
 
 const LINE_SEPARATOR = "\n";
-const EXIT_SUCCESS = 0;
 
 /** No filter given; bash's `filter` starts empty and an empty filter means "print everything". */
 const NO_FILTER = "";
@@ -20,13 +20,13 @@ export class QueryCommand {
         // Bash returns BEFORE reaching jq when there is nothing to enumerate, so an
         // unparseable filter against an empty tickets dir succeeds silently. Verified.
         if (tickets.length === 0) {
-            return EXIT_SUCCESS;
+            return ExitCode.SUCCESS;
         }
         const jsonl = QueryCommand.jsonl(tickets);
         const filter = QueryCommand.filterFrom(args);
         if (filter === NO_FILTER) {
             process.stdout.write(jsonl);
-            return EXIT_SUCCESS;
+            return ExitCode.SUCCESS;
         }
         return Jq.select(jsonl, filter);
     }

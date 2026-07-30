@@ -94,13 +94,19 @@ Verify these while porting — they are contractual even where scenarios are thi
 - `closed`: mtime-sorted (nanoseconds; `statSync().mtimeMs` is too coarse), ties broken by
   the file name as `ls -t` does, capped at 100 files scanned BEFORE filtering, `--limit`
   applied after. Its status set is `closed|done`, wider than the `closed`-only test
-  dependency resolution uses.
+  dependency resolution uses. Read the mtime with `lstat`, NOT `stat`: `ls -t` does not
+  dereference a symlink operand, so a symlinked ticket sorts by the LINK's own mtime.
 - `closed --limit=`: bash forwarded the raw text to `head -n`, inheriting `+N`, `2k` size
   suffixes, negative "all but the last N" and a RACY exit code for 0. TS takes a plain
   count only (whitelisted divergence #4 in `scripts/parity/README.md`).
 - `query`: bash escaped only `\` and `"`, so a control character in a value (reachable via
   `tk create $'a\tb'`) produced JSONL that jq cannot parse. TS escapes it properly
   (whitelisted divergence #5). The jq filter itself stays an external `jq` process.
+- `query` with no `jq` on PATH: exit 127 (the shell's code, kept) with an actionable message
+  instead of bash's `./ticket: line NNN: jq: command not found` (whitelisted divergence #6).
+- A closed stdout (`tk ls | head -1`): node ignores SIGPIPE, so the CLI turns the failed write
+  into 128+SIGPIPE itself. bash's code there depended on awk's write chunking, i.e. on output
+  size, so the two agree except in a band of output sizes (whitelisted divergence #7).
 - `ready`/`blocked`: unknown dep IDs count as not-closed (blocking).
 - `ready`/`blocked`: bash packs its sort key as `prio|id|status|title`, so it TRUNCATES a
   title at the first `|`. Do NOT reproduce that; the TS row prints the title whole

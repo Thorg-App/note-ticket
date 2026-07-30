@@ -1,4 +1,5 @@
 import { CliError } from "./cli-error.js";
+import { RowLimit } from "./row-limit.js";
 import { TicketFilter } from "./ticket-filter.js";
 
 const OPTION_STATUS = "--status=";
@@ -32,6 +33,17 @@ export class ListOptions {
     /** Assignee + tag only — the filter of every command that fixes the status itself. */
     get filterIgnoringStatus(): TicketFilter {
         return this.filter.ignoringStatus();
+    }
+
+    /**
+     * The `--limit=` as a row count, or the default when it was not given.
+     *
+     * WHY parsed on ACCESS rather than in `parse`: bash's `ls`/`ready`/`blocked` have no
+     * `--limit` arm at all and silently ignore the flag, so validating it eagerly would
+     * make `ls --limit=abc` fail where bash listed happily. Only `closed` looks at it.
+     */
+    get rowLimit(): RowLimit {
+        return RowLimit.parse(this.limitText);
     }
 
     static parse(args: readonly string[]): ListOptions {

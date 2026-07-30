@@ -2,6 +2,7 @@ import { basename } from "node:path";
 
 import { MissingTicketIdError } from "../core/id.js";
 import type { TicketStore } from "../core/ticket-store.js";
+import { BrokenPipe } from "./broken-pipe.js";
 import { CliError } from "./cli-error.js";
 import { BlockedCommand } from "./commands/blocked.js";
 import { ClosedCommand } from "./commands/closed.js";
@@ -9,12 +10,11 @@ import { HelpCommand } from "./commands/help.js";
 import { LsCommand } from "./commands/ls.js";
 import { QueryCommand } from "./commands/query.js";
 import { ReadyCommand } from "./commands/ready.js";
+import { ExitCode } from "./exit-codes.js";
 import { ListOptions } from "./list-options.js";
 import { StoreResolver } from "./store-resolver.js";
 
 const DEFAULT_PROGRAM_NAME = "ticket";
-const EXIT_SUCCESS = 0;
-const EXIT_FAILURE = 1;
 
 /** How a read command turns an open tickets directory into printable output. */
 type ReadCommandBody = (store: TicketStore, options: ListOptions) => string;
@@ -60,7 +60,7 @@ class Cli {
             case "--help":
             case "-h":
                 process.stdout.write(HelpCommand.render(Cli.programName()));
-                return EXIT_SUCCESS;
+                return ExitCode.SUCCESS;
             case "ls":
             case "list":
                 return Cli.read(args, (store, options) => LsCommand.render(store.loadAll(), options));
@@ -79,7 +79,7 @@ class Cli {
             default:
                 process.stderr.write(`Unknown command: ${command}\n`);
                 process.stderr.write(HelpCommand.render(Cli.programName()));
-                return EXIT_FAILURE;
+                return ExitCode.FAILURE;
         }
     }
 
@@ -90,7 +90,7 @@ class Cli {
     private static read(args: readonly string[], body: ReadCommandBody): number {
         const store = StoreResolver.forReadCommand();
         process.stdout.write(body(store, ListOptions.parse(args)));
-        return EXIT_SUCCESS;
+        return ExitCode.SUCCESS;
     }
 
     /**
@@ -110,4 +110,5 @@ class Cli {
     }
 }
 
+BrokenPipe.reportAsSignalDeath();
 process.exitCode = Cli.run(process.argv.slice(2));

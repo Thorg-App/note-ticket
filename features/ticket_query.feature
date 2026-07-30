@@ -108,6 +108,28 @@ Feature: Ticket Query
     Then the command should fail
     And the output should be empty
 
+  # bash returned before it ever reached jq when there was nothing to enumerate, so even an
+  # unparseable filter succeeded there. Deleting that short-circuit would make this exit 3.
+  Scenario: Query succeeds with an unparseable filter when there are no tickets
+    When I run "ticket query 'syntax((('"
+    Then the command should succeed
+    And the output should be empty
+
+  # DIVERGENCE: bash printed the shell's own `./ticket: line NNN: jq: command not found`,
+  # which names a line of the script. The exit code 127 is bash's and is kept.
+  Scenario: Query reports a missing jq with the shell's exit code
+    Given a ticket exists with ID "query-001" and title "Filtered ticket"
+    When I run "ticket query '.id'" with jq missing from PATH
+    Then the exit code should be 127
+    And stderr should contain "jq: command not found"
+    And stderr should contain "Install jq"
+
+  Scenario: Query without a filter needs no jq at all
+    Given a ticket exists with ID "query-001" and title "Unfiltered ticket"
+    When I run "ticket query" with jq missing from PATH
+    Then the command should succeed
+    And the output should contain "query-001"
+
   # bash's argument loop assigns the filter for EVERY argument, so the last one wins.
   Scenario: Query takes the last argument as the filter
     Given a ticket exists with ID "query-001" and title "Open ticket"

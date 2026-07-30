@@ -1,8 +1,7 @@
+import { ExitCode } from "./exit-codes.js";
+
 const ERROR_PREFIX = "Error: ";
 const LINE_SEPARATOR = "\n";
-
-/** Exit code of a plain usage error, which is what bash `return 1` gives for all of them. */
-const DEFAULT_EXIT_CODE = 1;
 
 /**
  * A failure whose text is meant for the user, and the ONE place that knows how such a
@@ -23,7 +22,7 @@ export class CliError extends Error {
     constructor(
         message: string,
         readonly detailLines: readonly string[] = [],
-        readonly exitCode: number = DEFAULT_EXIT_CODE,
+        readonly exitCode: number = ExitCode.FAILURE,
     ) {
         super(message);
         this.name = "CliError";

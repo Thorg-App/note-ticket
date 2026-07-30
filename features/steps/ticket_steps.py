@@ -3,8 +3,10 @@
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -549,6 +551,61 @@ def step_run_command_stdin_left_open(context, command):
     context.last_command = command
 
 
+def _path_without(binary_name):
+    """A PATH identical to the current one except that `binary_name` is not on it.
+
+    WHY the symlink farm: `query <filter>` must be exercised with jq genuinely absent, and
+    jq lives in the same directory as most of the tools the bash script needs (awk, sed,
+    find, git, node), so dropping directories from PATH is not an option. Every executable
+    on the real PATH is linked into one scratch dir, minus the one being hidden.
+
+    WHY-NOT an env var naming the binary: that is a test-only knob in shipped code.
+    """
+    farm = Path(tempfile.mkdtemp(prefix='path-without-%s-' % binary_name))
+    for directory in os.environ.get('PATH', '').split(os.pathsep):
+        if not directory or not os.path.isdir(directory):
+            continue
+        for name in os.listdir(directory):
+            if name == binary_name or (farm / name).exists():
+                continue
+            try:
+                (farm / name).symlink_to(Path(directory) / name)
+            except OSError:
+                pass
+    assert shutil.which(binary_name, path=str(farm)) is None, \
+        f"[{binary_name}] is still reachable on the stripped PATH"
+    return farm
+
+
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with (?P<binary>[a-z]+) missing from PATH')
+def step_run_command_without_binary(context, command, binary):
+    """Run a command with one external binary made unreachable."""
+    command = command.replace('\\"', '"')
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+    farm = _path_without(binary)
+    try:
+        env = os.environ.copy()
+        env['PATH'] = str(farm)
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=getattr(context, 'working_dir', context.test_dir),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            env=env
+        )
+    finally:
+        shutil.rmtree(farm, ignore_errors=True)
+
+    context.result = result
+    context.stdout = result.stdout.strip()
+    context.stderr = result.stderr.strip()
+    context.returncode = result.returncode
+    context.last_command = command
+
+
 @when(r'I run "(?P<command>(?:[^"\\]|\\.)+)"')
 def step_run_command(context, command):
     """Run a ticket CLI command."""
@@ -598,6 +655,13 @@ def step_command_fail(context):
     """Assert command returned non-zero exit code."""
     assert context.returncode != 0, \
         f"Command succeeded but was expected to fail\nstdout: {context.stdout}"
+
+
+@then(r'the exit code should be (?P<code>\d+)')
+def step_exit_code_is(context, code):
+    """Assert an EXACT exit code, for the codes that are themselves the contract."""
+    assert context.returncode == int(code), \
+        f"Expected exit code {code} but got {context.returncode}\nstderr: {context.stderr}"
 
 
 @then(r'the output should be "(?P<expected>[^"]*)"')

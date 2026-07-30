@@ -3,17 +3,22 @@
  * Every expected string here was captured from bash `./ticket`; see also `make parity`.
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before, describe, it } from "node:test";
 
 import { BlockedCommand } from "../src/cli/commands/blocked.js";
 import { ClosedCommand } from "../src/cli/commands/closed.js";
 import { LsCommand } from "../src/cli/commands/ls.js";
 import { ReadyCommand } from "../src/cli/commands/ready.js";
 import { CliError } from "../src/cli/cli-error.js";
+import { ExitCode } from "../src/cli/exit-codes.js";
 import { ListOptions } from "../src/cli/list-options.js";
 import { RowLimit } from "../src/cli/row-limit.js";
 import { TicketRow } from "../src/cli/ticket-row.js";
 import { Ticket } from "../src/core/ticket.js";
+import { TicketStore } from "../src/core/ticket-store.js";
 
 interface TicketSpec {
     readonly id: string;
@@ -358,5 +363,68 @@ describe("ClosedCommand", () => {
     it("keeps a title containing a pipe whole (no sort key is packed here)", () => {
         const piped = ticketsOf([{ id: "aa1", title: "Ship it | phase 2", status: "closed" }]);
         assert.equal(ClosedCommand.renderTickets(piped, NO_OPTIONS), "aa1      [closed] - Ship it | phase 2\n");
+    });
+});
+
+/**
+ * `ClosedCommand.render` — the half that talks to the store. Its own logic is the
+ * mtime-ordered read and the ORDER of that read relative to argv validation; the row
+ * content is `renderTickets`, above.
+ */
+describe("ClosedCommand.render", () => {
+    const tickets = mkdtempSync(join(tmpdir(), "closed-render-test-"));
+
+    before(() => {
+        // Newest last in write order, so a path-ordered or write-ordered read fails here.
+        for (const [name, id, seconds] of [
+            ["aaa.md", "third", 1700000100],
+            ["mmm.md", "first", 1700000300],
+            ["zzz.md", "second", 1700000200],
+        ] as const) {
+            writeFileSync(join(tickets, name), `---\nid: ${id}\ntitle: "T ${id}"\nstatus: closed\n---\n`);
+            utimesSync(join(tickets, name), seconds, seconds);
+        }
+    });
+
+    after(() => rmSync(tickets, { recursive: true, force: true }));
+
+    it("lists the most recently modified file first", () => {
+        assert.equal(
+            ClosedCommand.render(new TicketStore(tickets), NO_OPTIONS),
+            "first    [closed] - T first\nsecond   [closed] - T second\nthird    [closed] - T third\n",
+        );
+    });
+
+    /**
+     * The argv is validated BEFORE the store is read: this store cannot be enumerated at
+     * all (a file with no `id`), so a `--limit` error can only surface first if nothing was
+     * read yet. Reordering the two lines in `render` makes this fail with the store's error.
+     */
+    it("rejects an unusable --limit= before reading any ticket file", () => {
+        const broken = mkdtempSync(join(tmpdir(), "closed-render-broken-"));
+        try {
+            writeFileSync(join(broken, "no-id.md"), '---\ntitle: "no id here"\n---\n');
+            assert.throws(
+                () => ClosedCommand.render(new TicketStore(broken), ListOptions.parse(["--limit=abc"])),
+                { message: "--limit must be a whole number of rows, got 'abc'" },
+            );
+        } finally {
+            rmSync(broken, { recursive: true, force: true });
+        }
+    });
+});
+
+/**
+ * The exit codes are a user-facing contract: bash's pipelines reported 128+signal, and a
+ * missing binary is the shell's 127.
+ */
+describe("ExitCode", () => {
+    it("reports a SIGPIPE death as 141, as a shell does", () => {
+        assert.equal(ExitCode.forSignal("SIGPIPE"), 141);
+        assert.equal(ExitCode.BROKEN_PIPE, 141);
+    });
+
+    it("reports a SIGTERM death as 143", () => {
+        assert.equal(ExitCode.forSignal("SIGTERM"), 143);
     });
 });

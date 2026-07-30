@@ -242,6 +242,102 @@ def _check_closed_mtime_tie():
         return True, "closed equal-mtime tie-break identical"
 
 
+# A symlinked ticket, its target, and a plain sibling stamped between the two: `ls -t` does
+# not dereference a symlink operand, so the LINK's own mtime decides where it sorts.
+SYMLINK_TARGET_MTIME = 1577836800  # 2020
+SYMLINK_SIBLING_MTIME = 1735689600  # 2025
+SYMLINK_LINK_MTIME = 1893456000  # 2030
+
+
+def _check_closed_symlink_mtime():
+    """A symlinked ticket sorts by the LINK's mtime, not its target's.
+
+    README documents a symlinked ticket file as a supported layout and `_collect_ticket_files`
+    uses `find -L` to pick one up, so which mtime `closed` sorts by is contractual. Following
+    the link (`stat`) instead of reading it (`lstat`) flips the order, and nothing else in the
+    fixtures has a symlink whose mtime differs from its target's.
+    """
+    with TempRepo("parity-closed-symlink-") as repo:
+        outside = os.path.join(os.path.dirname(repo.tickets), "outside")
+        os.makedirs(outside)
+        target = os.path.join(outside, "target.md")
+        with open(target, "w") as f:
+            f.write('---\nid: sym1\ntitle: "Sym"\nstatus: closed\n---\n')
+        sibling = os.path.join(repo.tickets, "dir1.md")
+        with open(sibling, "w") as f:
+            f.write('---\nid: dir1\ntitle: "Direct"\nstatus: closed\n---\n')
+        link = os.path.join(repo.tickets, "sym1.md")
+        os.symlink(target, link)
+        repo.set_mtime(target, SYMLINK_TARGET_MTIME)
+        repo.set_mtime(sibling, SYMLINK_SIBLING_MTIME)
+        os.utime(link, (SYMLINK_LINK_MTIME, SYMLINK_LINK_MTIME), follow_symlinks=False)
+
+        bash, ts = _outcome(repo.bash_result("closed")), _outcome(repo.ts_cli_result("closed"))
+        if bash != ts:
+            return False, "closed symlink mtime order differs:\n  --- bash ---\n%s  --- ts ---\n%s" % (bash, ts)
+        # Non-vacuity: the fixture only exercises anything if the link really does lead.
+        if not bash.startswith("rc=0\nsym1"):
+            return False, "closed symlink fixture no longer puts the link first: [%s]" % bash.strip()
+        return True, "closed symlink ordered by the link's own mtime, identically"
+
+
+# More closed tickets than the default `--limit=20`, so the default is visible in the bytes.
+DEFAULT_LIMIT_SCENARIO = [("dl%02d" % i, "closed", [], "2") for i in range(25)]
+EXPECTED_DEFAULT_LIMIT_ROWS = 20
+
+
+def _check_closed_default_limit():
+    """`closed` with no `--limit=` prints bash's 20 rows.
+
+    Every other fixture has fewer than 20 closed tickets, so the default was pinned only by a
+    unit test asserting the constant -- i.e. not against bash at all.
+    """
+    with TempRepo("parity-closed-default-limit-") as repo:
+        repo.write_scenario(DEFAULT_LIMIT_SCENARIO)
+        bash, ts = repo.bash_result("closed"), repo.ts_cli_result("closed")
+        if _outcome(bash) != _outcome(ts):
+            return False, "closed default limit differs:\n  --- bash ---\n%s  --- ts ---\n%s" % (
+                _outcome(bash),
+                _outcome(ts),
+            )
+        rows = len(bash.stdout.splitlines())
+        if rows != EXPECTED_DEFAULT_LIMIT_ROWS:
+            return False, "closed default limit is %d rows, expected %d" % (rows, EXPECTED_DEFAULT_LIMIT_ROWS)
+        return True, "closed default limit identical (%d rows of %d)" % (rows, len(DEFAULT_LIMIT_SCENARIO))
+
+
+# Output has to exceed BOTH awk's ~4 KB write buffer and node's 64 KB pipe buffer, so that
+# both sides genuinely write into a pipe whose reader is already gone.
+BROKEN_PIPE_TICKET_COUNT = 3000
+BROKEN_PIPE_RC = 141  # 128 + SIGPIPE
+SMALL_SCENARIO = [("sm1", "open", [], "2")]
+
+
+def _check_broken_pipe_exit_code():
+    """`ls | head -1` must report SIGPIPE death, as every Unix tool does.
+
+    Node ignores SIGPIPE, so this only holds because the CLI turns the failed write into
+    128+SIGPIPE itself. The small-output case is here too: with nothing to break, both sides
+    must still exit 0, which is what stops the guard from reporting 141 unconditionally.
+    """
+    problems = []
+    with TempRepo("parity-broken-pipe-") as repo:
+        repo.write_scenario([("bp%04d" % i, "open", [], "2") for i in range(BROKEN_PIPE_TICKET_COUNT)])
+        bash, ts = repo.bash_head_rc("ls"), repo.ts_cli_head_rc("ls")
+        if bash != BROKEN_PIPE_RC:
+            problems.append("bash `ls | head -1` rc=%d, expected %d" % (bash, BROKEN_PIPE_RC))
+        if ts != BROKEN_PIPE_RC:
+            problems.append("TS `ls | head -1` rc=%d, expected %d" % (ts, BROKEN_PIPE_RC))
+    with TempRepo("parity-unbroken-pipe-") as repo:
+        repo.write_scenario(SMALL_SCENARIO)
+        bash, ts = repo.bash_head_rc("ls"), repo.ts_cli_head_rc("ls")
+        if (bash, ts) != (0, 0):
+            problems.append("one-row `ls | head -1` rc bash=%d ts=%d, expected 0/0" % (bash, ts))
+    if problems:
+        return False, "broken-pipe exit code changed: " + "; ".join(problems)
+    return True, "ls | head -1 exits %d on both sides (and 0 when nothing breaks)" % BROKEN_PIPE_RC
+
+
 def _outcome(result):
     """What must match: exit code AND stdout. Comparing stdout alone would let a bash-side
     crash that prints nothing look equal to an empty TS success."""
@@ -297,6 +393,9 @@ def run(random_count, seed):
         _check_closed_limit_divergences(),
         _check_closed_mtime_tie(),
         _check_closed_scan_cap(),
+        _check_closed_symlink_mtime(),
+        _check_closed_default_limit(),
+        _check_broken_pipe_exit_code(),
     ]
     summary = "scenarios=%d failures=%d (whitelisted: bash bogus cycles=%d); %s" % (
         len(scenarios),
