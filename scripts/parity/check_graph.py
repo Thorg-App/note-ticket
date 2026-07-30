@@ -378,10 +378,10 @@ def _show_mismatches(repo, scenario):
         ts_file, ts_sections = _split_show(ts.stdout)
         if bash_file != ts_file:
             problems.append(("show %s (echoed file)" % tid, bash_file, ts_file))
-        if sorted(bash_sections) != sorted(ts_sections):
-            problems.append(
-                ("show %s (sections)" % tid, str(sorted(bash_sections)), str(sorted(ts_sections)))
-            )
+        # Which sections appear AND in what order: only the rows inside Blocking and
+        # Children are hash-ordered in bash, never the headings themselves.
+        if list(bash_sections) != list(ts_sections):
+            problems.append(("show %s (sections)" % tid, str(list(bash_sections)), str(list(ts_sections))))
             continue
         for heading, bash_rows in bash_sections.items():
             if sorted(bash_rows) != sorted(ts_sections[heading]):
@@ -390,6 +390,48 @@ def _show_mismatches(repo, scenario):
                      str(sorted(ts_sections[heading])))
                 )
     return problems
+
+
+# A ticket with a parent, a dependency of each kind, a dependent and a child: enough for all
+# four `show` sections to appear AT ONCE, with exactly one row each. Generated scenarios have
+# no `parent:` field at all, so without this fixture neither the parent annotation nor the
+# Children section nor the ORDER of the sections is exercised anywhere (measured: mutating
+# either one left `make parity` green).
+SHOW_RELATIONS_FILES = {
+    "par.md": '---\nid: par\ntitle: "The parent"\nstatus: open\ndeps: []\nlinks: []\n---\n',
+    "tgt.md": (
+        '---\nid: tgt\ntitle: "Target"\nstatus: open\ndeps: [dep_open, dep_closed, ghost]\n'
+        'links: [par, nolink]\nparent: par\n---\n\nBody text.\n'
+    ),
+    "dep_open.md": '---\nid: dep_open\ntitle: "Open dep"\nstatus: open\ndeps: []\nlinks: []\n---\n',
+    "dep_closed.md": '---\nid: dep_closed\ntitle: "Closed dep"\nstatus: closed\ndeps: []\nlinks: []\n---\n',
+    "waiter.md": '---\nid: waiter\ntitle: "Waiter"\nstatus: open\ndeps: [tgt]\nlinks: []\n---\n',
+    "kid.md": '---\nid: kid\ntitle: "Kid"\nstatus: open\ndeps: []\nlinks: []\nparent: tgt\n---\n',
+}
+EXPECTED_SHOW_SECTIONS = ["## Blockers", "## Blocking", "## Children", "## Linked"]
+
+
+def _check_show_relations():
+    """`show` on a ticket with all four sections populated, byte-for-byte.
+
+    One row per section, so bash's unspecified Blocking/Children ORDER cannot make this
+    flaky, and the section sequence and the `parent:` annotation are both really compared.
+    """
+    with TempRepo("parity-show-relations-") as repo:
+        for name, text in SHOW_RELATIONS_FILES.items():
+            with open(os.path.join(repo.tickets, name), "w") as f:
+                f.write(text)
+        bash, ts = repo.bash_result("show", "tgt"), repo.ts_cli_result("show", "tgt")
+        if _outcome(bash) != _outcome(ts):
+            return False, "show with all sections differs:\n  --- bash ---\n%s  --- ts ---\n%s" % (
+                _outcome(bash),
+                _outcome(ts),
+            )
+        # Non-vacuity: the fixture only proves anything if every section really is there.
+        headings = [line for line in bash.stdout.split("\n") if line.startswith("## ")]
+        if headings != EXPECTED_SHOW_SECTIONS or "parent: par  # The parent" not in bash.stdout:
+            return False, "show fixture no longer exercises every section: %r" % headings
+        return True, "show identical with parent annotation and all four sections"
 
 
 # `dup` names `tgt` twice in its deps, which bash's `show` prints as two Blocking rows.
@@ -503,6 +545,7 @@ def run(random_count, seed):
         _check_closed_symlink_mtime(),
         _check_closed_default_limit(),
         _check_broken_pipe_exit_code(),
+        _check_show_relations(),
         _check_show_duplicate_blocking(),
         _check_id_resolution_divergences(),
     ]

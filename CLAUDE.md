@@ -10,6 +10,8 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 
 **TypeScript port (in flight):** Strangler-fig migration to a Node CLI; plan at `docs-internal/migration-to-ts-high-level.md`. Commands named in the `TS_COMMANDS` variable in `ticket` are `exec`'d to `node <script-dir>/dist/ticket.mjs`; everything else stays bash. Sources in `src/` (`src/cli/` dispatch + commands, `src/core/` data model), bundled by esbuild via `make build` (zero runtime npm deps). Porting a command = implement in TS → add to `TS_COMMANDS` → `make test` green. Rollback = remove the name.
 
+`dep` cannot be flipped as a whole — `dep tree`/`dep cycle` are reads, `dep <id> <dep-id>` is a write — so `cmd_dep` delegates those two branches via a second list, `TS_DEP_SUBCOMMANDS`. Both lists go through `_ts_serves`/`_exec_ts`, and the parity harness's pinned bash copy empties BOTH (it fails loudly if either assignment goes missing).
+
 `src/core/` is the shared data-model layer (CLI **and** the planned graph visualization import it) and has **zero CLI knowledge** — no argv, no output formatting, no console:
 
 - `frontmatter.ts` — `Frontmatter` (key-order-preserving block, raw values) + `TicketDocument` (block + body, byte-exact round trip)
@@ -19,18 +21,20 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 - `slug.ts` — title → filename, collision suffixes
 - `dep-graph.ts` — `DepGraph`: ready/blocked, cycles, dependency-tree layout rows
 
-`src/cli/` pieces shared by the read commands (`ls`/`ready`/`blocked`/`closed`/`query`):
+`src/cli/` pieces shared by the read commands (`ls`/`ready`/`blocked`/`closed`/`query`/`dep tree`/`dep cycle`/`show`):
 
 - `list-options.ts` / `ticket-filter.ts` — the `--status`/`-a`/`--assignee`/`-T`/`--tag`/`--limit` union. Only `ls` honors `--status`; the others use `filterIgnoringStatus`
-- `ticket-row.ts` — the four bash `printf` row formats, one place
+- `ticket-row.ts` — the four bash `printf` row formats plus `identified()` (`<id> [<status>] <title>`, the shape the graph commands share), one place
+- `ticket-lookup.ts` — the ONE place an `IdResolution` becomes a user-facing failure; carries bash's two different wordings (`ticket_path`'s vs `dep tree`'s)
+- `pager.ts` / `child-exit.ts` — `show`'s `$TICKET_PAGER` handoff (TTY only) and the shared "adopt the child's exit code" rule, also used by `jq.ts`
 - `store-resolver.ts` — bash `init_tickets_dir` semantics for read commands (dir must exist)
 - `row-limit.ts` — `closed`'s `--limit=`; a plain count only (bash forwarded it to `head -n`)
 - `jq.ts` — spawns the external `jq` for `query <filter>`; jq stays a real dependency, never reimplemented
-- `cli-error.ts` — `CliError`; `main.ts` renders it (and core's `MissingTicketIdError`) as `Error: <message>`, exit 1 (or the error's own `exitCode`)
+- `cli-error.ts` — `CliError`; `main.ts` renders it (and core's `MissingTicketIdError`) as `Error: <message>`, exit 1 (or the error's own `exitCode`). `UsageError` is the subclass for bash's un-prefixed `Usage: …` lines
 - `exit-codes.ts` — every exit code in one place, including `128 + signal` for a signalled child
 - `broken-pipe.ts` — node ignores SIGPIPE, so a closed stdout is turned into exit 141 here
 
-Bash behavior is the contract; parity is verified empirically via `make parity` (differential harness, `scripts/parity/README.md`; runs in CI alongside `make test`; delete at T6), not guessed. The harness diffs against a *pinned copy* of `ticket` with `TS_COMMANDS` emptied — running `./ticket` itself would compare TS to TS for anything already ported. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `printf` padding widths and trailing spaces, `dep tree` sibling ordering, `closed`'s mtime order (nanoseconds, `ls -t` name tie-break, a symlink's OWN mtime via `lstat`) with its 100-file scan cap applied before filtering, and exit codes inside a pipeline (a short reader kills bash's `awk`/`jq` with SIGPIPE).
+Bash behavior is the contract; parity is verified empirically via `make parity` (differential harness, `scripts/parity/README.md`; runs in CI alongside `make test`; delete at T6), not guessed. The harness diffs against a *pinned copy* of `ticket` with `TS_COMMANDS` emptied — running `./ticket` itself would compare TS to TS for anything already ported. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `printf` padding widths and trailing spaces, `dep tree` sibling ordering, `show`'s section order (awk hash order, i.e. unspecified — compared as sets), `closed`'s mtime order (nanoseconds, `ls -t` name tie-break, a symlink's OWN mtime via `lstat`) with its 100-file scan cap applied before filtering, and exit codes inside a pipeline (a short reader kills bash's `awk`/`jq` with SIGPIPE).
 
 Key functions:
 - `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides

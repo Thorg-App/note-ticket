@@ -372,6 +372,8 @@ describe("DepGraph relationships", () => {
     const graph = graphOf([
         { id: "target" },
         { id: "child", parent: "target" },
+        // Someone else's child: without it, "has a parent at all" would pass for "children".
+        { id: "other-child", parent: "elsewhere" },
         { id: "waiter", deps: ["target"] },
         { id: "done-waiter", status: "closed", deps: ["target"] },
     ]);
