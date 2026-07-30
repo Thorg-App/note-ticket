@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_graph
 import check_query
 import check_slug
-from harness import require_dump
+from harness import require_dump, require_jq
 
 DEFAULT_RANDOM_SCENARIOS = 60
 DEFAULT_SEED = 7
@@ -28,6 +28,7 @@ def main():
     args = parser.parse_args()
 
     require_dump()
+    require_jq()
     results = [
         ("graph", check_graph.run(args.random, args.seed)),
         ("query", check_query.run()),

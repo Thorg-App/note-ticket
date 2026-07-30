@@ -78,7 +78,9 @@ Design rules:
 
 `make parity` (see `scripts/parity/README.md`) diffs bash `./ticket` against the TS
 core over generated ticket graphs and covers the graph/JSONL/slug items below
-empirically. Run it while porting; delete it at T6 with bash.
+empirically. It runs in CI (`.github/workflows/test.yml`) alongside `make test`, because 6 of
+the 14 mutations it catches are invisible to the BDD suite. Delete both the harness and that CI
+step at T6 with bash.
 
 Verify these while porting — they are contractual even where scenarios are thin:
 
@@ -135,7 +137,7 @@ T1 scaffold ── T2 core model ──┬── T3 read cmds ──────
 | T3 | `nid_zesi8c4t7lyw6jgmqqsjqd54k_e` | Read commands: `ls`, `ready`, `blocked`, `closed`, `query` |
 | T4 | `nid_8cislepljqvv88ayndtjlw34k_e` | Graph commands: `dep tree`, `dep cycle`, `show` |
 | T5 | `nid_2ziai8ka9l0yak2lxnwlu9lk2_e` | Write commands: `create`, `status`/`start`/`close`/`reopen`, `dep`/`undep`, `link`/`unlink`, `add-note`, `edit` (T4 soft-dep: finishes the `dep` dispatch flip) |
-| T6 | `nid_fhmxugci00tfkeu3eyeggv6gq_e` | Cutover + packaging (`decide` tag): Node entrypoint replaces bash, delete bash impl, Homebrew/AUR gain `node` dep, docs/CHANGELOG |
+| T6 | `nid_fhmxugci00tfkeu3eyeggv6gq_e` | Cutover + packaging (`decide` tag): Node entrypoint replaces bash, delete bash impl, delete `scripts/parity/` + its make/npm targets + its CI step, Homebrew/AUR gain `node` dep, docs/CHANGELOG |
 
 ## Distribution (decided at T6, recommendation below)
 

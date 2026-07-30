@@ -97,8 +97,20 @@ with *identical* mtimes, bash `ls -t` breaks the tie with `strcoll`, i.e. the ca
 locale, while TS compares bytes. The harness runs both sides under `LC_ALL=C`, where the two
 agree, and `check_graph._check_closed_mtime_tie` byte-compares that case.
 
+## Requirements
+
+`node`, `python3`, `git`, GNU coreutils, and **`jq`** (`query <filter>` spawns the real `jq` on
+both sides — without it both exit 127 with empty output, and the run goes red with three
+misdiagnoses, none naming jq: "fixture drift" from the row-count minimums, `rc=127 ... expected
+141` from the broken-pipe check, and a "changed" control-character divergence. `run.py` refuses to
+start so the message names jq).
+
 ## Lifetime
 
-Delete `scripts/parity/`, the `parity` make target, `build:parity`, and the
-`dist-parity/` ignore entry at **T6 cutover** — once bash `ticket` is gone there is
-nothing left to diff against.
+Delete all of the following at **T6 cutover** — once bash `ticket` is gone there is
+nothing left to diff against:
+
+- `scripts/parity/`
+- the `parity` make target and the `build:parity` npm script
+- the `dist-parity/` ignore entry
+- the **`Run bash-vs-TS parity harness` step in `.github/workflows/test.yml`**
