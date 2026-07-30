@@ -240,3 +240,114 @@ BDD alone missed 6 of 14 that parity caught — and CI runs only `make test`.
 READY. No BLOCKING. 5 SHOULD-FIX (symlink mtime, jq SIGPIPE code, unpinned empty-dir guard,
 missing-jq/SIGPIPE not in CHANGELOG+whitelist, parity-not-in-CI now load-bearing) and 6 NITs.
 Full text in `IMPLEMENTATION_REVIEW_PHASE_B__PUBLIC.md`.
+
+---
+
+# PHASE B ROUND 2 — focused verification (commits `6b9b020`, `354645a`; diff `ec89845..HEAD`)
+
+Read-only for sources. `dist/ticket.mjs` + `dist-test/` mutated 7 times, restored from
+`.tmp/rv2_dist.bak` / `.tmp/rv2_dist_test.bak`; verified **byte-identical to a fresh
+`npm run build`** and `git status` clean at the end. Scratch (gitignored): `.tmp/rv2_bash_ref`,
+`.tmp/rv2_ticket_bash_only`, `.tmp/rv2_pipe_band.py`, `.tmp/rv2_mutate.py`,
+`.tmp/rv2_symlink_dir.py`, `.tmp/r2_*.log`.
+
+## 1. Suites — my numbers, every claim reproduces exactly
+
+| Command | Claimed | I measured |
+|---|---|---|
+| `make typecheck` | 0 | 0 |
+| `make unit-test` | 251 / 0 fail | **251 tests, 42 suites, 0 fail** |
+| `make test` | 208 scen / 1368 steps | **12 features, 208 scenarios, 1368 steps, 0 failed** |
+| `make parity` | graph 69/0 + 7 pins, query 5, slug 13 | **identical; rc 0** (read the FULL summary lines this time, not `tail -6`) |
+
+## 2. The size-band claim — independently re-derived, it HOLDS
+
+`.tmp/rv2_pipe_band.py`, 20 runs per cell, `ls | head -1` via `PIPESTATUS[0]`:
+
+```
+tickets=1     bytes=31      bash={0:20}    ts={0:20}
+tickets=120   bytes=3720    bash={0:20}    ts={0:20}
+tickets=150   bytes=4650    bash={141:20}  ts={0:20}
+tickets=400   bytes=12400   bash={141:20}  ts={0:20}
+tickets=1000  bytes=31000   bash={141:20}  ts={0:20}
+tickets=3000  bytes=93000   bash={141:20}  ts={141:20}
+```
+
+bash flips 0→141 between 3720 and 4650 bytes (awk's 4 KB buffer — sharper than the doc's
+"~4 KB", it IS 4096). TS flips between 31000 and 93000 (the 64 KB pipe buffer). Deterministic,
+not racy, in every cell. Both ends agree; the band is real and is exactly what #7 describes.
+`query <filter> | head -1` is the SAME phenomenon: 3 tickets ⇒ rc 0 on BOTH sides (jq finishes
+before `head` leaves); 3000 ⇒ 141 on both. So the code is right, but see the doc finding below.
+
+141-on-EPIPE does not mask genuine write errors: the handler rethrows any non-EPIPE code.
+Probed `ls >&-` (EBADF): bash rc 2, TS rc 1 — NOT 141, so the guard is not a catch-all.
+`process.exitCode = Cli.run(...)` after installing the handler is safe only because `Cli.run`
+is fully synchronous (`spawnSync` does not spin the loop), so the 'error' event cannot fire
+before the assignment. Latent, not a bug today.
+
+## 3. Mutation battery — 7 mutations, all caught, S3/N1/N2 no longer vacuous
+
+| Mutation | unit | parity | BDD |
+|---|---|---|---|
+| `if (tickets.length === 0)` → `if (false)` | – | **FAIL** (bash 0 / ts 3 on `syntax((((`) | **1 scenario FAIL** |
+| `lstatSync` → `statSync` | **fail 1** | **FAIL** (symlink check) | green |
+| `.mtimeNs` → `.mtimeMs*1e6n` | **fail 1** — and it is the *sub-millisecond* suite | green | green |
+| `DEFAULT_ROW_LIMIT` 20→25 | fail 1 | **FAIL** (default-limit check) | green |
+| `ExitCode.BROKEN_PIPE` → 0 | – | **FAIL** (`ls \| head -1`) | green |
+| `COMMAND_NOT_FOUND` 127→1 | – | – | **missing-jq scenario FAIL** |
+
+The renamed `zzz-newer.md` fixture DOES catch `mtimeNs→mtimeMs` — the path tie-break now
+contradicts the expected order, so the test can only pass for the right reason. Verified with a
+clean bigint-safe mutation (my first attempt threw inside `BigInt(float)` and produced 8 bogus
+BDD failures — the honest read is the second run).
+
+## 4. lstat did not break anything else — my own differential probe
+
+`.tmp/rv2_symlink_dir.py`, bash ref vs `dist/ticket.mjs`, rc+stdout: symlinked `_tickets/`
+DIRECTORY (with the dir symlink itself stamped 2030) `closed` + `ls` SAME; plain dir SAME;
+symlinked ticket file to a target outside `_tickets/` **plus a dangling symlink** `closed` +
+`ls` SAME. `isFile()` still uses `statSync`, so a broken link is excluded exactly as
+`find -L -type f` excludes it; `lstat` is only reached for entries already known to resolve.
+
+## 5. Missing-jq scenario — genuinely non-vacuous, no test knob
+
+`grep process.env src/` = only `TICKET_INVOKED_AS` (production bash→node handoff) and
+`TicketsDirectory.resolve`'s injectable default. No `JQ_*`, no TEST/MOCK knob anywhere in
+`src/` or `ticket`. Against `.tmp/rv2_ticket_bash_only`: **12 passed / 4 failed** in
+`ticket_query.feature`, the 4 being the 3 pre-existing divergence scenarios + missing-jq, which
+fails on `Install jq` while bash still gives rc **127** and `jq: command not found` — i.e. the
+127 assertion is a real parity lock and the message is the only divergence. Confirmed.
+
+## 6. Ledger + hygiene
+
+`scripts/parity/README.md` seven = {dep cycle, missing id, `|` title, `closed --limit=`,
+control chars, missing jq, broken pipe}. `docs-internal/migration-to-ts-high-level.md`
+references #3–#7 with the SAME numbers. CHANGELOG carries all six user-facing ones. Consistent.
+(The handoff's prose "same seven" is itself wrong — it swaps `dep cycle` for `-a`/`-T`. Docs are
+fine; the sentence is not. Not worth an iteration.)
+
+`features/` diff since `ec89845` = **0 deleted lines**; `test/` = 1 deleted line per file, both
+import statements reflowed. No scenario, test or anchor point removed; no `ap_*_E` line touched.
+`src/core/` still CLI-free (`grep` for console/argv/stdout/stderr/exit ⇒ none).
+
+## 7. New this round
+
+- **SHOULD-FIX (docs only):** `README.md` "Piping a listing into a short reader (`tk ls | head
+  -1`) exits 141" is FALSE below ~64 KB of output (measured 0 on both sides at 120–1000
+  tickets), and CHANGELOG's "`query <jq-filter> | head` (any short reader) now exits 141 …
+  instead of 1" is likewise size-dependent (rc 0/0 at 3 tickets). The internal parity README is
+  precise; the user-facing pair overstates. One conditioning clause each.
+- NIT: `_path_without` builds its symlink farm in the SYSTEM temp dir and those links must be
+  *executed* — the parity harness materializes its bash copy under `$REPO/.tmp` for exactly the
+  noexec reason. `dir=` would remove the risk.
+- NIT: `renderTickets(recent, options, limit = options.rowLimit)` — a defaulted 3rd param that
+  recomputes what the only production caller already computed, present only for direct test
+  calls.
+- NIT: worth a WHY on `process.exitCode = Cli.run(...)` recording that it must stay after a
+  synchronous run for the EPIPE handler to win.
+
+## 8. Verdict recorded
+
+**READY.** No BLOCKING, no NOT-FIXED, no REGRESSED. All 11 findings VERIFIED-FIXED (S5 as the
+agreed ticket update). Acceptance genuinely met. Full text in
+`IMPLEMENTATION_REVIEW_PHASE_B_ROUND2__PUBLIC.md`.
