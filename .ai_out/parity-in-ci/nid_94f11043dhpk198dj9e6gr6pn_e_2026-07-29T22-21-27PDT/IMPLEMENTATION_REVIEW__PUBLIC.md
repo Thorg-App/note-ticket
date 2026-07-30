@@ -237,3 +237,67 @@ asserts a jq-less behaviour that the `min_lines` guard in the same commit replac
 else in this round is verified fixed, both suites are green, and the CI step remains genuinely
 build-failing. This is a text-only fix with the corrected, measured wording supplied above; no
 further review round should be needed after it.
+
+---
+
+# ROUND 3 — final convergence check, commit 8ab268d (text-only, on 9f01f5e)
+
+Fresh instance, read-only for code. Scope was intentionally one question: **is the shipped
+`require_jq()` rationale factually true of the current tree?** No new review lines opened, no
+dispositioned finding re-raised.
+
+## R2-1 — verified FIXED by my own measurement
+
+I did **not** take the implementer's numbers on trust. Method: symlink farm of all 927
+executables on the real PATH minus **only** `jq` (`/usr/bin/jq`, `/bin/jq`), `PATH` pointed at the
+farm, `shutil.which("jq") is None` asserted, then each `check_query` sub-check called directly so
+`require_jq()` is bypassed.
+
+| Sub-check | Measured at HEAD |
+|---|---|
+| `_check_jsonl` | **False** — `query ['query', '.status == "open"'] matched 0 rows, expected at least 8 -- fixture drift, the comparison is measuring (almost) nothing` |
+| `_check_empty_repo` | True — "empty tickets dir succeeds **before jq**" |
+| `_check_query_broken_pipe` | **False** — `query <filter> \| head -1 rc=127 on both sides, expected 141` |
+| `_check_missing_id_divergence` | True — bare `query`, jq never spawned |
+| `_check_control_character_divergence` | **False** — `control-character divergence changed: TS \`query .id\` now fails on a control character` |
+
+Claim-by-claim against the shipped text:
+
+- "nothing passes vacuously" — **true**. The two passing sub-checks are structurally jq-free
+  (one asserts the pre-jq short-circuit, one runs bare `query`); neither is degraded.
+- "the run goes red" — **true** (three failures).
+- "three misdiagnoses: fixture drift / `rc=127 ... expected 141` / control-character divergence
+  'changed'" — **true**, matches my output string for string.
+- "none names jq" — **true**: none of the three messages contains the substring `jq`.
+- Guard fires with the new message: `PATH=<farm> python3 scripts/parity/run.py --random 1` →
+  exit **1**, `jq is not on PATH -- \`query <filter>\` exits 127 on both sides, and every
+  resulting failure misdiagnoses it (fixture drift, 127 vs 141). Install jq and re-run.`
+
+The `scripts/parity/README.md` "Requirements" sentence carries the same three-misdiagnosis
+wording and is equally accurate. Third attempt is correct.
+
+## No functional drift
+
+`git show HEAD` touches only `scripts/parity/harness.py` (the `require_jq()` docstring and the
+`SystemExit` string) and `scripts/parity/README.md`, plus `.ai_out/` reports. The guard
+condition `if shutil.which("jq") is None:` is unchanged; no workflow, no fixture, no
+`check_*.py` logic, no `src/`. Working tree clean at exit (scratch deleted).
+
+## Suites — green, real numbers
+
+| Check | Result |
+|---|---|
+| `make parity` (`.tmp/r3-parity.log`) | exit **0** — `graph OK scenarios=69 failures=0`, `query OK … query identical over 8 invocations (33 lines)`, `slug OK titles=13 failures=0` |
+| `make test` (`.tmp/r3-test.log`) | exit **0** — 12 features passed / 0 failed, **208 scenarios passed / 0 failed**, 1368 steps, 0min 5.777s |
+
+## Note for the record (not a finding)
+
+The root cause of two false shipments is worth a line in the team's habits, not another
+iteration: a WHY comment that quotes a *measured* failure mode is coupled to the code it
+describes, so it must be re-measured **after** the last functional edit of the same commit.
+`8ab268d` also has the property that makes it durable — it names the consequence class
+("failures that do not name jq") rather than a fragile line count like the old "33 → 16".
+The audit trail (round-1 text retained under a CORRECTED banner) is good practice and the two
+older commit messages' stale rationale is explicitly called out rather than quietly left.
+
+VERDICT: **READY**

@@ -72,3 +72,46 @@ accuses the fixtures. That is the sentence the docstring should carry.
 
 Verdict written: NEEDS-ITERATION (one ~3-line wording fix in `harness.py` + `README.md`,
 plus a correction note in the two PUBLIC docs; no functional change).
+
+---
+
+# Round 3 (final convergence) — commit 8ab268d
+
+Fresh instance. Scope was deliberately one question only: is the shipped `require_jq()`
+wording true of the CURRENT tree? Read-only for code; scratch (`.tmp/r3_nojq.py`,
+`.tmp/r3-nojq-bin`) deleted; `git status --porcelain` empty at exit.
+
+## My own jq-less measurement at HEAD (PATH = symlink farm of 927 real-PATH binaries, minus ONLY `/usr/bin/jq` + `/bin/jq`; `shutil.which("jq") is None`; sub-checks called directly, guard bypassed)
+
+| Sub-check | Result |
+|---|---|
+| `_check_jsonl` | **False** — `query ['query', '.status == "open"'] matched 0 rows, expected at least 8 -- fixture drift, the comparison is measuring (almost) nothing` |
+| `_check_empty_repo` | True — "succeeds **before jq**" (genuinely jq-independent, not a vacuous pass) |
+| `_check_query_broken_pipe` | **False** — `query <filter> \| head -1 rc=127 on both sides, expected 141` |
+| `_check_missing_id_divergence` | True — bare `query`, no jq involved |
+| `_check_control_character_divergence` | **False** — `control-character divergence changed: TS \`query .id\` now fails on a control character` |
+
+Three failures, and **none of the three messages contains the string "jq"**. The two passes are
+structurally jq-free, so "nothing passes vacuously" is also true. The shipped docstring,
+README sentence and `SystemExit` text all match this verbatim. **Third attempt is correct.**
+
+Guard fires: `PATH=.tmp/r3-nojq-bin python3 scripts/parity/run.py --random 1` → exit **1**,
+prints the new message, which names jq.
+
+## Regression numbers (mine, this tree)
+
+| Check | Result |
+|---|---|
+| `make parity` (`.tmp/r3-parity.log`) | exit **0** — `graph OK scenarios=69 failures=0`, `query OK … identical over 8 invocations (33 lines)`, `slug OK titles=13` |
+| `make test` (`.tmp/r3-test.log`) | exit **0** — 12 features, **208 scenarios / 1368 steps passed, 0 failed**, 5.8s |
+| Functional drift | none — HEAD's only non-`.ai_out` files are `scripts/parity/harness.py` (docstring + `SystemExit` string) and `scripts/parity/README.md`. `if shutil.which("jq") is None:` unchanged; no workflow, no fixture, no `check_*.py` logic |
+
+## Lesson to carry forward (generalizable)
+
+A WHY comment that quotes a *measured failure mode* is coupled to the code it describes. When
+one commit both (a) records a measurement and (b) changes the behavior measured, the comment
+ships false. Rule: re-measure the WHY **after** the last functional edit in the same commit,
+never before — and prefer WHY text that names the *consequence class* ("failures that do not
+name jq") over exact strings/line counts, which rot.
+
+Verdict written: **READY**.
