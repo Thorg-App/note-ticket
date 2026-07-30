@@ -310,6 +310,18 @@ def step_ticket_has_hr_and_fake_frontmatter(context, ticket_id):
     ticket_path.write_text(content)
 
 
+@given(r'a raw ticket file "(?P<filename>[^"]+)" exists with content')
+def step_raw_ticket_file(context, filename):
+    """Write a file under _tickets/ verbatim from the scenario's docstring.
+
+    For shapes `create` can never produce -- notably a ticket with no usable 'id',
+    which every enumerating command must reject by name.
+    """
+    path = Path(context.test_dir) / '_tickets' / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(context.text + '\n')
+
+
 @given(r'the test root is not a git repository')
 def step_test_root_not_git(context):
     """Remove the git repository from the test root."""
@@ -578,6 +590,13 @@ def step_output_contains(context, text):
     """Assert output contains text."""
     output = context.stdout + context.stderr
     assert text in output, f"Expected output to contain '{text}'\nActual output: {output}"
+
+
+@then(r'stderr should contain "(?P<text>[^"]+)"')
+def step_stderr_contains(context, text):
+    """Assert the text went to STDERR specifically, not merely to one of the streams."""
+    assert text in context.stderr, \
+        f"Expected stderr to contain '{text}'\nActual stderr: {context.stderr}"
 
 
 @then(r'the output should not contain "(?P<text>[^"]+)"')

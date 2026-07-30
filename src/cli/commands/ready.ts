@@ -13,7 +13,8 @@ import { TicketRow } from "../ticket-row.js";
 export class ReadyCommand {
     static render(tickets: readonly Ticket[], options: ListOptions): string {
         const ready = DepGraph.build(tickets).ready();
-        const rows = ready.filter((ticket) => options.filter.matches(ticket)).map((ticket) => TicketRow.withPriority(ticket));
+        const filter = options.filterIgnoringStatus;
+        const rows = ready.filter((ticket) => filter.matches(ticket)).map((ticket) => TicketRow.withPriority(ticket));
         return TicketRow.text(rows);
     }
 }

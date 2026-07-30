@@ -23,8 +23,10 @@ unit-test: $(NPM_STAMP)
 # Differential bash-vs-TS parity harness (scripts/parity/). Migration-only: it is
 # deleted at T6 when bash `ticket` goes away and there is nothing left to diff against.
 # Scale the generated graphs with e.g. `make parity PARITY_ARGS="--random 500"`.
+# Depends on `build`: the checks run the shipped dist/ticket.mjs for every command
+# already flipped into TS_COMMANDS, and a stale bundle would measure the wrong code.
 PARITY_ARGS ?=
-parity: $(NPM_STAMP)
+parity: build
 	npm run --silent build:parity
 	python3 scripts/parity/run.py $(PARITY_ARGS)
 

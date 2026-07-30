@@ -10,8 +10,9 @@
 - Nested subfolders under `_tickets/` are now supported for organizing tickets (e.g. `_tickets/backend/api/foo.md`). Move ticket files with `mv`; every command searches all nesting levels. New tickets are still created at the top level of `_tickets/`. Hidden directories (`.trash`, `.obsidian`, ...) are skipped; `ls` and `query` list tickets in byte-wise path order.
 
 ### Changed
-- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Implemented in the TypeScript core; becomes user-visible as each enumerating command is delegated to it.
-- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help` is the first delegated command. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
+- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Live for `ls`/`list`, `ready` and `blocked`; the remaining enumerating commands follow as they are delegated to the TypeScript core.
+- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help`, `ls`/`list`, `ready` and `blocked` are delegated so far. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
+- `ls`, `ready` and `blocked` now reject a `-a`/`-T` given without a value (`Error: option '-a' requires a value`) instead of aborting with an internal bash `unbound variable` message. Output formats and filtering are unchanged.
 
 ### Fixed
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules

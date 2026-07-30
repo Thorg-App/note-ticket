@@ -12,8 +12,9 @@ import { TicketRow } from "../ticket-row.js";
 export class BlockedCommand {
     static render(tickets: readonly Ticket[], options: ListOptions): string {
         const blocked = DepGraph.build(tickets).blocked();
+        const filter = options.filterIgnoringStatus;
         const rows = blocked
-            .filter((entry) => options.filter.matches(entry.ticket))
+            .filter((entry) => filter.matches(entry.ticket))
             .map((entry) => TicketRow.withBlockers(entry));
         return TicketRow.text(rows);
     }

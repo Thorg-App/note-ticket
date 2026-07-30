@@ -19,10 +19,16 @@ const OPTION_LIMIT = "--limit=";
  */
 export class ListOptions {
     private constructor(
+        /** Status + assignee + tag. Only `ls` accepts a status, so only `ls` uses this. */
         readonly filter: TicketFilter,
         /** Raw `--limit=` text, empty when absent. Only `closed` reads it. */
         readonly limitText: string,
     ) {}
+
+    /** Assignee + tag only — the filter of every command that fixes the status itself. */
+    get filterIgnoringStatus(): TicketFilter {
+        return this.filter.ignoringStatus();
+    }
 
     static parse(args: readonly string[]): ListOptions {
         let status = "";

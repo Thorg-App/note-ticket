@@ -74,10 +74,14 @@ CLI_INVOCATIONS = [
     ["ready", "-a", "u1"],
     ["ready", "-T", "t2"],
     ["ready", "--assignee=u0", "--tag=common"],
+    # ready/blocked take no --status: bash never reads it there, so it must be IGNORED
+    # rather than applied. This pair is what catches a shared option parser overreaching.
+    ["ready", "--status=closed"],
     ["blocked"],
     ["blocked", "-a", "u0"],
     ["blocked", "-T", "t0"],
     ["blocked", "--assignee=u1", "--tag=common"],
+    ["blocked", "--status=closed"],
 ]
 
 

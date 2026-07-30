@@ -17,12 +17,25 @@ make parity PARITY_ARGS="--seed 42"      # different graphs; failures are reprod
 
 | File | Role |
 |------|------|
-| `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format; bundled to `dist-parity/dump.mjs` |
-| `harness.py` | Throwaway repo, command runners, scenario generators |
-| `check_graph.py` | `ready`, `blocked`, `dep tree[ --full]` byte-compare + `dep cycle` semantic check |
+| `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format, for commands the shipped CLI does not serve yet; bundled to `dist-parity/dump.mjs` |
+| `harness.py` | Throwaway repo, command runners, scenario generators, pinned bash reference |
+| `check_graph.py` | `ls`/`ready`/`blocked` (every filter flag) + `dep tree[ --full]` byte-compare, `dep cycle` semantic check |
 | `check_query.py` | `query` JSONL byte-compare + the missing-`id` divergence |
 | `check_slug.py` | `title_to_filename` vs `Slug.fromTitle` |
 | `run.py` | Runs all checks; exit 1 on any unexpected mismatch |
+
+## The bash side is a pinned copy, not `./ticket`
+
+`./ticket` exec's the TS bundle for every command named in its `TS_COMMANDS`, so calling it
+directly would compare TS against TS the moment a command is ported — a harness that can no
+longer fail. `harness.py` therefore runs a copy of the script with `TS_COMMANDS` emptied
+(`BashReference`, materialized under `$REPO/.tmp` because the system temp dir may be
+`noexec`). Nothing in the shipped script changes.
+
+The TS side of a check is the **real CLI** (`dist/ticket.mjs`) for every ported command, and
+`dump.mjs` only for the rest; a command's `dump.ts` mode is deleted when it is ported, so no
+output format is ever described in two places. `make parity` depends on `make build` for
+exactly this reason.
 
 ## Whitelisted divergences
 
