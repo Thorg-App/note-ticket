@@ -2,7 +2,7 @@
 id: nid_zesi8c4t7lyw6jgmqqsjqd54k_e
 title: "TS port 3: read commands (ls, ready, blocked, closed, query)"
 status: open
-deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e]
+deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e, nid_n6eavbm0h77twvna8k9nnpu2g_e]
 links: []
 created_iso: 2026-07-29T21:57:25Z
 status_updated_iso: 2026-07-29T21:57:25Z

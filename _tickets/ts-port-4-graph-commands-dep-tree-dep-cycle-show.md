@@ -23,3 +23,14 @@ Scope:
 
 Acceptance: dep tree, dep cycle, show served by TS; full BDD suite green.
 
+
+## Notes
+
+**2026-07-30T00:00:13Z**
+
+### Carry-over from the closed ID-resolution decision ticket (nid_5g3eta9cf7yi6iukmscxma6wc_e)
+
+Human confirmed both ID-resolution changes; this ticket owns pinning them:
+- Add a BDD scenario: `dep tree <full-id>` resolves when that full id is a **substring of another** ticket's id (bash errors "ambiguous" here; TS is correct). Use `IdResolver` for the dep-tree root — do NOT reimplement the substring scan.
+- Add a BDD scenario: an **empty** id resolves to not-found (bash succeeds in a one-ticket repo).
+- Partial-ID matching is **retained** — exact match simply wins over it. Do not remove the partial tier.
