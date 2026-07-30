@@ -36,6 +36,7 @@
 - `closed` orders a symlinked ticket file by the link's own modification time, matching `ls -t` (a listing containing symlinks could come out in the wrong order)
 - `dep cycle` now reports every cycle exactly once. It used to abort its search at the first cycle found, which both printed walks that were not cycles and missed real ones
 - `show` lists a duplicate dependent once under `## Blocking`; a ticket naming the target twice in its `deps` used to be printed once per entry
+- A ticket file (or tickets directory) the OS refuses to read, write, append to, list or create now fails like every other error — `Error: cannot write <path>: permission denied (EACCES)`, exit 1 — instead of dumping a node stack trace naming an internal temp file
 
 ### Removed
 - Removed `migrate-beads` command

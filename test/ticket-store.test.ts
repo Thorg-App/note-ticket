@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+    chmodSync,
     lstatSync,
     lutimesSync,
     mkdtempSync,
@@ -16,6 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { after, before, describe, it } from "node:test";
 
+import { FileSystemError } from "../src/core/file-system-error.js";
 import {
     CorruptTicketFileError,
     MissingFrontmatterBlockError,
@@ -436,10 +438,18 @@ describe("TicketStore writes", () => {
     describe("when the write fails", () => {
         const path = tree.ticket("survivor.md", "nid_survivor");
         const store = new TicketStore(tree.root);
+        // Captured, not re-triggered per test: the failed save cleans the squatting
+        // directory away, so the failure can only be observed ONCE.
+        let failure: unknown;
 
         before(() => {
             mkdirSync(`${path}${SCRATCH_SUFFIX}`);
-            assert.throws(() => store.save(store.load(path).withField("status", "closed")));
+            try {
+                store.save(store.load(path).withField("status", "closed"));
+            } catch (error) {
+                failure = error;
+            }
+            assert.notEqual(failure, undefined, "expected the save to fail");
         });
 
         it("keeps the previous content readable", () => {
@@ -451,6 +461,15 @@ describe("TicketStore writes", () => {
                 readdirSync(tree.root).filter((name) => name.startsWith("survivor") && name.endsWith(".md")),
                 ["survivor.md"],
             );
+        });
+
+        /**
+         * The scratch name is an implementation detail of `save`; a failure that named it
+         * would send the user after a path they never created and cannot fix.
+         */
+        it("names the TICKET, not the scratch file, in the failure", () => {
+            assert.ok(failure instanceof FileSystemError, `expected a FileSystemError, got ${String(failure)}`);
+            assert.equal(failure.message, `cannot write ${path}: is a directory (EISDIR)`);
         });
     });
 
@@ -485,6 +504,95 @@ describe("TicketStore writes", () => {
     it("detects a taken top-level filename", () => {
         tree.ticket("taken.md", "nid_taken");
         assert.equal(new TicketStore(tree.root).topLevelFileExists("taken.md"), true);
+    });
+});
+
+/**
+ * Permission failures reach the user as a `FileSystemError` — a one-line, path-naming
+ * message the CLI renders as `Error: …`, exit 1 — and never as node's stack trace
+ * (ticket nid_xioefs6t2rcs1gyl2mpcb1oyf_e).
+ *
+ * WHY the root skip: root bypasses the permission bits outright, so every chmod below
+ * would be a no-op and the assertions would pass for the wrong reason. Skipping says so;
+ * `FileSystemError.guarding`'s own errno translation is covered without any chmod in
+ * test/file-system-error.test.ts, and the write path is covered EISDIR-wise above.
+ */
+const ROOT_SKIP = process.getuid?.() === 0 ? "root bypasses permission bits" : false;
+
+const READ_ONLY_DIR = 0o555;
+const READ_ONLY_FILE = 0o444;
+const UNREADABLE_FILE = 0o000;
+const WRITABLE_DIR = 0o755;
+
+describe("TicketStore permission failures", { skip: ROOT_SKIP }, () => {
+    const tree = new TicketsTree();
+
+    // Restore write permission first: rmSync cannot unlink out of a read-only directory.
+    after(() => {
+        chmodSync(tree.root, WRITABLE_DIR);
+        tree.remove();
+    });
+
+    it("reports an unwritable directory when rewriting a ticket", () => {
+        const path = tree.ticket("locked.md", "nid_locked");
+        const store = new TicketStore(tree.root);
+        const ticket = store.load(path).withField("status", "closed");
+        chmodSync(tree.root, READ_ONLY_DIR);
+        try {
+            assert.throws(
+                () => store.save(ticket),
+                (error: Error) =>
+                    error instanceof FileSystemError &&
+                    error.message === `cannot write ${path}: permission denied (EACCES)`,
+            );
+        } finally {
+            chmodSync(tree.root, WRITABLE_DIR);
+        }
+    });
+
+    it("reports an unwritable file when appending a note", () => {
+        const path = tree.ticket("append-denied.md", "nid_append_denied");
+        const store = new TicketStore(tree.root);
+        const ticket = store.load(path);
+        chmodSync(path, READ_ONLY_FILE);
+        assert.throws(
+            () => store.appendTo(ticket, "\nnote\n"),
+            (error: Error) => error.message === `cannot append to ${path}: permission denied (EACCES)`,
+        );
+    });
+
+    it("reports an unreadable ticket file", () => {
+        const path = tree.ticket("unreadable.md", "nid_unreadable");
+        chmodSync(path, UNREADABLE_FILE);
+        assert.throws(
+            () => new TicketStore(tree.root).load(path),
+            (error: Error) => error.message === `cannot read ${path}: permission denied (EACCES)`,
+        );
+    });
+
+    it("reports a tickets directory it may not create", () => {
+        const parent = join(tree.root, "no-mkdir-here");
+        mkdirSync(parent);
+        chmodSync(parent, READ_ONLY_DIR);
+        const wanted = join(parent, "_tickets");
+        assert.throws(
+            () => new TicketStore(wanted).ensureDir(),
+            (error: Error) => error.message === `cannot create directory ${wanted}: permission denied (EACCES)`,
+        );
+    });
+
+    it("reports a directory it may not list", () => {
+        const nested = join(tree.root, "sealed");
+        mkdirSync(nested);
+        chmodSync(nested, 0o000);
+        try {
+            assert.throws(
+                () => new TicketStore(tree.root).collectFiles(),
+                (error: Error) => error.message === `cannot list ${nested}: permission denied (EACCES)`,
+            );
+        } finally {
+            chmodSync(nested, WRITABLE_DIR);
+        }
     });
 });
 

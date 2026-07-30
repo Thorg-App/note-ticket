@@ -1,3 +1,4 @@
+import { FileSystemError } from "../core/file-system-error.js";
 import { CorruptTicketFileError } from "../core/ticket-file-error.js";
 import type { TicketStore } from "../core/ticket-store.js";
 import { BrokenPipe } from "./broken-pipe.js";
@@ -139,6 +140,11 @@ class Cli {
         // A corrupt repo is the user's problem, not a defect, but core knows nothing of
         // the CLI, so its error is adopted into the one user-facing channel here.
         if (error instanceof CorruptTicketFileError) {
+            return new CliError(error.message);
+        }
+        // Likewise an unwritable ticket or a read-only checkout: the user's environment, not
+        // a defect, so it gets the `Error: ` line instead of node's stack trace.
+        if (error instanceof FileSystemError) {
             return new CliError(error.message);
         }
         return undefined;

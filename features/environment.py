@@ -42,7 +42,18 @@ def before_scenario(context, scenario):
 def after_scenario(context, scenario):
     """Clean up temporary directories after each scenario."""
     if hasattr(context, 'test_dir') and os.path.exists(context.test_dir):
+        _restore_directory_permissions(context.test_dir)
         shutil.rmtree(context.test_dir)
+
+
+def _restore_directory_permissions(root):
+    """Make every directory writable again.
+
+    A scenario may drop write permission to exercise an unwritable tickets directory,
+    and rmtree cannot unlink out of one.
+    """
+    for directory, _subdirs, _files in os.walk(root):
+        os.chmod(directory, 0o755)
 
 
 def before_feature(context, feature):

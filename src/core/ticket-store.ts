@@ -17,6 +17,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { FileSystemError } from "./file-system-error.js";
 import { Git } from "./git.js";
 import { Ticket } from "./ticket.js";
 import { MissingFrontmatterBlockError, MissingTicketIdError } from "./ticket-file-error.js";
@@ -87,7 +88,9 @@ export class TicketStore {
     }
 
     ensureDir(): void {
-        mkdirSync(this.ticketsDir, { recursive: true });
+        FileSystemError.guarding("create directory", this.ticketsDir, () => {
+            mkdirSync(this.ticketsDir, { recursive: true });
+        });
     }
 
     /** Absolute-or-as-given paths of every ticket file, deterministically ordered. */
@@ -102,7 +105,7 @@ export class TicketStore {
 
     /** Throws a `CorruptTicketFileError` for a file that is not a ticket — see that class. */
     load(path: string): Ticket {
-        const text = readFileSync(path, FILE_ENCODING);
+        const text = FileSystemError.guarding("read", path, () => readFileSync(path, FILE_ENCODING));
         const ticket = Ticket.parse(path, text);
         // Order matters: no block at all is a DIFFERENT failure from a block without an
         // `id`, and only the second may name the `id` field.
@@ -173,13 +176,18 @@ export class TicketStore {
      */
     save(ticket: Ticket): void {
         const tempPath = `${ticket.path}${TEMP_FILE_SUFFIX}.${process.pid}`;
-        try {
-            writeFileSync(tempPath, ticket.text(), FILE_ENCODING);
-            renameSync(tempPath, ticket.path);
-        } catch (error) {
-            TicketStore.discardScratch(tempPath);
-            throw error;
-        }
+        // The reported path is the TICKET's, not the scratch file's: the scratch name is an
+        // implementation detail of this method and means nothing to whoever has to fix the
+        // permissions.
+        FileSystemError.guarding("write", ticket.path, () => {
+            try {
+                writeFileSync(tempPath, ticket.text(), FILE_ENCODING);
+                renameSync(tempPath, ticket.path);
+            } catch (error) {
+                TicketStore.discardScratch(tempPath);
+                throw error;
+            }
+        });
     }
 
     /**
@@ -196,7 +204,9 @@ export class TicketStore {
      * already there.
      */
     appendTo(ticket: Ticket, text: string): void {
-        appendFileSync(ticket.path, text, FILE_ENCODING);
+        FileSystemError.guarding("append to", ticket.path, () => {
+            appendFileSync(ticket.path, text, FILE_ENCODING);
+        });
     }
 
     /**
@@ -241,7 +251,8 @@ export class TicketStore {
             return;
         }
         const descent = new Set([...ancestorRealPaths, realDir]);
-        for (const name of readdirSync(dir)) {
+        const names = FileSystemError.guarding("list", dir, () => readdirSync(dir));
+        for (const name of names) {
             const path = join(dir, name);
             if (TicketStore.isDirectory(path)) {
                 // Hidden DIRECTORY: prune the whole subtree (.obsidian, .trash, .git).

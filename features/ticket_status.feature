@@ -143,6 +143,17 @@ Feature: Ticket Status Management
     Then the command should succeed
     And ticket "test-0001" should have a valid "status_updated_iso" timestamp
 
+  # An unwritable ticket is the user's environment, not a crash: it must read like every
+  # other failure, naming the file to fix (ticket nid_xioefs6t2rcs1gyl2mpcb1oyf_e).
+  Scenario: A ticket file that cannot be rewritten fails with a message, not a stack trace
+    Given the tickets directory is not writable
+    When I run "ticket close test-0001"
+    Then the exit code should be 1
+    And stderr should contain "Error: cannot write"
+    And stderr should contain "_tickets/"
+    And stderr should contain "permission denied (EACCES)"
+    And the output should not contain "node:fs"
+
   Scenario: Reopening preserves status_updated_iso
     When I run "ticket close test-0001"
     Then the command should succeed
