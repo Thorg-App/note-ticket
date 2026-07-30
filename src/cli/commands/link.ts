@@ -74,8 +74,8 @@ export class LinkCommand {
      * WHY this is refused while `dep a a` is still recorded: a `links` entry has no graph
      * semantics, so a ticket linked to itself is inert data no reader can act on; a `deps`
      * edge IS part of a graph, so a self-edge is a real error that `dep cycle` reports and
-     * `ready`/`blocked` act on. See the WHY-NOT in `dep.ts` and ticket
-     * nid_r3mp6uylht7t77iwxtuqvhxv2_e (tag `decide`) for the human sign-off.
+     * `ready`/`blocked` act on. See the WHY-NOT in `dep.ts`. APPROVED as shipped by the owner
+     * on 2026-07-30 (ticket nid_r3mp6uylht7t77iwxtuqvhxv2_e).
      */
     private static resolve(store: TicketStore, args: readonly string[]): readonly Ticket[] {
         const all = store.loadAll();

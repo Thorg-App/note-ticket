@@ -9,7 +9,7 @@ status_updated_iso: 2026-07-30T02:24:10Z
 type: bug
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
-tags: [ts-port, core, decide]
+tags: [ts-port, core]
 ---
 
 A ticket file with CRLF line endings (Windows editor, synced Obsidian vault, `git config core.autocrlf=true` checkout) is now a HARD failure for every command served by the TypeScript core.
@@ -26,22 +26,35 @@ The loud failure is DESIRABLE and pre-approved (nid_n6eavbm0h77twvna8k9nnpu2g_e)
 
 Root cause: /home/nickolaykondratyev/git_repos/note-ticket/src/core/frontmatter.ts matches the `---` fence and `key: value` lines without tolerating a trailing `\r`, so the whole block parses as absent and /home/nickolaykondratyev/git_repos/note-ticket/src/core/id.ts raises MissingTicketIdError.
 
-Pick ONE (needs a human call, see Design):
-(a) Tolerate a trailing `\r` on the fence and field lines in `frontmatter.ts`, i.e. actually support CRLF ticket files. Must keep the byte-exact round-trip property (TicketDocument re-serializes unchanged text identically) — that is the hard part, and it has unit tests in test/frontmatter.test.ts.
+DECIDED (see HUMAN_DECISION at the end of this file): option (b). CRLF ticket files stay UNSUPPORTED;
+only the misleading message is fixed.
+
 (b) Keep rejecting the file but distinguish the two causes: an unparseable/absent frontmatter block gets its own message (e.g. `Error: <path> has no YAML frontmatter block` / `... frontmatter block is not parseable (CRLF line endings?)`), separate from a block that parses but has no `id`.
+
+NOT doing (rejected for now): tolerating a trailing `\r` on the fence and field lines in `frontmatter.ts`, i.e.
+actually supporting CRLF ticket files. It touches the byte-exact round-trip guarantee of `TicketDocument`
+(re-serializes unchanged text identically), which every write command depends on. Revisit only if a real user
+hits a CRLF ticket file; no ticket is filed for it, on purpose — it is speculative until then.
 
 Deliberately OUT of scope of the T3 read-commands ticket (nid_zesi8c4t7lyw6jgmqqsjqd54k_e): pre-existing core parsing, not caused by the port, and scope discipline mattered more than folding it in.
 
 ## Design
 
-(a) is the user-friendly fix but touches the byte-exact round-trip guarantee of TicketDocument, which every write command depends on; (b) is cheap, safe, and honest but leaves CRLF files unusable.
+The message must not name a field the file visibly contains. Two distinct causes, two distinct messages:
+no frontmatter block could be parsed at all vs a block that parsed and has no `id`. Naming CRLF as the likely
+cause in the first message is the whole value of the fix — it turns a dead end into a one-line diagnosis.
 
-Pareto suggests (b) now plus (a) only if CRLF files turn out to be real for a user. Human decision requested because it is a product call about which platforms are supported, not a technical one.
+WHY-NOT support CRLF: a product call about which platforms are supported, and the round-trip guarantee makes
+it the expensive half of the problem while the cheap half removes the actual user-facing harm.
 
 ## Acceptance Criteria
 
 - A failing unit test in test/frontmatter.test.ts (or test/id.test.ts) covering a CRLF ticket file exists and drives the fix.
-- Whichever option is chosen, the error message for a CRLF file no longer claims the `id` field is missing when the file contains one, OR the file is parsed successfully.
+- A CRLF ticket file still fails loudly (exit 1, pre-approved by nid_n6eavbm0h77twvna8k9nnpu2g_e) but the error no longer claims the `id` field is missing; it reports an unparseable frontmatter block and points at CRLF.
+- A file that genuinely has a parseable block without `id` keeps the existing `has no 'id' frontmatter field` message — the two causes stay distinguishable.
 - `make typecheck`, `make unit-test`, `make test`, `make parity` all green.
 - CHANGELOG.md `[Unreleased]` updated if user-visible.
 
+--------------------------------------------------------------------------------
+
+HUMAN_DECISION: lets go with cheap B dont support CRLF for now.

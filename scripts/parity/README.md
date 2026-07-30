@@ -104,6 +104,11 @@ case that IS compared is the one where every file gains exactly one id.
 Byte-comparison is the default; the following are deliberate and are *pinned*
 instead, so the harness still fails if either side changes its mind.
 
+Every entry that CHANGES user-visible behavior rather than merely picking an order bash left
+unspecified has owner sign-off: #9 on `nid_5g3eta9cf7yi6iukmscxma6wc_e`, #8's duplicate-row
+removal on `nid_qxt3z5unr9k220aqttbw84a6a_e`, and #6, #10, #11, #12 and #17 approved as shipped
+on 2026-07-30 (`nid_r3mp6uylht7t77iwxtuqvhxv2_e`). Nothing here is pending a decision.
+
 1. **`dep cycle`** — bash aborts its DFS on the first cycle and leaves nodes marked
    "visiting", so it prints paths that are not cycles and misses real ones (19 bogus
    cycles over the default scenario set). Diffing bytes would pin a bug, so both sides
@@ -168,9 +173,9 @@ instead, so the harness still fails if either side changes its mind.
    so keep the dedup narrow. The `Blockers` and `Linked` sections are `deps`/`links` order on
    both sides, duplicate entries included — both sides repeat the row.
    **Approval status:** the ORDER half needs none (bash's order is unspecified, so any
-   implementation must pick one). The DUPLICATE-ROW REMOVAL is a deliberate behavior change
-   that is **shipped but PENDING HUMAN SIGN-OFF** — ticket `nid_qxt3z5unr9k220aqttbw84a6a_e`
-   (tagged `decide`). It is NOT covered by the id-resolution decision ticket, which is #9 only.
+   implementation must pick one). The DUPLICATE-ROW REMOVAL is a deliberate behavior change,
+   approved by the owner on 2026-07-30 (`nid_qxt3z5unr9k220aqttbw84a6a_e`); it was not covered
+   by the id-resolution decision ticket, which is #9 only.
 9. **`dep tree`'s root id, and an empty id anywhere** — bash's `cmd_dep_tree` resolved its
    root with its own awk scan matching by SUBSTRING, so a full id contained in another
    ticket's id came back "ambiguous" and that tree was unreachable, while untrimmed input
@@ -250,8 +255,8 @@ instead, so the harness still fails if either side changes its mind.
    One `check_write` case, two BDD scenarios (the refusal and the count).
    WHY only `link` and not `dep`: a `links` entry has no graph semantics, so a ticket linked to
    itself is inert data; a `deps` self-edge is a real graph error that `dep cycle` reports, so
-   `tk dep a a` is still recorded exactly as bash recorded it. Awaiting human sign-off on
-   ticket `nid_r3mp6uylht7t77iwxtuqvhxv2_e`.
+   `tk dep a a` is still recorded exactly as bash recorded it. The asymmetry is approved (see
+   above).
 18. **The ORDER in which `link` appends missing ids** — bash appended them with awk's
    `for (id in need)`, whose order is unspecified and differs between awk builds (measured
    `[c, b]` for `link a b c` under this machine's awk). TS appends in the order the user named

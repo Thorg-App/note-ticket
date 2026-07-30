@@ -1,15 +1,16 @@
 ---
+closed_iso: 2026-07-30T17:46:29Z
 id: nid_r3mp6uylht7t77iwxtuqvhxv2_e
 title: "Decide: TS-port divergences that replace a bash crash, garbage output or useless data"
-status: open
+status: closed
 deps: []
 links: []
 created_iso: 2026-07-30T10:51:35Z
-status_updated_iso: 2026-07-30T10:51:35Z
+status_updated_iso: 2026-07-30T17:46:29Z
 type: chore
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
-tags: [decide, ts-port]
+tags: [ts-port]
 ---
 
 (A fifth item, #17, was appended as a note at the bottom after this ticket was written; it is a
@@ -20,12 +21,19 @@ The TS port of the CLI (docs-internal/migration-to-ts-high-level.md) has four de
 All four are listed as whitelisted divergences in scripts/parity/README.md and are pinned by tests (check_write.py cases plus BDD scenarios), so nothing is unobserved -- what is missing is APPROVAL.
 
 #6 `query <filter>` with no jq on PATH: bash printed the shell's own `./ticket: line NNN: jq: command not found`; TS prints `Error: jq: command not found` + `Install jq, or run 'query' without a filter`. Exit code 127 on both.
+HD: YES fine to have different error message on this.
 
 #10 `tk create x --design` (a value-taking flag at the end of the argument list): bash died with `./ticket: line 308: $2: unbound variable`; TS exits 1 with `Error: option '--design' requires a value`.
+HD: YES fine to have different error message on this.
+
 
 #11 A NEWLINE in a create title (`tk create $'line1\nline2'`): bash created a file literally named `line1<LF>line2.md` and printed a JSON line that does not parse (`"title":"\"line1","line2\"":""`); TS creates `line1line2.md` and valid JSON.
+HD: YES fine. 
 
 #12 `_tickets/<slug>.md` already exists as a DIRECTORY: bash tested `[[ -f ]]`, false for a directory, redirected create output into it and died with `Is a directory` at exit 1; TS treats the name as taken, picks `<slug>-1.md` and succeeds.
+HD: Yes that is fine.
+
+(HD -- Human decision)
 
 ## Design
 
@@ -59,3 +67,9 @@ Options:
   (c) Extend the refusal to `dep`: `tk dep a a` would also fail, a SECOND new error string and a change to a command whose bash behavior is currently reproduced exactly.
 
 Pinned by: one `diverges=True` case in scripts/parity/check_write.py, and the scenarios "Linking a ticket to itself is refused" and "A repeated id is counted once when other tickets remain".
+
+HD: (a) APPROVE as shipped — `link` refuses a collapsing set, `dep a a` keeps recording a self-dependency.
+
+**2026-07-30T17:46:29Z**
+
+All five items approved as shipped (#6, #10, #11, #12 inline above; #17 option (a)). No implementation follow-ups. Docs adjusted to record the approval instead of pending sign-off: scripts/parity/README.md (whitelist preamble + #17), docs-internal/migration-to-ts-high-level.md, and the WHY comments in src/cli/commands/dep.ts and link.ts. Still open and NOT covered here: divergence #8's duplicate-row removal, ticket nid_qxt3z5unr9k220aqttbw84a6a_e.

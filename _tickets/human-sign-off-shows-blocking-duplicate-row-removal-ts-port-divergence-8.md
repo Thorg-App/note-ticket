@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-30T17:48:57Z
 id: nid_qxt3z5unr9k220aqttbw84a6a_e
 title: "Human sign-off: show's ## Blocking duplicate-row removal (TS port divergence #8)"
-status: open
+status: closed
 deps: []
 links: []
 created_iso: 2026-07-30T07:47:06Z
-status_updated_iso: 2026-07-30T07:47:06Z
+status_updated_iso: 2026-07-30T17:48:57Z
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -34,7 +35,15 @@ by that closed decision ticket and needs no further approval.
 Approve the dedup (expected: yes, duplicated rows are not a feature), or ask for bash's duplicates
 to be reproduced.
 
+Human Decision: Yes dedup is approved.
+
 ## If approved
 
 Update the "pending human sign-off" wording for divergence #8 in `scripts/parity/README.md` and
 `docs-internal/migration-to-ts-high-level.md` to "approved", then close this ticket.
+
+## Notes
+
+**2026-07-30T17:48:57Z**
+
+Dedup approved by the owner. Wording updated from 'pending human sign-off' to approved in scripts/parity/README.md (whitelist preamble + entry #8) and docs-internal/migration-to-ts-high-level.md. No code change: the dedup was already shipped. With this, no whitelisted divergence is pending a decision.

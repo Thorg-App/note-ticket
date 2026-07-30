@@ -58,7 +58,7 @@ Seven declared divergences (parity whitelist + migration doc + a pinning test ea
 bad --limit= on an empty dir, control-char escaping, missing jq -> 127, and the mid-size broken-pipe band.
 
 Follow-ups: nid_7opxnvhia4a2ty7o0k9t6z4bl_e (deferred NITs), nid_z10hpj927zqilxcpl9ycpe0ad_e (CRLF files
-fail with a misleading no-'id' error — tagged `decide`, needs a human call), nid_94f11043dhpk198dj9e6gr6pn_e
+fail with a misleading no-'id' error — decided 2026-07-30: fix the message only, CRLF stays unsupported), nid_94f11043dhpk198dj9e6gr6pn_e
 (make parity not in CI; raised to P1 after measuring that the scan cap, --limit ordering and full_path
 position are invisible to make test).
 

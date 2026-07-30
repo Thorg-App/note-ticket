@@ -123,8 +123,8 @@ Verify these while porting — they are contractual even where scenarios are thi
 - `show`: bash's Blocking/Children order is an awk hash order, i.e. unspecified, and it
   printed one Blocking row per matching `deps` entry; TS uses enumeration order and one row
   per ticket (whitelisted divergence #8). The order half needs no approval; the duplicate-row
-  removal is shipped but PENDING human sign-off in `nid_qxt3z5unr9k220aqttbw84a6a_e` — the
-  closed decision ticket covers #9 only.
+  removal was approved by the owner on 2026-07-30 (`nid_qxt3z5unr9k220aqttbw84a6a_e`), the
+  #9 decision ticket having covered #9 only.
 - `dep` is ONE command name whose `tree`/`cycle` subcommands are reads and whose default form
   is a write. T4 delegated the two read branches from inside bash `cmd_dep` via a second list,
   `TS_DEP_SUBCOMMANDS`; T5 phase B put `dep` itself in `TS_COMMANDS`, which makes that inner
@@ -143,7 +143,8 @@ Verify these while porting — they are contractual even where scenarios are thi
   order the user named them, where bash used awk's unspecified hash order (#18).
   `tk dep a a` deliberately stays bash-compatible (a self-dependency IS recorded): a `deps`
   self-edge is a graph error `dep cycle` already reports, while a self-`link` is inert data.
-  Both halves of that judgement are on the `decide` ticket `nid_r3mp6uylht7t77iwxtuqvhxv2_e`.
+  Both halves of that judgement were APPROVED as shipped by the owner on 2026-07-30
+  (`nid_r3mp6uylht7t77iwxtuqvhxv2_e`, closed), together with #6, #10, #11 and #12.
 - `unlink` decides whether the link exists from the SUBJECT's `links` alone, then clears both
   sides — a half link recorded only by the target reports `Link not found`. That is bash's
   behavior and is kept.

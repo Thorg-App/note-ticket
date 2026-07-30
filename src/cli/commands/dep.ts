@@ -32,8 +32,8 @@ const ALREADY_EXISTS = "Dependency already exists";
  * reportable graph error — `dep cycle` names it and `ready`/`blocked` act on it, which is
  * strictly more useful to the user than a refusal at write time. A `links` entry carries no
  * graph semantics at all, so `a <-> a` is inert data nobody and nothing can act on. The
- * asymmetry is therefore deliberate, not an oversight. Filed for human sign-off on ticket
- * nid_r3mp6uylht7t77iwxtuqvhxv2_e.
+ * asymmetry is therefore deliberate, not an oversight, and was APPROVED as shipped by the
+ * owner on 2026-07-30 (ticket nid_r3mp6uylht7t77iwxtuqvhxv2_e).
  */
 export class DepCommand {
     static run(store: TicketStore, args: readonly string[]): number {
