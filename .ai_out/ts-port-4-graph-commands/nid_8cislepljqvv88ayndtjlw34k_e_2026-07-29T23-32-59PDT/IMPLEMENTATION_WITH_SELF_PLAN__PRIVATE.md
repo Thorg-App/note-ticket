@@ -127,3 +127,43 @@ rollback path and the parity harness's other side.
 
 Not done here (owned elsewhere): CHANGELOG entry (TOP_LEVEL_AGENT), closing the ticket.
 `.tmp/exp/` is scratch and is gitignored-by-convention (untracked, left in place).
+
+---
+
+## Round 2 (review follow-up) — DONE, all four gates green
+
+Cleanup only, zero shipped behavior change. `make build && make unit-test && make test &&
+make parity` → exit 0 (289/289 unit, 214 scenarios, parity graph/query/slug all OK).
+
+What changed:
+- **Divergence #8 labelling.** Round 1 said "both human-approved" — WRONG. The closed
+  decision ticket `nid_5g3eta9cf7yi6iukmscxma6wc_e` covers #9 (id resolution) only. #8's
+  duplicate-row removal is pending sign-off in `nid_qxt3z5unr9k220aqttbw84a6a_e` (`decide`).
+  Corrected in `scripts/parity/README.md`, `docs-internal/migration-to-ts-high-level.md`
+  and the PUBLIC file. **If that ticket is approved, flip the wording in all three.**
+- `test/graph-commands.test.ts` — the dangling-dep tree test was named for the opposite of
+  its assertion; renamed to "omits a dangling dependency…"; the awk-array comment moved to
+  the `show` test that really asserts `- ghost [] `.
+- `src/core/id.ts` — stale "needs human confirmation" pointer replaced with the closed
+  ticket + divergence #9 reference.
+- `TicketRow.paddedIdentified()` added; `dep-cycle.ts` uses it; `idColumn` is **private
+  again** (it had only been made public for that one call site).
+- **`TreeLayout.layoutChildren`'s re-check DELETED** (was dead). Argument, re-derived: a
+  child is listed only when `maxDepth[child] === depth + 1`, an earlier sibling's subtree
+  prints only at depths `>= depth + 2`, so `printed` cannot gain it in between; `--full`
+  makes `isPrintable` state-independent anyway. A WHY-NOT comment records this and that
+  bash re-checks at pop time. Parity byte-compares `dep tree`/`--full` for every ticket of
+  69 scenarios and stayed green. Do NOT re-add it without a failing case.
+- `CLAUDE.md` — harness copy now described as emptying BOTH delegation lists.
+
+Measured this round (throwaway repo under `.tmp/vrepo`, built bundle):
+- `dep tree`/`dep cycle`/`show` on a repo containing an id-less `.md` → `Error: <path> has
+  no 'id' frontmatter field`, rc 1 (all three).
+- `show ""` → `Error: ticket '' not found`, rc 1.
+- Pager missing-binary arm, **under a real TTY** via `script -qec "TICKET_PAGER=nosuchpager
+  ticket show <id>"` → `Error: nosuchpager: command not found`. Round 1 called this
+  unmeasured; it is measured now (still no automated test — no TTY in BDD/parity).
+
+CHANGELOG is still NOT written here (TOP_LEVEL_AGENT owns it); the exact seven-item content
+list is in the PUBLIC file. Note the reviewer misattributed the missing-`id` command list to
+README — it is `CHANGELOG.md:13`; README has no per-command enumeration.

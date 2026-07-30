@@ -57,13 +57,18 @@ export class TicketRow {
         return `${id} [${ticket?.status ?? ""}] ${ticket?.title ?? ""}`;
     }
 
+    /** `identified` with the id in bash's `%-8s` column — the `dep cycle` member row. */
+    static paddedIdentified(id: string, ticket: Ticket | undefined): string {
+        return TicketRow.identified(TicketRow.idColumn(id), ticket);
+    }
+
     /** Rows as printable output: one trailing newline each, empty text for no rows. */
     static text(rows: readonly string[]): string {
         return rows.map((row) => `${row}${ROW_SEPARATOR}`).join("");
     }
 
     /** An id padded to bash's `%-8s` column; a longer id is NOT truncated. */
-    static idColumn(id: string): string {
+    private static idColumn(id: string): string {
         return id.padEnd(ID_COLUMN_WIDTH);
     }
 

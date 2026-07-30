@@ -48,7 +48,7 @@ export class DepCycleCommand {
             }
             rows.push(`Cycle ${index + 1}: ${cycle.pathIds.join(CYCLE_ARROW)}`);
             for (const id of cycle.memberIds) {
-                rows.push(`${MEMBER_INDENT}${TicketRow.identified(TicketRow.idColumn(id), open.get(id))}`);
+                rows.push(`${MEMBER_INDENT}${TicketRow.paddedIdentified(id, open.get(id))}`);
             }
         });
         return TicketRow.text(rows);

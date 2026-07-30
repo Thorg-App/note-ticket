@@ -71,7 +71,7 @@ the review stage.
 - **`show` echoes the file line by line** (reproducing awk `getline`, which terminates a
   file that lacks a final newline) instead of re-serialising the parsed document.
 
-## Declared divergences from bash (both human-approved)
+## Declared divergences from bash (approval status differs per divergence)
 
 Recorded as **#8** and **#9** in `scripts/parity/README.md` (alongside the existing seven)
 and in `docs-internal/migration-to-ts-high-level.md`.
@@ -92,6 +92,12 @@ and in `docs-internal/migration-to-ts-high-level.md`.
    The parity harness byte-compares the echoed file and the section headings **in order**,
    and compares the rows inside a section as sorted sets;
    `_check_show_duplicate_blocking` pins the duplicate-row difference.
+   **Approval:** the ORDER half needs none (bash's order is unspecified). The
+   DUPLICATE-ROW REMOVAL is shipped but **PENDING human sign-off** —
+   `nid_qxt3z5unr9k220aqttbw84a6a_e` (tagged `decide`). The closed decision ticket
+   `nid_5g3eta9cf7yi6iukmscxma6wc_e` covers #9 ONLY; the round-1 report's claim that both
+   divergences were human-approved was wrong and is corrected here and in
+   `scripts/parity/README.md` + `docs-internal/migration-to-ts-high-level.md`.
 
 Divergence **#1** (`dep cycle`: bash aborts its DFS on the first cycle, printing walks that
 are not cycles and missing real ones — 19 bogus cycles over the default scenario set) is now
@@ -151,3 +157,105 @@ twice.
 - Running `node dist/ticket.mjs dep <id> <dep-id>` directly (bypassing bash) prints bash's
   `dep` usage block and exits 1, because the write form is still bash's. Unreachable through
   `./ticket`; documented in `src/cli/commands/dep.ts`. It disappears at T5.
+
+---
+
+# Round 2 — review follow-up (cleanup only, no behavior change)
+
+All four gates re-run after the changes below. **Actual results:**
+
+| Command | Result |
+|---|---|
+| `make build` | exit 0 — `dist/ticket.mjs` 61.4kb |
+| `make unit-test` | exit 0 — 289 tests, 289 pass, 0 fail |
+| `make test` | exit 0 — 12 features, 214 scenarios, 1420 steps, 0 failed |
+| `make parity` | exit 0 — graph OK (69 scenarios, 0 failures), query OK, slug OK |
+
+No shipped behavior changed this round. Tree is clean.
+
+## Per review item
+
+### IMPORTANT #2 — "both human-approved" mislabelling — **INCORPORATED**
+
+The reviewer is right and the round-1 wording was a real accuracy failure. Corrected in
+three places: `scripts/parity/README.md` (divergence #8 now carries an explicit
+"**Approval status**" paragraph), `docs-internal/migration-to-ts-high-level.md` (the `show`
+bullet), and the "Declared divergences" heading + #8 entry of this file. All three now say:
+the ORDER half needs no approval (awk hash order is unspecified, any implementation must
+pick one); the DUPLICATE-ROW REMOVAL is shipped but **pending human sign-off** in
+`nid_qxt3z5unr9k220aqttbw84a6a_e` (tagged `decide`), and the closed decision ticket
+`nid_5g3eta9cf7yi6iukmscxma6wc_e` covers **#9 only**. The fix itself was NOT reverted.
+
+### IMPORTANT #3 — misleading test name — **INCORPORATED**
+
+`test/graph-commands.test.ts` — renamed to *"omits a dangling dependency from the tree, even
+in `--full` mode"*, and the misplaced awk-array comment moved down to the `show` test that
+actually asserts `- ghost [] `. The tree test now carries a WHY comment naming bash's
+`build_children` `!(child in max_depth)` skip. The assertion is an exact string equality, so
+it cannot go vacuous from a rename.
+
+### Suggestion 1 — stale pointer in `src/core/id.ts` — **INCORPORATED**
+
+"Needs human confirmation before the write commands are flipped" replaced with "Confirmed as
+a bug by the owner in `nid_5g3eta9cf7yi6iukmscxma6wc_e` (closed); whitelisted divergence #9".
+
+### Suggestion 2 — padded id passed to `TicketRow.identified` — **INCORPORATED**
+
+Added `TicketRow.paddedIdentified(id, ticket)`; `dep-cycle.ts:51` uses it, and `idColumn`
+went back to **private** (it had been made public only for that one call site). The padding
+knowledge is now entirely inside `TicketRow`.
+
+### Suggestion 3 — unreachable re-check in `src/core/dep-graph.ts` — **INCORPORATED (deleted)**
+
+**Decision: delete the dead guard**, keeping the reasoning as a WHY-NOT comment. Rationale:
+the reviewer proved it unreachable both by mutation (removal left unit tests *and* parity
+green) and analytically, and I re-derived the argument — a child is listed only when
+`maxDepth[child] === depth + 1`, while an earlier sibling's subtree can only print at depths
+`>= depth + 2`, so `printed` cannot have gained it in between; in `--full` mode `isPrintable`
+is state-independent anyway. CLAUDE.md forbids unused code, and a dead branch whose comment
+claims a scenario that cannot occur is worse than no branch. The comment now records that
+bash re-checks at pop time and *why* we do not need to. Parity (69 scenarios, byte-compared
+`dep tree` and `dep tree --full` for every ticket) is green after the deletion.
+
+### Suggestion 4 — `CLAUDE.md` "TS_COMMANDS emptied" — **INCORPORATED**
+
+Now reads "with BOTH delegation lists (`TS_COMMANDS` and `TS_DEP_SUBCOMMANDS`) emptied".
+
+### IMPORTANT #1 — CHANGELOG — **not touched, by instruction** (owned by TOP_LEVEL_AGENT)
+
+## CHANGELOG content (item 4) — verified by me, not copied
+
+I re-measured each claim against the built bundle in a throwaway repo under `$PWD/.tmp/`
+rather than trusting the review. Six user-visible changes belong in the entry:
+
+1. **`dep tree`, `dep cycle` and `show` are now served by the TypeScript core.**
+2. **An empty id no longer resolves.** `tk show ""` (i.e. `tk show "$UNSET_VAR"`) used to
+   print an arbitrary ticket in a one-ticket repo — awk's `index(s, "")` is 1. **Measured
+   now:** `Error: ticket '' not found`, exit 1. This is the one a user can be bitten by.
+3. **`dep tree <full-id>` resolves where it used to report "ambiguous"** — the root now goes
+   through the shared `IdResolver` (exact beats partial, input trimmed) instead of a
+   substring scan, so a full id contained in another ticket's id is reachable.
+4. **`dep cycle` reports every cycle once** — it no longer aborts its DFS at the first cycle,
+   so it stops printing walks that are not cycles and stops missing real ones.
+5. **`show` lists a duplicate dependent once** under `## Blocking` (bash printed one row per
+   matching `deps` entry). Flag it as pending sign-off (`nid_qxt3z5unr9k220aqttbw84a6a_e`).
+6. **`dep tree`, `dep cycle` and `show` now hard-error on a `.md` with no `id`.** **Measured
+   now:** all three print
+   `Error: <path> has no 'id' frontmatter field`, exit 1. The existing `Changed` bullet at
+   `CHANGELOG.md:13` enumerates `ls`/`list`, `ready`, `blocked`, `closed`, `query` — **that
+   list is what needs extending** with these three. (Correction to the brief: `README.md`
+   does *not* carry a per-command list — its paragraph says "commands fail with …" with no
+   enumeration — so README needs no change here.)
+7. **A missing pager binary now reports `Error: <pager>: command not found`** (exit 127)
+   instead of the shell's `./ticket: line NNN: …`. **Measured now** under a real TTY via
+   `script -qec "TICKET_PAGER=nosuchpager ticket show <id>"`: `Error: nosuchpager: command
+   not found`. Same shape as the `jq` change, which was CHANGELOG'd. (This also closes part
+   of round 1's "pager path is unmeasured" caveat — the missing-binary arm is now measured,
+   though still not covered by an automated test, since neither BDD nor parity has a TTY.)
+
+## Readiness
+
+**READY.** All SHOULD-FIX and NICE-TO-HAVE items are addressed, no shipped behavior changed,
+all four gates green. Remaining, both owned elsewhere: the CHANGELOG entry
+(TOP_LEVEL_AGENT, content above) and human sign-off on divergence #8's dedup
+(`nid_qxt3z5unr9k220aqttbw84a6a_e`).

@@ -100,6 +100,10 @@ instead, so the harness still fails if either side changes its mind.
    HEADINGS in order, but compares the rows within a section as sorted sets;
    `_check_show_duplicate_blocking` pins the duplicate-row difference. The `Blockers` and
    `Linked` sections are `deps`/`links` order on both sides.
+   **Approval status:** the ORDER half needs none (bash's order is unspecified, so any
+   implementation must pick one). The DUPLICATE-ROW REMOVAL is a deliberate behavior change
+   that is **shipped but PENDING HUMAN SIGN-OFF** — ticket `nid_qxt3z5unr9k220aqttbw84a6a_e`
+   (tagged `decide`). It is NOT covered by the id-resolution decision ticket, which is #9 only.
 9. **`dep tree`'s root id, and an empty id anywhere** — bash's `cmd_dep_tree` resolved its
    root with its own awk scan matching by SUBSTRING, so a full id contained in another
    ticket's id came back "ambiguous" and that tree was unreachable, while untrimmed input

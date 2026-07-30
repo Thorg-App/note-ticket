@@ -59,8 +59,9 @@ describe("DepTreeCommand.render", () => {
         assert.equal(DepTreeCommand.render(graph, "a", false), "a [open] a\n└── b [open] Child\n");
     });
 
-    // bash looked the id up in an awk array and got the empty string for both fields.
-    it("prints a dangling dependency with empty status and title in --full mode", () => {
+    // Unlike `show`, the tree drops the dangling id entirely: bash's `build_children` skips
+    // any child that is `!(child in max_depth)`, and only real tickets get a max_depth.
+    it("omits a dangling dependency from the tree, even in --full mode", () => {
         const graph = graphOf([{ id: "a", deps: ["ghost"] }]);
         assert.equal(DepTreeCommand.render(graph, "a", true), "a [open] a\n");
     });
@@ -146,6 +147,7 @@ describe("ShowCommand.render", () => {
         assert.ok(!shown.includes("## Blockers"));
     });
 
+    // bash looked the id up in an awk array and got the empty string for both fields.
     it("lists a dangling dependency with empty status and title", () => {
         assert.ok(shownFor([{ id: "a", deps: ["ghost"] }]).endsWith("- ghost [] \n"));
     });
