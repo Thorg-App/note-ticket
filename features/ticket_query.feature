@@ -72,3 +72,70 @@ Feature: Ticket Query
     And the output should contain "HR ticket"
     And the output should not contain "fake_field"
     And the output should not contain "leaked_value"
+
+  # bash escaped only backslashes and double quotes, so a raw tab in a title produced JSONL
+  # that jq itself refuses to read.
+  Scenario: Query escapes a control character in a title
+    Given a ticket exists with ID "query-001" and title "Tab ticket"
+    And ticket "query-001" has a tab character in its title
+    When I run "ticket query"
+    Then the command should succeed
+    And the output should be valid JSONL
+
+  Scenario: Query with a control character in a title survives a jq filter
+    Given a ticket exists with ID "query-001" and title "Tab ticket"
+    And ticket "query-001" has a tab character in its title
+    When I run "ticket query '.id != null'"
+    Then the command should succeed
+    And the output should contain "query-001"
+
+  Scenario: Query fails loudly when a ticket file has no id
+    Given a ticket exists with ID "query-001" and title "Healthy ticket"
+    And a raw ticket file "orphan.md" exists with content
+      """
+      ---
+      title: "No id key"
+      status: open
+      ---
+      """
+    When I run "ticket query"
+    Then the command should fail
+    And stderr should contain "orphan.md has no 'id' frontmatter field"
+
+  Scenario: Query reports an unusable jq filter through jq's own exit code
+    Given a ticket exists with ID "query-001" and title "Filtered ticket"
+    When I run "ticket query 'syntax((('"
+    Then the command should fail
+    And the output should be empty
+
+  # bash returned before it ever reached jq when there was nothing to enumerate, so even an
+  # unparseable filter succeeded there. Deleting that short-circuit would make this exit 3.
+  Scenario: Query succeeds with an unparseable filter when there are no tickets
+    When I run "ticket query 'syntax((('"
+    Then the command should succeed
+    And the output should be empty
+
+  # DIVERGENCE: bash printed the shell's own `./ticket: line NNN: jq: command not found`,
+  # which names a line of the script. The exit code 127 is bash's and is kept.
+  Scenario: Query reports a missing jq with the shell's exit code
+    Given a ticket exists with ID "query-001" and title "Filtered ticket"
+    When I run "ticket query '.id'" with jq missing from PATH
+    Then the exit code should be 127
+    And stderr should contain "jq: command not found"
+    And stderr should contain "Install jq"
+
+  Scenario: Query without a filter needs no jq at all
+    Given a ticket exists with ID "query-001" and title "Unfiltered ticket"
+    When I run "ticket query" with jq missing from PATH
+    Then the command should succeed
+    And the output should contain "query-001"
+
+  # bash's argument loop assigns the filter for EVERY argument, so the last one wins.
+  Scenario: Query takes the last argument as the filter
+    Given a ticket exists with ID "query-001" and title "Open ticket"
+    And a ticket exists with ID "query-002" and title "Closed ticket"
+    And ticket "query-002" has status "closed"
+    When I run "ticket query '.status == \"closed\"' '.status == \"open\"'"
+    Then the command should succeed
+    And the output should contain "query-001"
+    And the output should not contain "query-002"

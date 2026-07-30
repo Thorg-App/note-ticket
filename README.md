@@ -22,4 +22,21 @@ without one is a corrupt repo: commands fail with
 `Error: <path> has no 'id' frontmatter field` instead of silently omitting that
 ticket from every listing. Restore the `id`, or move the file out of `_tickets/`.
 
+`closed` lists tickets whose status is `closed` (or the legacy `done`), most recently
+modified first. It looks only at the 100 most recently modified ticket files, so a
+ticket closed long ago is not listed however large `--limit` is. `--limit=N` takes a
+plain count of rows and defaults to 20; anything else is rejected. A symlinked ticket
+file is ordered by the link's own modification time, as `ls -t` orders it.
+
+`query` prints one JSON object per line — the frontmatter fields in file order, with
+`full_path` appended last — and the output is always valid JSON, control characters
+included. `query <jq-filter>` pipes that JSONL through `jq -c "select(<filter>)"`, so
+`jq` must be installed for filtering (only then) and its exit code is passed through;
+without `jq` on PATH, filtering exits 127 with `Error: jq: command not found`.
+
+Piping a listing into a short reader (`tk ls | head -1`, `tk query ... | head -1`) exits
+141, the usual code for SIGPIPE, only once the output is large enough that the write
+actually fails. A listing that fits in the pipe buffer is written before the reader goes
+away and exits 0, so the exit code depends on how many tickets were listed.
+
 

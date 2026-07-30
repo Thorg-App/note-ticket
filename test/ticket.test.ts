@@ -82,6 +82,23 @@ describe("Ticket accessors", () => {
         assert.equal(ticket.withField("status", "closed").isClosed, true);
     });
 
+    it("is not finished while in progress", () => {
+        assert.equal(ticket.isFinished, false);
+    });
+
+    it("is finished when closed", () => {
+        assert.equal(ticket.withField("status", "closed").isFinished, true);
+    });
+
+    // The `closed` listing takes `done` too; dependency resolution deliberately does NOT.
+    it("is finished on the legacy `done` status", () => {
+        assert.equal(ticket.withField("status", "done").isFinished, true);
+    });
+
+    it("is NOT closed on the legacy `done` status", () => {
+        assert.equal(ticket.withField("status", "done").isClosed, false);
+    });
+
     it("defaults a missing priority", () => {
         const bare = Ticket.parse(PATH, '---\nid: x\ntitle: "x"\n---\n');
         assert.equal(bare.priority, DEFAULT_PRIORITY);
@@ -92,9 +109,6 @@ describe("Ticket accessors", () => {
         assert.equal(bare.priority, DEFAULT_PRIORITY);
     });
 
-    it("reports no frontmatter fields for a plain markdown file", () => {
-        assert.equal(Ticket.parse(PATH, "just text\n").hasFrontmatterFields, false);
-    });
 });
 
 describe("Ticket.toJsonRecord", () => {

@@ -2,6 +2,10 @@
  * Thin entrypoint that renders `src/core` output in bash `./ticket`'s exact format,
  * so the parity checks can diff the two byte-for-byte. Not shipped: this is a test
  * fixture for the migration and gets deleted at T6 together with bash `ticket`.
+ *
+ * Only for commands the shipped CLI does NOT serve yet — once a command lands in
+ * `TS_COMMANDS`, its check switches to `dist/ticket.mjs` and its mode is deleted here,
+ * so the output format is never described in two places.
  */
 import { DepGraph } from "../../src/core/dep-graph.js";
 import { Slug } from "../../src/core/slug.js";
@@ -38,20 +42,6 @@ if (mode === "tree") {
                 process.stdout.write(`  ${id.padEnd(8)} [${t?.status}] ${t?.title}\n`);
             }
         });
-    }
-} else if (mode === "ready") {
-    for (const t of graph().ready()) {
-        process.stdout.write(`${t.id.padEnd(8)} [P${t.priority}][${t.status}] - ${t.title}\n`);
-    }
-} else if (mode === "blocked") {
-    for (const b of graph().blocked()) {
-        process.stdout.write(
-            `${b.ticket.id.padEnd(8)} [P${b.ticket.priority}][${b.ticket.status}] - ${b.ticket.title} <- [${b.blockerIds.join(", ")}]\n`,
-        );
-    }
-} else if (mode === "query") {
-    for (const t of openStore().loadAll()) {
-        if (t.hasFrontmatterFields) process.stdout.write(`${JSON.stringify(t.toJsonRecord())}\n`);
     }
 } else if (mode === "slug") {
     process.stdout.write(`${Slug.fromTitle(arg1 as string)}.md\n`);

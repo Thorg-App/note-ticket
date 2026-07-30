@@ -1,8 +1,23 @@
 import { basename } from "node:path";
 
+import { MissingTicketIdError } from "../core/id.js";
+import type { TicketStore } from "../core/ticket-store.js";
+import { BrokenPipe } from "./broken-pipe.js";
+import { CliError } from "./cli-error.js";
+import { BlockedCommand } from "./commands/blocked.js";
+import { ClosedCommand } from "./commands/closed.js";
 import { HelpCommand } from "./commands/help.js";
+import { LsCommand } from "./commands/ls.js";
+import { QueryCommand } from "./commands/query.js";
+import { ReadyCommand } from "./commands/ready.js";
+import { ExitCode } from "./exit-codes.js";
+import { ListOptions } from "./list-options.js";
+import { StoreResolver } from "./store-resolver.js";
 
 const DEFAULT_PROGRAM_NAME = "ticket";
+
+/** How a read command turns an open tickets directory into printable output. */
+type ReadCommandBody = (store: TicketStore, options: ListOptions) => string;
 
 /**
  * CLI entrypoint. Mirrors the bash `case` dispatch in ./ticket for the commands
@@ -26,18 +41,74 @@ class Cli {
 
     static run(argv: string[]): number {
         const command = argv[0] ?? "help";
+        const args = argv.slice(1);
+        try {
+            return Cli.dispatch(command, args);
+        } catch (error) {
+            const failure = Cli.userFacingFailure(error);
+            if (failure === undefined) {
+                throw error;
+            }
+            process.stderr.write(failure.stderrText);
+            return failure.exitCode;
+        }
+    }
+
+    private static dispatch(command: string, args: readonly string[]): number {
         switch (command) {
             case "help":
             case "--help":
             case "-h":
-                process.stdout.write(HelpCommand.render(this.programName()));
-                return 0;
+                process.stdout.write(HelpCommand.render(Cli.programName()));
+                return ExitCode.SUCCESS;
+            case "ls":
+            case "list":
+                return Cli.read(args, (store, options) => LsCommand.render(store.loadAll(), options));
+            case "ready":
+                return Cli.read(args, (store, options) => ReadyCommand.render(store.loadAll(), options));
+            case "blocked":
+                return Cli.read(args, (store, options) => BlockedCommand.render(store.loadAll(), options));
+            case "closed":
+                // The store, not loadAll(): `closed` orders by file mtime and reads only the
+                // most recently modified files.
+                return Cli.read(args, (store, options) => ClosedCommand.render(store, options));
+            case "query":
+                // Not Cli.read: `query` may hand its output to jq and exit with jq's code,
+                // so it owns its own writing.
+                return QueryCommand.run(StoreResolver.forReadCommand(), args);
             default:
                 process.stderr.write(`Unknown command: ${command}\n`);
-                process.stderr.write(HelpCommand.render(this.programName()));
-                return 1;
+                process.stderr.write(HelpCommand.render(Cli.programName()));
+                return ExitCode.FAILURE;
         }
+    }
+
+    /**
+     * The shape every read command shares: open an EXISTING tickets directory, then print
+     * what the command renders. An existing-but-empty directory prints nothing and succeeds.
+     */
+    private static read(args: readonly string[], body: ReadCommandBody): number {
+        const store = StoreResolver.forReadCommand();
+        process.stdout.write(body(store, ListOptions.parse(args)));
+        return ExitCode.SUCCESS;
+    }
+
+    /**
+     * The failure as the user should see it, or undefined for a defect, which must keep
+     * its stack trace instead of masquerading as a usage error.
+     */
+    private static userFacingFailure(error: unknown): CliError | undefined {
+        if (error instanceof CliError) {
+            return error;
+        }
+        // A corrupt repo is the user's problem, not a defect, but core knows nothing of
+        // the CLI, so its error is adopted into the one user-facing channel here.
+        if (error instanceof MissingTicketIdError) {
+            return new CliError(error.message);
+        }
+        return undefined;
     }
 }
 
+BrokenPipe.reportAsSignalDeath();
 process.exitCode = Cli.run(process.argv.slice(2));

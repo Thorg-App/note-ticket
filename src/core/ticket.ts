@@ -9,6 +9,8 @@ import { Frontmatter, FrontmatterValue, type FrontmatterJsonValue, TicketDocumen
 export const TICKET_STATUS_OPEN = "open";
 export const TICKET_STATUS_IN_PROGRESS = "in_progress";
 export const TICKET_STATUS_CLOSED = "closed";
+/** Legacy status found in old files; `create`/`status` never write it. */
+export const TICKET_STATUS_DONE = "done";
 
 export const VALID_TICKET_STATUSES: readonly string[] = [
     TICKET_STATUS_OPEN,
@@ -94,13 +96,21 @@ export class Ticket {
         return this.status === TICKET_STATUS_CLOSED;
     }
 
-    get body(): string {
-        return this.document.body();
+    /**
+     * Work is over: `closed`, or the legacy `done`.
+     *
+     * WHY this is NOT `isClosed`: the two notions are deliberately different in bash. The
+     * `closed` listing selects `status == "closed" || status == "done"`, while dependency
+     * resolution (`ready`/`blocked`) compares against `"closed"` alone, so a `done`
+     * dependency still blocks. Verified against ./ticket; collapsing them would change
+     * either the listing or the graph.
+     */
+    get isFinished(): boolean {
+        return this.isClosed || this.status === TICKET_STATUS_DONE;
     }
 
-    /** False for files that have no frontmatter fields at all; `query` skips those. */
-    get hasFrontmatterFields(): boolean {
-        return this.frontmatter.entries().length > 0;
+    get body(): string {
+        return this.document.body();
     }
 
     hasTag(tag: string): boolean {
@@ -114,6 +124,19 @@ export class Ticket {
      */
     toJsonRecord(): Record<string, FrontmatterJsonValue> {
         return { ...this.frontmatter.toJsonRecord(), [JSON_KEY_FULL_PATH]: this.path };
+    }
+
+    /**
+     * `toJsonRecord` as one compact JSON line, no trailing newline: the unit `query`
+     * emits per ticket and `create` prints for the ticket it just wrote (bash shares one
+     * `_file_to_jsonl` between the two, and so does this).
+     *
+     * DIVERGENCE (deliberate): bash escapes only `\` and `"`, so a value containing a raw
+     * control character — reachable via `tk create $'tab\there'` — produces a line that is
+     * not valid JSON and that `jq` rejects. `JSON.stringify` escapes it properly.
+     */
+    toJsonText(): string {
+        return JSON.stringify(this.toJsonRecord());
     }
 
     withField(key: string, rawValue: string): Ticket {

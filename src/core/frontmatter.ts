@@ -176,8 +176,13 @@ export class Frontmatter {
      * Split a field line at its FIRST colon. Keys are ASCII-letter-initial, which
      * excludes list items (`- x`) and indented continuations.
      *
-     * A letter-initial line with no colon is not a field. Bash instead turns the whole
-     * line into a JSON key with an empty value; see the divergence list.
+     * Two shapes where bash's `_file_to_jsonl` differs, both hand-edit-only because `create`
+     * and `update_yaml_field` always write `": "` (measured against ./ticket):
+     *   - a letter-initial line with NO colon (`nocolon`) is not a field here; bash emits the
+     *     whole line as a key with an empty value (`"nocolon":""`);
+     *   - a colon with no following space (`title:` or `title:Hi`) splits here into key
+     *     `title`; bash's `FS=": "` never splits, so its key is `"title:"` / `"title:Hi"`.
+     * See the divergence list.
      */
     private static parseLine(line: string): FrontmatterEntry | undefined {
         if (!/^[a-zA-Z]/.test(line)) {

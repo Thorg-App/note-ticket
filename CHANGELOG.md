@@ -10,13 +10,19 @@
 - Nested subfolders under `_tickets/` are now supported for organizing tickets (e.g. `_tickets/backend/api/foo.md`). Move ticket files with `mv`; every command searches all nesting levels. New tickets are still created at the top level of `_tickets/`. Hidden directories (`.trash`, `.obsidian`, ...) are skipped; `ls` and `query` list tickets in byte-wise path order.
 
 ### Changed
-- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Implemented in the TypeScript core; becomes user-visible as each enumerating command is delegated to it.
-- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help` is the first delegated command. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
+- A `.md` file under `_tickets/` with no `id` frontmatter field is now a hard error naming the path (`Error: <path> has no 'id' frontmatter field`) instead of being silently omitted from every listing. Live for `ls`/`list`, `ready`, `blocked`, `closed` and `query`; the remaining enumerating commands follow as they are delegated to the TypeScript core.
+- TypeScript port started (strangler-fig): `ticket` now delegates the commands listed in its `TS_COMMANDS` variable to a Node bundle at `dist/ticket.mjs`; `help`, `ls`/`list`, `ready`, `blocked`, `closed` and `query` are delegated so far. Requires `node` on PATH and `make build` from a source checkout. Removing a name from `TS_COMMANDS` rolls that command back to bash.
+- `ls`, `ready` and `blocked` now reject a `-a`/`-T` given without a value (`Error: option '-a' requires a value`) instead of aborting with an internal bash `unbound variable` message. Output formats and filtering are unchanged.
+- `query <filter>` with no `jq` installed now reports `Error: jq: command not found` plus `Install jq, or run 'query' without a filter`, instead of the shell's `./ticket: line NNN: jq: command not found`. The exit code is unchanged (127), and `query` without a filter still needs no jq.
+- `closed` now rejects a `--limit=` that is not a plain count (`Error: --limit must be a whole number of rows, got 'abc'`). The value used to be handed to `head -n`, which silently accepted `--limit=2k` as 2048, `--limit=-1` as "all but the last one", and reported `head: invalid number of lines` for a typo. `--limit=0` now prints nothing and exits 0; it used to exit 141 or 0 depending on a race between `awk` and `head`.
 
 ### Fixed
+- `query` now escapes control characters, so its JSONL is always valid JSON. A tab in a title (`tk create $'a\tb'`) used to be emitted raw, which made `query` unparseable and `query <filter>` fail inside jq with `Invalid string: control characters ... must be escaped`
+- `ready` and `blocked` no longer truncate a title at a `|` character (e.g. `tk create "Ship it | phase 2"` listed as `Ship it `); `blocked` also no longer prints the rest of such a title where the blocker list belongs
 - Awk frontmatter parsers no longer re-enter frontmatter parsing when body contains `---` horizontal rules
 - `ls`, `ready`, `blocked`, `closed`, `query`, `dep tree`, and `dep cycle` exited with code 2 and an awk error when no ticket files existed; they now exit 0 with no output
 - `closed` no longer mangles paths containing spaces
+- `closed` orders a symlinked ticket file by the link's own modification time, matching `ls -t` (a listing containing symlinks could come out in the wrong order)
 
 ### Removed
 - Removed `migrate-beads` command

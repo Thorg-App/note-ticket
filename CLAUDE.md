@@ -19,7 +19,18 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 - `slug.ts` — title → filename, collision suffixes
 - `dep-graph.ts` — `DepGraph`: ready/blocked, cycles, dependency-tree layout rows
 
-Bash behavior is the contract; parity is verified empirically against `./ticket` via `make parity` (differential harness, `scripts/parity/README.md`; delete at T6), not guessed. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `dep tree` sibling ordering.
+`src/cli/` pieces shared by the read commands (`ls`/`ready`/`blocked`/`closed`/`query`):
+
+- `list-options.ts` / `ticket-filter.ts` — the `--status`/`-a`/`--assignee`/`-T`/`--tag`/`--limit` union. Only `ls` honors `--status`; the others use `filterIgnoringStatus`
+- `ticket-row.ts` — the four bash `printf` row formats, one place
+- `store-resolver.ts` — bash `init_tickets_dir` semantics for read commands (dir must exist)
+- `row-limit.ts` — `closed`'s `--limit=`; a plain count only (bash forwarded it to `head -n`)
+- `jq.ts` — spawns the external `jq` for `query <filter>`; jq stays a real dependency, never reimplemented
+- `cli-error.ts` — `CliError`; `main.ts` renders it (and core's `MissingTicketIdError`) as `Error: <message>`, exit 1 (or the error's own `exitCode`)
+- `exit-codes.ts` — every exit code in one place, including `128 + signal` for a signalled child
+- `broken-pipe.ts` — node ignores SIGPIPE, so a closed stdout is turned into exit 141 here
+
+Bash behavior is the contract; parity is verified empirically via `make parity` (differential harness, `scripts/parity/README.md`; delete at T6), not guessed. The harness diffs against a *pinned copy* of `ticket` with `TS_COMMANDS` emptied — running `./ticket` itself would compare TS to TS for anything already ported. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `printf` padding widths and trailing spaces, `dep tree` sibling ordering, `closed`'s mtime order (nanoseconds, `ls -t` name tie-break, a symlink's OWN mtime via `lstat`) with its 100-file scan cap applied before filtering, and exit codes inside a pipeline (a short reader kills bash's `awk`/`jq` with SIGPIPE).
 
 Key functions:
 - `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides
