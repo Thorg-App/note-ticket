@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-30T00:56:04Z
 id: nid_mgfn04pyn3byxj72xxq0mggw5_e
 title: Promote bash-vs-TS differential parity harness into the repo
-status: in_progress
+status: closed
 deps: [nid_ropjwdm792a5qqyu2u0zeuna1_e]
 links: []
 created_iso: '2026-07-29T22:46:24Z'
-status_updated_iso: '2026-07-30T00:40:04Z'
+status_updated_iso: 2026-07-30T00:56:04Z
 type: chore
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -26,3 +27,32 @@ Promote them into e.g. scripts/parity/ with a make target, so T3 (nid_zesi8c4t7l
 ## Acceptance Criteria
 
 A make target runs the differential harness against the current bash ./ticket and reports zero unexpected mismatches; the expected (documented) cycle-detection divergence is either whitelisted or the harness is run after T4 flips dep cycle.
+
+## Resolution (done)
+
+Promoted to `scripts/parity/` with `make parity` (commit f70d3ca).
+
+- `dump.ts` — TS entrypoint rendering `src/core` in bash's exact format; bundled by
+  `npm run build:parity` to `dist-parity/` (gitignored, typechecked via tsconfig include).
+- `harness.py` — `TempRepo` (throwaway git repo + `_tickets`), bash/TS runners, fixed +
+  seeded-random scenario generators.
+- `check_graph.py` — byte-compare of `ready`, `blocked`, `dep tree`, `dep tree --full`;
+  semantic validation of `dep cycle`.
+- `check_query.py` — `query` JSONL byte-compare + missing-`id` divergence pin.
+- `check_slug.py` — bash `create` filename vs `Slug.fromTitle`.
+- `run.py` — runs all, exit 1 on unexpected mismatch. `make parity PARITY_ARGS="--random 500"`.
+
+Whitelisted divergences (pinned, not byte-compared, so a change on either side still fails):
+1. `dep cycle` — bash emits bogus cycles and misses real ones; instead every TS-reported
+   cycle must be a real closed walk and no cyclic graph may come back empty. Drop the
+   whitelist when T4 (nid_fba92yfczp71jjcprn4ufmory_e) flips `dep cycle` to TS.
+2. `.md` with no `id` — bash skips it (emits a bare blank line), TS hard-errors naming the
+   file (deliberate, nid_n6eavbm0h77twvna8k9nnpu2g_e).
+
+Verification: `make parity` green (68 scenarios) and at `--random 400` (408 scenarios,
+0 failures, 111 whitelisted bash bogus cycles). Mutation-tested — injected bugs in
+`dump.ts` (dropped first `ready` row; mangled slug; fabricated cycle) all fail the
+harness. `make test` 180 scenarios / 1205 steps green; `make typecheck` clean.
+
+Docs: `scripts/parity/README.md` (usage, whitelist, T6 delete list), plus pointers in
+CLAUDE.md and `docs-internal/migration-to-ts-high-level.md`.
