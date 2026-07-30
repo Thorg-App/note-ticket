@@ -78,7 +78,9 @@ Design rules:
 
 `make parity` (see `scripts/parity/README.md`) diffs bash `./ticket` against the TS
 core over generated ticket graphs and covers the graph/JSONL/slug items below
-empirically. It runs in CI (`.github/workflows/test.yml`) alongside `make test`, because 6 of
+empirically. Since T5 phase A it also diffs the WRITE commands (`check_write.py`): the same
+command sequence on two identical fresh repos, comparing the transcript plus every byte under
+`_tickets/`, with ids and timestamps neutralised. It runs in CI (`.github/workflows/test.yml`) alongside `make test`, because 6 of
 the 14 mutations it catches are invisible to the BDD suite. Delete both the harness and that CI
 step at T6 with bash.
 
@@ -130,7 +132,32 @@ Verify these while porting — they are contractual even where scenarios are thi
   title at the first `|`. Do NOT reproduce that; the TS row prints the title whole
   (whitelisted divergence #3 in `scripts/parity/README.md`).
 - `status closed` sets `closed_iso`; other statuses remove it; both bump
-  `status_updated_iso`.
+  `status_updated_iso`. A field the file lacks is inserted as the FIRST frontmatter entry,
+  which is where bash's `sed` insert landed it, and JSONL key order depends on that. The TS
+  port reads the clock ONCE where bash called `_iso_date` twice, so `status_updated_iso` and
+  `closed_iso` can no longer differ by a second while describing the same event.
+- `create`: `ensure_dir` runs BEFORE argument parsing, so even a rejected `create` leaves the
+  tickets directory behind; `create` is the only command allowed to create it. Frontmatter key
+  order, the `assignee`/`external-ref`/`parent`/`tags` lines' conditional presence, `tags`
+  comma re-spacing (`${tags//,/, }`, no trimming), the `Untitled` fallback for an absent OR
+  empty title, "last positional wins" and the JSONL line are all reproduced byte-for-byte
+  (golden strings in `test/create-command.test.ts` captured from bash).
+- `create` with a value-taking flag at the END of the argument list died with bash's own
+  `$2: unbound variable` naming a script line; TS reports `Error: option '--design' requires a
+  value`, same exit code 1 (whitelisted divergence #10 in `scripts/parity/README.md`).
+- A NEWLINE in a `create` title: bash's line-oriented `sed` kept it, producing a file named
+  `line1<LF>line2.md` and an unparseable JSON line; TS drops it like any other byte outside
+  `[a-z0-9-]` (whitelisted divergence #11).
+- `_tickets/<slug>.md` existing as a DIRECTORY: bash's `[[ -f ]]` was false, so it redirected
+  into the directory and died with `Is a directory`; TS treats the NAME as taken and picks
+  `<slug>-1.md` (whitelisted divergence #12).
+- `git config user.name` (the default assignee) and `git rev-parse --show-toplevel` are read
+  through `Git.output`, which strips TRAILING NEWLINES only — what bash's `$( )` does. An
+  earlier `.trim()` there silently reshaped a padded `user.name`; not a divergence, a bug that
+  was found by review and is now pinned in `test/git.test.ts` and by `check_write`.
+- Usage lines of `status`/`start`/`close`/`reopen` interpolate the INVOKED program name
+  (`$(basename "$0")` in bash, `TICKET_INVOKED_AS` → `ProgramName.invoked()` in TS); every
+  other write command's usage text hardcodes `ticket`, and that difference is bash's, kept.
 - TTY handling: `edit` only launches `$EDITOR` when stdin+stdout are TTYs, else
   prints path; `show` pages via `TICKET_PAGER`/`PAGER` only when stdout is a TTY;
   `add-note` reads stdin when not a TTY.

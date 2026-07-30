@@ -40,6 +40,15 @@ Feature: Ticket Directory Resolution
     Then the command should fail
     And the output should contain "does not exist"
 
+  # `create` is the ONLY command allowed to bring _tickets into being (bash WRITE_COMMANDS).
+  # A mutation that let every write command mkdir it would turn a typo'd repo into a new,
+  # empty ticket store instead of an error.
+  Scenario: Error when no tickets directory for a write command
+    Given the tickets directory does not exist
+    When I run "ticket close some-id"
+    Then the command should fail
+    And the output should contain "does not exist"
+
   Scenario: Error when not inside a git repository
     Given the tickets directory does not exist
     And the test root is not a git repository

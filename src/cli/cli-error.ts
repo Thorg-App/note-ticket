@@ -1,7 +1,7 @@
 import { ExitCode } from "./exit-codes.js";
+import { LINE_SEPARATOR } from "../core/text.js";
 
 const ERROR_PREFIX = "Error: ";
-const LINE_SEPARATOR = "\n";
 
 /**
  * A failure whose text is meant for the user, and the ONE place that knows how such a

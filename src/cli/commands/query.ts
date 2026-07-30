@@ -2,8 +2,7 @@ import type { Ticket } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
 import { ExitCode } from "../exit-codes.js";
 import { Jq } from "../jq.js";
-
-const LINE_SEPARATOR = "\n";
+import { LINE_SEPARATOR } from "../../core/text.js";
 
 /** No filter given; bash's `filter` starts empty and an empty filter means "print everything". */
 const NO_FILTER = "";

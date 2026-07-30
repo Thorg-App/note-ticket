@@ -1597,7 +1597,7 @@ EOF
 # TypeScript delegation (strangler-fig port; see docs-internal/migration-to-ts-high-level.md).
 # Commands listed here are served by the TS bundle. Removing a name from the list
 # instantly rolls that command back to the bash implementation below.
-TS_COMMANDS="help --help -h ls list ready blocked closed query show"
+TS_COMMANDS="help --help -h ls list ready blocked closed query show create status start close reopen"
 
 # `dep` cannot be flipped as a whole: `dep tree` / `dep cycle` are read-only and ported,
 # while its default form `dep <id> <dependency-id>` is a WRITE still served by bash (T5).

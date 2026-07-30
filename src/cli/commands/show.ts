@@ -5,10 +5,10 @@ import { UsageError } from "../cli-error.js";
 import { Pager } from "../pager.js";
 import { TicketLookup } from "../ticket-lookup.js";
 import { TicketRow } from "../ticket-row.js";
+import { LINE_SEPARATOR } from "../../core/text.js";
 
 const USAGE = "Usage: ticket show <id>";
 
-const LINE_SEPARATOR = "\n";
 const FRONTMATTER_FENCE = "---";
 /** `parent: <id>` inside the frontmatter — the only line `show` rewrites. */
 const PARENT_LINE = /^parent: */;

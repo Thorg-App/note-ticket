@@ -1,22 +1,21 @@
-import { basename } from "node:path";
-
 import { MissingTicketIdError } from "../core/id.js";
 import type { TicketStore } from "../core/ticket-store.js";
 import { BrokenPipe } from "./broken-pipe.js";
 import { CliError } from "./cli-error.js";
+import { CommandEnvironment } from "./command-environment.js";
 import { BlockedCommand } from "./commands/blocked.js";
 import { ClosedCommand } from "./commands/closed.js";
+import { CreateCommand } from "./commands/create.js";
 import { DepCommand } from "./commands/dep.js";
 import { HelpCommand } from "./commands/help.js";
 import { LsCommand } from "./commands/ls.js";
 import { QueryCommand } from "./commands/query.js";
 import { ReadyCommand } from "./commands/ready.js";
 import { ShowCommand } from "./commands/show.js";
+import { STATUS_WRAPPERS, StatusCommand, type StatusWrapper } from "./commands/status.js";
 import { ExitCode } from "./exit-codes.js";
 import { ListOptions } from "./list-options.js";
 import { StoreResolver } from "./store-resolver.js";
-
-const DEFAULT_PROGRAM_NAME = "ticket";
 
 /** How a read command turns an open tickets directory into printable output. */
 type ReadCommandBody = (store: TicketStore, options: ListOptions) => string;
@@ -26,26 +25,11 @@ type ReadCommandBody = (store: TicketStore, options: ListOptions) => string;
  * listed in that script's TS_COMMANDS.
  */
 class Cli {
-    /**
-     * Name the user invoked us as, used in usage text.
-     *
-     * WHY the env var: the bash dispatcher exec's `node dist/ticket.mjs`, so
-     * argv[1] is the bundle, not the invoked script. Bash passes its $0 along.
-     */
-    private static programName(): string {
-        const invokedAs = process.env["TICKET_INVOKED_AS"];
-        if (invokedAs) {
-            return basename(invokedAs);
-        }
-        const arg = process.argv[1];
-        return arg ? basename(arg) : DEFAULT_PROGRAM_NAME;
-    }
-
     static run(argv: string[]): number {
         const command = argv[0] ?? "help";
         const args = argv.slice(1);
         try {
-            return Cli.dispatch(command, args);
+            return Cli.dispatch(command, args, CommandEnvironment.forProcess());
         } catch (error) {
             const failure = Cli.userFacingFailure(error);
             if (failure === undefined) {
@@ -56,12 +40,16 @@ class Cli {
         }
     }
 
-    private static dispatch(command: string, args: readonly string[]): number {
+    private static dispatch(
+        command: string,
+        args: readonly string[],
+        environment: CommandEnvironment,
+    ): number {
         switch (command) {
             case "help":
             case "--help":
             case "-h":
-                process.stdout.write(HelpCommand.render(Cli.programName()));
+                process.stdout.write(HelpCommand.render(environment.programName));
                 return ExitCode.SUCCESS;
             case "ls":
             case "list":
@@ -82,13 +70,25 @@ class Cli {
             // `dep <id> <dep-id>`, which is a write. See TS_DEP_SUBCOMMANDS in ./ticket.
             case "dep":
                 return DepCommand.run(StoreResolver.forReadCommand(), args);
+            // Write commands. `create` is the only one allowed to create the tickets
+            // directory (bash WRITE_COMMANDS); the rest require an existing one.
+            case "create":
+                return CreateCommand.run(StoreResolver.forCreateCommand(), args, environment);
+            case "status":
+                return StatusCommand.run(StoreResolver.forWriteCommand(), args, environment);
+            case "start":
+                return Cli.setStatus(args, environment, STATUS_WRAPPERS.start);
+            case "close":
+                return Cli.setStatus(args, environment, STATUS_WRAPPERS.close);
+            case "reopen":
+                return Cli.setStatus(args, environment, STATUS_WRAPPERS.reopen);
             case "show":
                 // Not Cli.read: `show` takes an id rather than list filters, and may hand its
                 // output to a pager and exit with the pager's code.
                 return ShowCommand.run(StoreResolver.forReadCommand(), args);
             default:
                 process.stderr.write(`Unknown command: ${command}\n`);
-                process.stderr.write(HelpCommand.render(Cli.programName()));
+                process.stderr.write(HelpCommand.render(environment.programName));
                 return ExitCode.FAILURE;
         }
     }
@@ -101,6 +101,14 @@ class Cli {
         const store = StoreResolver.forReadCommand();
         process.stdout.write(body(store, ListOptions.parse(args)));
         return ExitCode.SUCCESS;
+    }
+
+    private static setStatus(
+        args: readonly string[],
+        environment: CommandEnvironment,
+        wrapper: StatusWrapper,
+    ): number {
+        return StatusCommand.runWrapper(StoreResolver.forWriteCommand(), args, environment, wrapper);
     }
 
     /**

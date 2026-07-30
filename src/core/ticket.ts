@@ -21,15 +21,29 @@ export const VALID_TICKET_STATUSES: readonly string[] = [
 /** Priority when the field is absent — 0 is highest, 4 lowest. */
 export const DEFAULT_PRIORITY = "2";
 
-const FIELD_ID = "id";
-const FIELD_TITLE = "title";
-const FIELD_STATUS = "status";
-const FIELD_DEPS = "deps";
-const FIELD_LINKS = "links";
-const FIELD_TAGS = "tags";
-const FIELD_PRIORITY = "priority";
-const FIELD_ASSIGNEE = "assignee";
-const FIELD_PARENT = "parent";
+/**
+ * The on-disk frontmatter key names, in one place.
+ *
+ * WHY exported: the write commands address fields by name (`status`, `closed_iso`, `deps`,
+ * …) and a second spelling of a key in a command module would be a silent data-model fork.
+ */
+export class TicketField {
+    static readonly ID = "id";
+    static readonly TITLE = "title";
+    static readonly STATUS = "status";
+    static readonly DEPS = "deps";
+    static readonly LINKS = "links";
+    static readonly TAGS = "tags";
+    static readonly PRIORITY = "priority";
+    static readonly ASSIGNEE = "assignee";
+    static readonly PARENT = "parent";
+    static readonly TYPE = "type";
+    /** Hyphenated on disk, unlike every other key. */
+    static readonly EXTERNAL_REF = "external-ref";
+    static readonly CREATED_ISO = "created_iso";
+    static readonly STATUS_UPDATED_ISO = "status_updated_iso";
+    static readonly CLOSED_ISO = "closed_iso";
+}
 
 /** Key `query` appends after the frontmatter fields. */
 const JSON_KEY_FULL_PATH = "full_path";
@@ -54,42 +68,42 @@ export class Ticket {
      * file with `MissingTicketIdError`, so a ticket obtained from the store always has one.
      */
     get id(): string {
-        return this.frontmatter.getString(FIELD_ID) ?? "";
+        return this.frontmatter.getString(TicketField.ID) ?? "";
     }
 
     /** Title with the surrounding double quotes stripped; inner escapes kept as on disk. */
     get title(): string {
-        return this.frontmatter.getString(FIELD_TITLE) ?? "";
+        return this.frontmatter.getString(TicketField.TITLE) ?? "";
     }
 
     get status(): string {
-        return this.frontmatter.getString(FIELD_STATUS) ?? "";
+        return this.frontmatter.getString(TicketField.STATUS) ?? "";
     }
 
     get deps(): readonly string[] {
-        return this.frontmatter.getArray(FIELD_DEPS);
+        return this.frontmatter.getArray(TicketField.DEPS);
     }
 
     get links(): readonly string[] {
-        return this.frontmatter.getArray(FIELD_LINKS);
+        return this.frontmatter.getArray(TicketField.LINKS);
     }
 
     get tags(): readonly string[] {
-        return this.frontmatter.getArray(FIELD_TAGS);
+        return this.frontmatter.getArray(TicketField.TAGS);
     }
 
     /** Raw priority text, defaulted — kept a string because it is echoed verbatim. */
     get priority(): string {
-        const priority = this.frontmatter.getString(FIELD_PRIORITY);
+        const priority = this.frontmatter.getString(TicketField.PRIORITY);
         return priority === undefined || priority === "" ? DEFAULT_PRIORITY : priority;
     }
 
     get assignee(): string {
-        return this.frontmatter.getString(FIELD_ASSIGNEE) ?? "";
+        return this.frontmatter.getString(TicketField.ASSIGNEE) ?? "";
     }
 
     get parent(): string {
-        return this.frontmatter.getString(FIELD_PARENT) ?? "";
+        return this.frontmatter.getString(TicketField.PARENT) ?? "";
     }
 
     get isClosed(): boolean {

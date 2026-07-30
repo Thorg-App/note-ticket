@@ -1,14 +1,16 @@
 # bash-vs-TS differential parity harness
 
 Migration-only test tooling. It generates ticket graphs in throwaway git repos, runs
-both bash `./ticket` and the TS `src/core` over the *same* tickets dir, and compares
-the output. Parity with bash is the contract for the port, and this harness verifies
+both bash `./ticket` and the TS `src/core` over the *same* tickets dir (over two
+identical copies of it, for the write commands), and compares the output — and, for a
+write, the resulting file bytes.
+Parity with bash is the contract for the port, and this harness verifies
 it empirically instead of by reading the two implementations side by side — the way
 it was originally built during T2, where it caught two divergences that code reading
 had missed.
 
 ```bash
-make parity                              # ~70 graph scenarios + query + slug
+make parity                              # ~70 graph scenarios + query + slug + write
 make parity PARITY_ARGS="--random 500"   # more generated graphs
 make parity PARITY_ARGS="--seed 42"      # different graphs; failures are reproducible
 ```
@@ -17,11 +19,12 @@ make parity PARITY_ARGS="--seed 42"      # different graphs; failures are reprod
 
 | File | Role |
 |------|------|
-| `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format, for commands the shipped CLI does not serve yet (only `slug` is left); bundled to `dist-parity/dump.mjs` |
+| `dump.ts` | Thin entrypoint rendering `src/core` output in bash's exact format; only the `slug` mode is left, and it compares the PURE title-to-filename functions (see below) |
 | `harness.py` | Throwaway repo, command runners, scenario generators, pinned bash reference |
 | `check_graph.py` | `ls`/`ready`/`blocked`/`closed` (every filter flag) + `dep tree[ --full]` byte-compare, `dep cycle` and `show` semantic checks, pinned `closed` divergences, `closed` scan cap / mtime ties / symlink mtime / default limit, `ls \| head -1` exit code, the `show` and id-resolution divergences |
 | `check_query.py` | `query` JSONL byte-compare (bare and through jq), the empty-tickets-dir short-circuit, `query <filter> \| head -1` exit code, and the missing-`id` and control-character divergences |
 | `check_slug.py` | `title_to_filename` vs `Slug.fromTitle` |
+| `check_write.py` | `create` and `status`/`start`/`close`/`reopen`: transcript + FILE BYTES compared after running each side on identical fresh repos |
 | `run.py` | Runs all checks; exit 1 on any unexpected mismatch |
 
 ## The bash side is a pinned copy, not `./ticket`
@@ -40,9 +43,45 @@ The TS side of a check is the **real CLI** (`dist/ticket.mjs`) for every ported 
 output format is ever described in two places. `make parity` depends on `make build` for
 exactly this reason.
 
+`slug` is the one exception, and deliberately so: `create` is ported (T5), but the check
+diffs bash `title_to_filename` against `Slug.fromTitle` — the two PURE functions — rather
+than driving `tk create` on both sides. WHY: a `create` invocation also emits a random id and
+a timestamp and can only be observed one title per repo, so the function-level diff is
+strictly finer-grained and cheaper for the exact same property. It is not a second
+description of an output format; there is no format, only a filename.
+
+## Write commands: compared by FILE BYTES (`check_write.py`)
+
+A write command's contract is not its stdout, it is what it leaves on disk. `check_write.py`
+therefore creates two identical throwaway repos, runs the same command sequence with the
+pinned bash copy in one and the shipped `./ticket` in the other, and compares a transcript of
+`rc` + stdout + stderr for every command **plus every byte of every file under `_tickets/`**.
+Frontmatter key order, `closed_iso`'s insertion position, the slug picked for a colliding
+title, the JSON line and every usage string are all inside that comparison.
+
+Only the two things that cannot match by construction are neutralized — generated ids become
+`<ID1>`, `<ID2>`, … (consistently, so a reference to an earlier ticket still has to line up)
+and ISO timestamps become `<TS>`. Nothing else is masked. `create`'s default assignee comes
+from `git config user.name`, so each repo sets that value itself rather than inheriting the
+developer's or CI's global config.
+
+A case may declare `diverges=True`, which INVERTS the expectation: the two sides must differ,
+and the check fails loudly if they ever agree again. That is how the write-command entries of
+the whitelist below (#5, #9, #10, #11, #12) are pinned rather than merely described.
+
+Still not diffed: `dep <id> <dep-id>`, `undep`, `link`, `unlink`, `add-note` and `edit` —
+phases B and C of T5. Adding one is a `Case(...)` entry in `CASES`; nothing else.
+
+**A green run of this check only proves the LISTED cases agree.** Mutation-tested with 8
+breakages of the TS write path (`closed_iso` never written, a new frontmatter field appended
+instead of prepended, tags not re-spaced, the git-config assignee default dropped, `--parent`
+not expanded, `Updated <typed id>`, `.trim()` on git's output, slug collisions ignored) —
+all 8 turn the check red. Extend `CASES` when a fix depends on an input shape that is not
+there yet; that lesson was learned the expensive way with `dep tree` and duplicate `deps`.
+
 ## Whitelisted divergences
 
-Byte-comparison is the default; the following nine are deliberate and are *pinned*
+Byte-comparison is the default; the following are deliberate and are *pinned*
 instead, so the harness still fails if either side changes its mind.
 
 1. **`dep cycle`** — bash aborts its DFS on the first cycle and leaves nodes marked
@@ -76,7 +115,9 @@ instead, so the harness still fails if either side changes its mind.
    handles `\` and `"` only, so a raw tab (reachable via `tk create $'a\tb'`) lands inside a
    JSON string and makes the line unparseable; bash's own `query <filter>` then dies inside
    jq. TS uses `JSON.stringify`. `check_query._check_control_character_divergence` pins that
-   bash's output stays invalid and TS's stays valid.
+   bash's output stays invalid and TS's stays valid, and `check_write`'s
+   `DIVERGENCE #5 tab in title` pins it at the point where the value is BORN — the JSON line
+   `create` itself prints.
 6. **`query <filter>` with no `jq` on PATH** — both sides exit **127**, the shell's code for
    a missing binary, but bash printed the shell's own `./ticket: line NNN: jq: command not
    found`, which names a line of the script. TS prints `Error: jq: command not found` plus
@@ -119,12 +160,36 @@ instead, so the harness still fails if either side changes its mind.
    (`nid_5g3eta9cf7yi6iukmscxma6wc_e`): `dep tree` now resolves through the shared
    `IdResolver` (exact beats partial, input trimmed) and an empty id matches nothing.
    BDD scenarios pin the TS side; `check_graph._check_id_resolution_divergences` pins that
-   bash really did behave the other way. bash's error WORDING for a `dep tree` root is
-   reproduced exactly (`Error: ticket <id> not found`, unquoted — unlike `ticket_path`'s).
+   bash really did behave the other way, and `check_write`'s `DIVERGENCE #9 empty id` pins
+   that an empty id now mutates NOTHING where bash closed the only ticket in the repo.
+   bash's error WORDING for a `dep tree` root is reproduced exactly
+   (`Error: ticket <id> not found`, unquoted — unlike `ticket_path`'s).
+
+10. **`create` with a value-taking flag at the end of the argument list** (`tk create x
+   --design`) — bash dereferenced `"$2"` under `set -u` and died with the shell's own
+   `./ticket: line 308: $2: unbound variable`, which names a line of the script and tells the
+   user nothing about what to type instead. TS exits 1 with `Error: option '--design'
+   requires a value`. Pinned by a scenario in `features/ticket_creation.feature` and by
+   `check_write`.
+11. **A NEWLINE in a `create` title** — bash's `title_to_filename` is a `sed` pipeline, which
+   is line-oriented, so the LF survived every substitution (and the per-line `s/^-//; s/-$//`
+   ran twice): `tk create $'line1\nline2'` created a file literally named `line1<LF>line2.md`
+   and printed a JSON line that does not parse (`"title":"\"line1","line2\"":""`). TS drops
+   the newline like any other byte outside `[a-z0-9-]`, giving `line1line2.md`, and
+   `JSON.stringify` escapes it in the title. Pinned by `check_write`
+   (`DIVERGENCE #11 newline in title`) and commented on `Slug.fromTitle`.
+   `check_slug.TITLES` deliberately does NOT contain a newline: that check compares the two
+   implementations expecting agreement, so the case belongs where divergence is expected.
+12. **`_tickets/<slug>.md` already exists as a DIRECTORY** — bash tested `[[ -f ]]`, false for
+   a directory, so it redirected its `create` output INTO the directory and died with
+   `Is a directory` at exit 1. TS's `TicketStore.topLevelFileExists` asks whether the NAME is
+   taken at all, picks `<slug>-1.md` and succeeds. Pinned by `check_write`
+   (`DIVERGENCE #12 …`) and commented on `topLevelFileExists`.
 
 Because of #3, `harness.HOSTILE_TITLES` — the titles every generated scenario cycles
 through so the byte-compare sees `"`, `\`, `:`, `[]`, non-ASCII and a trailing space —
-deliberately contains no `|`. For the same reason it contains no tab (#5).
+deliberately contains no `|`. For the same reason it contains no tab (#5) and no newline
+(#11).
 
 Not whitelisted because it is unreachable in practice, but worth knowing: for ticket files
 with *identical* mtimes, bash `ls -t` breaks the tie with `strcoll`, i.e. the caller's

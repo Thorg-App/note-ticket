@@ -2,7 +2,6 @@
  * Where tickets live and how they are enumerated, read and written.
  */
 
-import { execFileSync } from "node:child_process";
 import {
     existsSync,
     lstatSync,
@@ -17,6 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { Git } from "./git.js";
 import { MissingTicketIdError } from "./id.js";
 import { Ticket } from "./ticket.js";
 
@@ -42,23 +42,11 @@ export class TicketsDirectory {
         if (override) {
             return { kind: "resolved", path: override };
         }
-        const repoRoot = TicketsDirectory.gitRepoRoot(cwd);
+        const repoRoot = Git.repoRoot(cwd);
         if (repoRoot === undefined) {
             return { kind: "no-git-repo" };
         }
         return { kind: "resolved", path: join(repoRoot, TICKETS_DIR_NAME) };
-    }
-
-    private static gitRepoRoot(cwd: string): string | undefined {
-        try {
-            return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-                cwd,
-                encoding: FILE_ENCODING,
-                stdio: ["ignore", "pipe", "ignore"],
-            }).trim();
-        } catch {
-            return undefined;
-        }
     }
 }
 
@@ -205,6 +193,14 @@ export class TicketStore {
         return join(this.ticketsDir, filename);
     }
 
+    /**
+     * "Is this name taken at the top level?" — for ANY kind of entry, not just a regular file.
+     *
+     * DIVERGENCE (deliberate, #12 in scripts/parity/README.md): bash asked `[[ -f ]]`, which
+     * is false for a DIRECTORY, so a `_tickets/<slug>.md/` directory made `create` redirect
+     * into it and die with `Is a directory` at exit 1. Treating the name as taken picks
+     * `<slug>-1.md` and the create succeeds.
+     */
     topLevelFileExists(filename: string): boolean {
         return existsSync(this.pathForNewTicket(filename));
     }

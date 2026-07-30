@@ -8,8 +8,9 @@
  * the bytes that follow the colon — and interpreted only on demand.
  */
 
+import { LINE_SEPARATOR } from "./text.js";
+
 const FRONTMATTER_MARKER = "---";
-const LINE_SEPARATOR = "\n";
 
 /** A `key: value` frontmatter line. `rawValue` is the on-disk text, untouched. */
 export interface FrontmatterEntry {

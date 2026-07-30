@@ -71,6 +71,17 @@ Feature: Ticket ID Resolution
     Then the command should fail
     And stderr should contain "Error: ticket '' not found"
 
+  # The same rule on a WRITE, which is where it actually costs something: bash resolved the
+  # empty id to the only ticket in the repo and CLOSED it, so `tk close "$UNSET_VAR"` silently
+  # finished someone's work. Nothing may be mutated when the id matches nothing.
+  Scenario: An empty ID closes no ticket
+    Given a ticket exists with ID "abc-1234" and title "Only ticket"
+    When I run "ticket close \"\""
+    Then the command should fail
+    And stderr should contain "Error: ticket '' not found"
+    And ticket "abc-1234" should have field "status" with value "open"
+    And ticket "abc-1234" should not have field "closed_iso"
+
   Scenario: ID resolution works with status command
     Given a ticket exists with ID "test-9999" and title "Test ticket"
     When I run "ticket status 9999 in_progress"

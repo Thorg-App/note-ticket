@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Differential parity for the WRITE commands: `create`, `status`/`start`/`close`/`reopen`.
+
+Every other check in this harness reads: the fixtures are written by Python and only the
+printed output is compared. A write command's real contract is the FILE BYTES it leaves
+behind, so this check runs the same command sequence twice -- once against the pinned bash
+copy, once against the shipped `./ticket` -- in two freshly created, identical repos, and
+compares a transcript of `rc` + stdout + stderr for every command PLUS every byte of every
+file under `_tickets/`.
+
+The two things that cannot match by construction are neutralized rather than ignored:
+generated ids become `<ID1>`, `<ID2>`, ... (consistently, so a reference to a previously
+created ticket still has to line up) and ISO timestamps become `<TS>`. Everything else --
+frontmatter key order, `closed_iso`'s insertion position, the slug chosen for a colliding
+title, the JSON line, the usage wording, the exit code -- is compared literally.
+
+A case may declare `diverges=True`: then the two sides MUST differ, and the check fails if
+they ever agree again. That is how the write-command entries in README.md's whitelist are
+pinned (#10, #11, #12) instead of merely described.
+"""
+import difflib
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+
+from harness import REPO, TICKET, BashReference
+
+# Random ids and wall-clock timestamps are the only unavoidable difference between two runs.
+_GENERATED_ID = re.compile(r"nid_[a-z0-9]{25}_e")
+_ISO_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+# `create` falls back to `git config user.name`, so the harness must OWN that value: the
+# developer's or CI's global config would otherwise leak into the compared bytes.
+CONFIGURED_USER_NAME = "Parity Tester"
+
+# A `user.name` bash writes VERBATIM: `$( )` strips trailing newlines and nothing else.
+PADDED_USER_NAME = "  Padded Name  "
+
+
+class WriteRepo:
+    """A throwaway git repo whose `_tickets/` dir the command under test creates itself.
+
+    WHY-NOT `harness.TempRepo`: that one pre-creates `_tickets/`, points `TICKETS_DIR` at it
+    and runs commands from inside it. Half of what a write command must get right is exactly
+    what happens when the directory does NOT exist, and `create` resolving the repo root from
+    a working directory is part of the contract.
+    """
+
+    def __init__(self, fixtures, user_name):
+        self.root = tempfile.mkdtemp(prefix="parity-write-", dir=os.path.join(REPO, ".tmp"))
+        subprocess.run(["git", "init", "-q", self.root], check=True)
+        subprocess.run(["git", "config", "user.name", user_name], cwd=self.root, check=True)
+        for relative, content in fixtures.items():
+            path = os.path.join(self.root, relative)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(content)
+
+    def transcript(self, program, commands):
+        """`rc`/stdout/stderr of each command, then a dump of the whole tickets tree."""
+        parts = []
+        for command in commands:
+            result = self._run(program, command)
+            parts.append(
+                "$ tk %s\nrc=%d\n--out--\n%s--err--\n%s"
+                % (" ".join(repr(a) for a in command), result.returncode,
+                   result.stdout, result.stderr)
+            )
+        parts.append("--- TREE ---\n" + self._tree_dump())
+        return self._normalize("".join(parts))
+
+    def remove(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _run(self, program, command):
+        # LC_ALL=C for the same reason as the read checks; TICKETS_DIR unset so both sides
+        # resolve the dir through `git rev-parse --show-toplevel`, as a user would.
+        env = dict(os.environ, LC_ALL="C")
+        env.pop("TICKETS_DIR", None)
+        return subprocess.run([program] + list(command), cwd=self.root, env=env,
+                              capture_output=True, text=True, stdin=subprocess.DEVNULL)
+
+    def _tree_dump(self):
+        tickets = os.path.join(self.root, "_tickets")
+        if not os.path.isdir(tickets):
+            return "<no _tickets dir>\n"
+        dumped = []
+        for directory, subdirectories, filenames in os.walk(tickets):
+            subdirectories.sort()
+            for filename in sorted(filenames):
+                path = os.path.join(directory, filename)
+                with open(path, "rb") as f:
+                    # `backslashreplace`: a hand-broken fixture need not be valid UTF-8, and
+                    # a decode error must not be reported as a parity failure.
+                    body = f.read().decode("utf8", "backslashreplace")
+                dumped.append("===== %s =====\n%s" % (os.path.relpath(path, self.root), body))
+        return "".join(dumped) or "<empty _tickets dir>\n"
+
+    def _normalize(self, text):
+        text = text.replace(self.root, "<ROOT>")
+        text = _ISO_TIMESTAMP.sub("<TS>", text)
+        seen = {}
+
+        def placeholder(match):
+            return seen.setdefault(match.group(0), "<ID%d>" % (len(seen) + 1))
+
+        return _GENERATED_ID.sub(placeholder, text)
+
+
+def _fixture(ticket_id, title, extra_lines=(), body="Body.\n"):
+    lines = ["---", "id: %s" % ticket_id, 'title: "%s"' % title, "status: open"]
+    lines.extend(extra_lines)
+    return "\n".join(lines + ["---", "", body])
+
+
+ALPHA_ID = "nid_aaaaaaaaaaaaaaaaaaaaaaaaa_e"
+GAMMA_ID = "nid_ccccccccccccccccccccccccc_e"
+
+# alpha: a full ticket. beta: only the fields bash's `create` does not guarantee are absent
+# (a status change must ADD the stamps). gamma: already closed, nested, legacy-`done` sibling.
+BASE = {
+    "_tickets/alpha.md": _fixture(
+        ALPHA_ID, "Alpha",
+        ["deps: []", "links: []", "created_iso: 2020-01-01T00:00:00Z",
+         "status_updated_iso: 2020-01-01T00:00:00Z", "type: task", "priority: 2"]),
+    "_tickets/beta.md": _fixture("nid_bbbbbbbbbbbbbbbbbbbbbbbbb_e", "Beta"),
+    "_tickets/nested/gamma.md": "\n".join([
+        "---", "id: %s" % GAMMA_ID, 'title: "Gamma"', "status: closed",
+        "closed_iso: 2019-05-05T05:05:05Z", "deps: []", "links: []",
+        "created_iso: 2019-01-01T00:00:00Z", "status_updated_iso: 2019-02-01T00:00:00Z",
+        "type: task", "priority: 2", "---", "", "Gamma body.\n"]),
+    "_tickets/eps.md": _fixture(
+        "nid_eeeeeeeeeeeeeeeeeeeeeeeee_e", "Eps",
+        ["deps: []", "links: []", "created_iso: 2018-01-01T00:00:00Z",
+         "status_updated_iso: 2018-01-01T00:00:00Z", "type: task", "priority: 2"]),
+}
+# `status: done` is the legacy spelling; patch it in so `_fixture` stays single-purpose.
+BASE["_tickets/eps.md"] = BASE["_tickets/eps.md"].replace("status: open", "status: done")
+
+ALL_OPTIONS = ["create", "Full", "-d", "desc", "--design", "dsn", "--acceptance", "acc",
+               "-p", "0", "-t", "bug", "-a", "me", "--external-ref", "REF-1",
+               "--tags", "a,b , c"]
+
+
+class Case:
+    """One command sequence run on both sides. `diverges` inverts the expectation."""
+
+    def __init__(self, name, commands, fixtures=None, diverges=False,
+                 user_name=CONFIGURED_USER_NAME):
+        self.name = name
+        self.commands = commands
+        self.fixtures = fixtures or {}
+        self.diverges = diverges
+        self.user_name = user_name
+
+
+CASES = [
+    # --- create: arguments and defaults -------------------------------------------------
+    Case("create minimal", [["create", "Solo"]]),
+    Case("create every option", [ALL_OPTIONS]),
+    Case("create no title", [["create"]]),
+    Case("create empty title", [["create", ""]]),
+    Case("create last positional wins", [["create", "First", "Second"]]),
+    Case("create unknown option", [["create", "x", "--bogus"], ["ls"]]),
+    Case("create bare hyphen", [["create", "-"]]),
+    Case("create priority unvalidated", [["create", "T", "-p", "high"]]),
+    Case("create repeated flag last wins", [["create", "T", "-p", "1", "-p", "3"]]),
+    Case("create explicit empty assignee", [["create", "T", "-a", ""]]),
+    Case("create explicit assignee overrides git", [["create", "T", "-a", "Someone Else"]]),
+    Case("create default assignee from git config", [["create", "T"]]),
+    Case("create default assignee keeps padding", [["create", "T"]],
+         user_name=PADDED_USER_NAME),
+    Case("create empty tags", [["create", "T", "--tags", ""]]),
+    Case("create tags spacing", [["create", "T", "--tags", "a,b , c"]]),
+    Case("create external ref only", [["create", "T", "--external-ref", "R"]]),
+    Case("create multiline description", [["create", "T", "-d", "l1\nl2"]]),
+    Case("create description that looks like a fence", [["create", "T", "-d", "---"]]),
+    # --- create: titles, slugs and collisions -------------------------------------------
+    Case("create quotes in title", [["create", 'say "hi" ok']]),
+    Case("create unicode and backslash in title", [["create", "é你 \\ back"]]),
+    Case("create slug collision three times",
+         [["create", "Dup"], ["create", "Dup"], ["create", "Dup"]]),
+    Case("create collides with a nested file of the same slug",
+         [["create", "Dup"]], {"_tickets/nested/dup.md": BASE["_tickets/alpha.md"]}),
+    Case("create punctuation-only titles", [["create", "!!!"], ["create", "???"]]),
+    Case("create long title truncation", [["create", "z" * 250]]),
+    Case("create leading and trailing spaces", [["create", "  spaced  "]]),
+    Case("create brackets and colon", [["create", "a: [b] c"]]),
+    # --- create: parent resolution -------------------------------------------------------
+    Case("create parent partial id", [["create", "Child", "--parent", "aaaaa"]], BASE),
+    Case("create parent exact id", [["create", "Child", "--parent", ALPHA_ID]], BASE),
+    Case("create parent unresolvable", [["create", "Child", "--parent", "zzz"], ["ls"]], BASE),
+    Case("create parent ambiguous", [["create", "Child", "--parent", "nid_"], ["ls"]], BASE),
+    Case("create parent empty", [["create", "Child", "--parent", ""]], BASE),
+    # --- create: the tickets directory ---------------------------------------------------
+    Case("create from a subdirectory", [["create", "SubMade"]], {"sub/keep.txt": "k\n"}),
+    # --- status family -------------------------------------------------------------------
+    Case("status no args", [["status"]], BASE),
+    Case("status id only", [["status", "aaaaa"]], BASE),
+    Case("status invalid value", [["status", "aaaaa", "bogus"]], BASE),
+    Case("status invalid value on a missing ticket", [["status", "zzz", "bogus"]], BASE),
+    Case("status open", [["status", "aaaaa", "open"]], BASE),
+    Case("status in_progress", [["status", "aaaaa", "in_progress"]], BASE),
+    Case("status closed adds closed_iso first", [["status", "aaaaa", "closed"]], BASE),
+    Case("status extra args ignored", [["status", "aaaaa", "closed", "junk"]], BASE),
+    Case("status exact id beats partial", [["status", ALPHA_ID, "closed"]], BASE),
+    Case("status partial id is reported expanded", [["close", "aaaaa"]], BASE),
+    Case("status on a ticket missing every stamp", [["close", "bbbbb"]], BASE),
+    Case("status on a ticket with no status field", [["close", "ddddd"], ["query"]],
+         {"_tickets/delta.md": "---\nid: nid_ddddddddddddddddddddddddd_e\n"
+                               'title: "Delta"\npriority: 1\n---\n\nDelta body.\n'}),
+    Case("close twice", [["close", "aaaaa"], ["close", "aaaaa"]], BASE),
+    Case("close then reopen removes closed_iso",
+         [["close", "aaaaa"], ["reopen", "aaaaa"]], BASE),
+    Case("reopen an already-closed fixture", [["reopen", "ccccc"]], BASE),
+    Case("reopen a legacy done ticket", [["reopen", "eeeee"]], BASE),
+    Case("close a legacy done ticket", [["close", "eeeee"]], BASE),
+    Case("start then close", [["start", "aaaaa"], ["close", "aaaaa"]], BASE),
+    Case("start rewrites a nested ticket in place", [["start", "ccccc"], ["ls"]], BASE),
+    Case("start no args", [["start"]], BASE),
+    Case("close no args", [["close"]], BASE),
+    Case("reopen no args", [["reopen"]], BASE),
+    Case("close unknown id", [["close", "zzzz"]], BASE),
+    Case("close ambiguous id", [["close", "nid_"]], BASE),
+    Case("close id with surrounding whitespace", [["close", "  aaaaa  "]], BASE),
+    Case("close with no tickets directory", [["close", "x"]]),
+    # --- declared divergences (README.md "Whitelisted divergences") ----------------------
+    # #10: bash dies with the shell's own `$2: unbound variable`.
+    Case("DIVERGENCE #10 value flag ends the argument list", [["create", "x", "--design"]],
+         diverges=True),
+    # #11: bash's line-oriented sed keeps the LF in the filename and emits invalid JSON.
+    Case("DIVERGENCE #11 newline in title", [["create", "line1\nline2"]], diverges=True),
+    # #12: bash's `[[ -f ]]` is false for a directory, so it redirects INTO it and dies.
+    Case("DIVERGENCE #12 slug already exists as a directory", [["create", "Dup"]],
+         {"_tickets/dup.md/inner.txt": "x\n"}, diverges=True),
+    # #5: bash's `json_escape` handles `\` and `"` only, so a raw tab lands inside the JSON
+    # string `create` prints and makes the line unparseable. `create` is how that value gets
+    # into a ticket in the first place, so this is where the divergence is BORN.
+    Case("DIVERGENCE #5 tab in title", [["create", "tab\there"]], diverges=True),
+    # #9: awk's `index(s, "")` is 1, so bash's empty id matched a ticket.
+    Case("DIVERGENCE #9 empty id", [["close", ""]], BASE, diverges=True),
+]
+
+
+def _report_diff(name, bash_text, ts_text):
+    print("MISMATCH write case=[%s]" % name)
+    for line in difflib.unified_diff(bash_text.splitlines(True), ts_text.splitlines(True),
+                                     "bash", "ts", n=2):
+        print("  " + line.rstrip("\n"))
+
+
+def run():
+    failures = 0
+    bash_program = BashReference.path()
+    for case in CASES:
+        texts = []
+        for program in (bash_program, TICKET):
+            repo = WriteRepo(case.fixtures, case.user_name)
+            try:
+                texts.append(repo.transcript(program, case.commands))
+            finally:
+                repo.remove()
+        bash_text, ts_text = texts
+        if case.diverges:
+            if bash_text == ts_text:
+                failures += 1
+                print("DIVERGENCE GONE write case=[%s] -- bash and TS now agree; the "
+                      "README.md whitelist entry is stale" % case.name)
+        elif bash_text != ts_text:
+            failures += 1
+            _report_diff(case.name, bash_text, ts_text)
+    return failures == 0, "cases=%d failures=%d" % (len(CASES), failures)

@@ -174,6 +174,23 @@ def step_clean_tickets_directory(context):
     tickets_dir.mkdir(parents=True, exist_ok=True)
 
 
+@given(r'the git user\.name is "(?P<name>[^"]+)"')
+def step_git_user_name_is(context, name):
+    """Set `user.name` in the scenario's own repository.
+
+    Repository-local config beats the developer's/CI's global config, so the value the
+    command reads is fully determined by this step -- which is what makes asserting
+    `create`'s default assignee non-flaky.
+    """
+    subprocess.run(
+        ['git', 'config', 'user.name', name],
+        cwd=context.test_dir,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 @given(r'the tickets directory does not exist')
 def step_tickets_dir_not_exist(context):
     """Ensure _tickets directory does not exist."""
@@ -773,6 +790,18 @@ def step_ticket_file_exists_with_title(context, title):
     # Title is now in frontmatter, not body
     assert re.search(rf'^title:\s*"?{re.escape(title)}"?\s*$', content, re.MULTILINE), \
         f"Ticket does not have title '{title}' in frontmatter\nContent: {content}"
+
+
+@then(r'no ticket file should exist with title "(?P<title>[^"]+)"')
+def step_no_ticket_file_with_title(context, title):
+    """Assert NOTHING under _tickets/ carries that title -- i.e. the write never happened."""
+    tickets_dir = Path(context.test_dir) / '_tickets'
+    pattern = rf'^title:\s*"?{re.escape(title)}"?\s*$'
+    matches = [
+        str(path) for path in tickets_dir.rglob('*.md')
+        if re.search(pattern, path.read_text(), re.MULTILINE)
+    ]
+    assert not matches, f"Expected no ticket titled '{title}', found: {matches}"
 
 
 @then(r'the tickets directory should exist')
