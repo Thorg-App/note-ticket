@@ -121,3 +121,67 @@ Makefile now has `parity: build`.
 Complete. `make test` green, `make parity` green, `make typecheck` clean, tree committed.
 `TS_COMMANDS="help --help -h ls list ready blocked"`. Note `list` had to be flipped alongside `ls`
 (it is the alias in bash's `ls|list)` case).
+
+---
+
+# ITERATION round 1 (review response) — commits `f165d98`, `736fd10`
+
+Review: `IMPLEMENTATION_REVIEW__PUBLIC.md`, verdict READY, no BLOCKING. Dispositions in
+`IMPLEMENTATION_ITERATION__PUBLIC.md`. What matters for a successor:
+
+## Divergence #4 (NEW, declared): `|` in a title, `ready`/`blocked` only
+
+Reproduced against the pinned bash copy: title `Pipe|Title`, deps `[bbb2]`
+→ bash `ready` prints `Plain ` (truncated), bash `blocked` prints
+`aaa1 [P1][open] - Pipe <- Title` — the title tail sits where the blockers belong.
+Cause: `ticket:905` / `ticket:1068` `sprintf("%s|%s|%s|%s", prio, id, status, title)` then
+`split(output[i], a, "|")`. `ls` does NOT pack a sort key and is unaffected (verified identical).
+TS is correct. Now pinned in FOUR places so it cannot be "fixed back":
+unit tests (`test/list-commands.test.ts`, describe `a title containing the sort-key separator '|'`),
+2 BDD scenarios, `check_graph._check_pipe_title_divergence`, whitelist #3 in `scripts/parity/README.md`.
+
+## What else I probed empirically (so you do not have to)
+
+Ran every hostile title through real bash `create` and diffed bash-vs-TS `ls`/`ready`:
+`Fix: the thing`, `say "hi"`, `back\slash`, `unicode ünïcødé`, `has [brackets]`, `trail ` — ALL
+byte-identical. So the predecessor's divergence #3 (`": "` truncation) is NOT reachable via
+`create` for `title`; bash reads the title with a different extraction than `FS=": "` `$2`.
+`|` is the only title metacharacter that diverges.
+
+## Parity fixture: hostile titles, and why `|` is excluded from them
+
+`harness.HOSTILE_TITLES` (cycled per ticket, written exactly as bash `create` writes them, i.e.
+quotes as `\"`) closed the blind spot that let #1 through a green run. `|` deliberately stays out:
+putting it in the generator would make the ready/blocked byte-compare fail on a divergence we
+WANT, so it is pinned separately instead. `write_scenario(scenario, title_template=…)` is how the
+pipe check pins one title.
+
+Mutation-tested both new protections (each restored afterwards; `.tmp/ticket.mjs.bak`):
+- title-unescaping mutation in the `ls` row → **207** graph byte failures (would have been 0 with
+  the old `T <id>` titles).
+- truncate-title-at-`|` mutation in the `ready`/`blocked` row → byte failures **0**, and ONLY
+  `_check_pipe_title_divergence` fires. Exactly the regression class it exists for.
+- The 2 new BDD scenarios fail (2 failed / 29 skipped) against `TICKET_SCRIPT=.tmp/ticket-bash-only`.
+
+## One error channel (finding #3)
+
+`CliError(message, detailLines)` owns `stderrText` — the ONLY place that adds `Error: `. Detail
+lines are printed WITHOUT the prefix because bash's second line
+(`Run inside a git repo, or set TICKETS_DIR env var`) has no prefix. `StoreResolver.forReadCommand()`
+now returns `TicketStore` and throws; `StoreResolution` is gone; `Cli.read` is 3 lines.
+`MissingTicketIdError` (core, CLI-free) is adopted into a `CliError` in `Cli.userFacingFailure`.
+Phase B / T4 / T5: throw `CliError`, never print `Error:` yourself.
+
+## Deliberately NOT done
+
+- `limitText` kept although unused until `closed` lands — Phase B is next up, deleting and
+  re-adding it is churn. Delete it if Phase B is abandoned.
+- CRLF handling: follow-up ticket `nid_z10hpj927zqilxcpl9ycpe0ad_e` (tags `ts-port, core, decide`,
+  deps on this T3 ticket). Verified: bash lists nothing/exit 0, TS says
+  `has no 'id' frontmatter field` on a file containing `id: aaa1`. Root cause is
+  `src/core/frontmatter.ts` not tolerating a trailing `\r`. Left out of scope on purpose.
+
+## Final numbers (my own runs)
+
+`make typecheck` exit 0 · `make unit-test` 207 pass / 0 fail · `make test` 12 features,
+192 scenarios, 1272 steps, 0 failed · `make parity` graph 68/0, query OK, slug OK.
