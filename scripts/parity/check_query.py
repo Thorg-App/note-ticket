@@ -4,6 +4,7 @@
 Tickets are created through bash `./ticket create` (so the frontmatter is exactly what
 bash writes) plus hand-written edge cases bash's create cannot produce.
 """
+import collections
 import json
 import os
 import shutil
@@ -30,19 +31,26 @@ EDGE_FILES = {
 
 MISSING_ID_FILE = "nofm.md"
 
+# `min_lines`: how many rows this invocation MUST produce against the fixtures below. Two
+# identical empty outputs compare equal, so an invocation that stops matching would keep
+# reporting OK while measuring nothing -- the vacuous-pass class this repo keeps hitting.
+# 0 is for the cases that are DELIBERATELY empty (no such field; jq syntax error). 8 is every
+# ticket (7 CREATE_ARGS + 1 EDGE_FILES); these are minima, so adding a fixture never breaks them.
+QueryInvocation = collections.namedtuple("QueryInvocation", "args min_lines")
+
 # The bare command plus the jq passthrough: the filter is spawned as external `jq` on both
 # sides, so its output, its "nothing selected" empty success and its exit code 3 for a syntax
 # error must all match. The `--flag` cases pin bash's arg loop, where the LAST argument wins
 # and nothing is treated as a flag.
 QUERY_INVOCATIONS = [
-    ["query"],
-    ["query", ""],
-    ["query", '.status == "open"'],
-    ["query", ".tags | length > 0"],
-    ["query", ".nosuchfield"],
-    ["query", "syntax((("],
-    ["query", "--pretty", ".id"],
-    ["query", ".id", "--pretty"],
+    QueryInvocation(["query"], 8),
+    QueryInvocation(["query", ""], 8),
+    QueryInvocation(["query", '.status == "open"'], 8),
+    QueryInvocation(["query", ".tags | length > 0"], 1),
+    QueryInvocation(["query", ".nosuchfield"], 0),
+    QueryInvocation(["query", "syntax((("], 0),
+    QueryInvocation(["query", "--pretty", ".id"], 8),
+    QueryInvocation(["query", ".id", "--pretty"], 0),
 ]
 
 # A tab in a title: reachable through `tk create $'a\tb'`, and bash emits it RAW inside the
@@ -175,7 +183,8 @@ def _check_jsonl():
                 f.write(content)
 
         lines = 0
-        for args in QUERY_INVOCATIONS:
+        for invocation in QUERY_INVOCATIONS:
+            args = invocation.args
             bash, ts = repo.bash_result(*args), repo.ts_cli_result(*args)
             if bash.returncode != ts.returncode:
                 return False, "query %r exit codes differ (bash=%d ts=%d, ts stderr=[%s])" % (
@@ -195,7 +204,13 @@ def _check_jsonl():
                     len(bash_out.splitlines()),
                     len(ts_out.splitlines()),
                 )
-            lines += len(bash_out.splitlines())
+            matched = len(bash_out.splitlines())
+            if matched < invocation.min_lines:
+                return False, (
+                    "query %r matched %d rows, expected at least %d -- fixture drift, the "
+                    "comparison is measuring (almost) nothing" % (args, matched, invocation.min_lines)
+                )
+            lines += matched
         return True, "query identical over %d invocations (%d lines)" % (len(QUERY_INVOCATIONS), lines)
 
 

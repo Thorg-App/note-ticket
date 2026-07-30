@@ -178,16 +178,19 @@ def require_dump():
 
 
 def require_jq():
-    """`query <filter>` spawns external `jq` on BOTH sides, so a missing jq is a vacuous pass.
+    """`query <filter>` spawns external `jq` on BOTH sides, so without jq the run is misleading.
 
-    Without jq both sides exit 127 with empty stdout, and every jq-filter comparison in
-    check_query "matches" while measuring nothing. Refuse to run instead -- especially in CI,
-    where nobody is watching the summary line.
+    Measured with a PATH stripped of only jq: `check_query.run()` returns False, so CI goes red
+    -- but for confusing reasons. What it reports is `rc=127 on both sides, expected 141` plus a
+    changed control-character divergence, while `_check_jsonl` silently stops measuring the four
+    filter invocations (33 -> 16 lines compared) and still says "identical". Refuse to start, so
+    the message names the real cause instead of leaving the next maintainer to chase a 127.
     """
     if shutil.which("jq") is None:
         raise SystemExit(
-            "jq is not on PATH -- the query filter checks would compare two 127s and pass "
-            "vacuously. Install jq and re-run."
+            "jq is not on PATH -- `query <filter>` would exit 127 on both sides: the filter "
+            "comparisons would measure nothing and the rest would fail confusingly. "
+            "Install jq and re-run."
         )
 
 
