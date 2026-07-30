@@ -1,17 +1,17 @@
 ---
 id: nid_n6eavbm0h77twvna8k9nnpu2g_e
-title: "Missing 'id' frontmatter field under _tickets is a hard error naming the file"
-status: open
+title: Missing 'id' frontmatter field under _tickets is a hard error naming the file
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-07-29T23:59:37Z
-status_updated_iso: 2026-07-29T23:59:37Z
+created_iso: '2026-07-29T23:59:37Z'
+status_updated_iso: '2026-07-30T00:03:09Z'
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
 tags: [ts-port, core]
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 HUMAN DECISION (recorded 2026-07-29, see nid_5g3eta9cf7yi6iukmscxma6wc_e): every `.md` file under `_tickets/` is EXPECTED to carry an `id` frontmatter field. A file without one is a corrupt repo, not a silently-ignored file.
 
 Current bash behavior (`ticket_path()` / `_collect_ticket_files()` in ./ticket): a file with no `id` simply never matches and contributes nothing — no signal at all. A hand-edit that drops the `id` makes the ticket vanish silently. That is the behavior being replaced.
@@ -31,4 +31,3 @@ Do NOT change ./ticket (bash) for this: the BDD suite runs against bash until ea
 - Unit tests cover: missing `id`, empty `id` value, and a file with no frontmatter block at all.
 - A BDD scenario pinning the error ships with T3 (the first flipped enumerating command).
 - README/ORIGINAL_README documents that `id` is mandatory.
-
