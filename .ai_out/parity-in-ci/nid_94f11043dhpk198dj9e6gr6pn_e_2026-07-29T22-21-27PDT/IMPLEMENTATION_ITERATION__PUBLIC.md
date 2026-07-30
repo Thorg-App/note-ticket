@@ -5,7 +5,14 @@ Nothing committed (TOP_LEVEL_AGENT owns commits, CHANGELOG and closing the ticke
 
 ## Per-finding disposition
 
-### 1. Wrong WHY rationale on `require_jq()` — **INCORPORATED**
+### 1. Wrong WHY rationale on `require_jq()` — **INCORPORATED, THEN SUPERSEDED IN ROUND 2**
+
+> **CORRECTED IN ROUND 2:** everything in this finding about `_check_jsonl` "still saying
+> identical (33 → 16 lines)" was measured against `ed71586` and was already false by the time it
+> shipped in `9f01f5e` — the `min_lines` guard from finding 1b landed in the *same commit* and
+> now fails on the third invocation. See the "Round 2" section at the end of this file for the
+> re-measured behavior and the wording actually shipped. The text below is retained unedited so
+> the correction is auditable.
 
 I re-measured independently before touching the text (a PATH symlink farm identical to the real
 PATH minus only `jq`, calling `check_query.run()` directly to bypass the guard). The reviewer's
@@ -121,3 +128,62 @@ Files modified this round: `.github/workflows/test.yml`, `CLAUDE.md`,
 `_tickets/ts-port-6-cutover-delete-bash-packaging-docs.md`. Scratch (`.tmp/nojq-bin`, measurement
 script) deleted; only logs left under the gitignored `.tmp/`. Still **no CHANGELOG entry** —
 CI/workflow + migration-only test tooling.
+
+## Round 2 (R2-1: the `require_jq()` rationale, third attempt) — **INCORPORATED**
+
+Text only. No guard logic, workflow or fixture touched.
+
+The reviewer is right, and the mechanism is exactly as described: my round-1 wording was measured
+against `ed71586`, but finding 1b's `min_lines` guard landed in the **same commit** (`9f01f5e`), so
+by the time the corrected comment shipped, `_check_jsonl` no longer degraded silently.
+
+### Re-measured myself before writing (PATH farm = the real PATH symlinked, minus only `jq`)
+
+Sub-checks called directly, bypassing `require_jq()`:
+
+```
+jq visible: None
+_check_jsonl: [false, "query ['query', '.status == \"open\"'] matched 0 rows, expected at least 8
+                       -- fixture drift, the comparison is measuring (almost) nothing"]
+_check_query_broken_pipe: [false, "query <filter> | head -1 rc=127 on both sides, expected 141"]
+_check_control_character_divergence: [false, "control-character divergence changed:
+                       TS `query .id` now fails on a control character"]
+run(): [false, "<the three above, joined; plus the two 'as designed' notes>"]
+```
+
+So: **three failures, none of which names jq**, and no "16 lines"/"identical" anywhere. The
+reviewer's measurement reproduces exactly. The honest WHY for the guard is therefore *one clear
+message instead of three misdiagnoses* — not vacuity, and not a silently green build.
+
+### Shipped wording (three places)
+
+- `scripts/parity/harness.py` — `require_jq()` docstring: states the measurement above verbatim in
+  prose (fixture drift / `rc=127 ... expected 141` / control-character divergence "changed"), and
+  that nothing passes vacuously.
+- `scripts/parity/harness.py` — `SystemExit`: `"jq is not on PATH -- \`query <filter>\` exits 127
+  on both sides, and every resulting failure misdiagnoses it (fixture drift, 127 vs 141). Install
+  jq and re-run."` (verified by running `run.py` on the jq-less PATH → exit **1**, that message.)
+- `scripts/parity/README.md` "Requirements" — same one-sentence correction.
+
+Plus the audit trail the reviewer asked for: a CORRECTED-IN-ROUND-2 banner on §1 above (round-1
+text retained unedited) and the corresponding rewrite of item 2 in
+`IMPLEMENTATION_WITH_SELF_PLAN__PUBLIC.md`, whose "33 → 16 lines" was stale for the same reason.
+
+### Commit-message trail (unchanged, still worth knowing)
+
+`ed71586`'s message carries the original (wrong) vacuity story and `9f01f5e`'s carries the
+round-1 (also wrong) "33 → 16 lines" story. Neither can be amended per instruction. The measured
+version now lives in the docstring, the error message, `scripts/parity/README.md` and this file.
+If this branch is squash-merged, the merge message is the place to state the corrected rationale.
+
+### Verification (actual, this working tree, after the edits)
+
+| Check | Result |
+|---|---|
+| `make parity` | exit **0** — `graph OK scenarios=69 failures=0`, `query OK ... (33 lines)`, `slug OK titles=13` (`.tmp/r2-parity.log`) |
+| `make test` | exit **0** — 12 features, **208 scenarios passed, 0 failed**, 1368 steps (`.tmp/r2-test.log`) |
+| jq-less `run.py` | exit **1**, new message, names jq |
+
+Files modified this round: `scripts/parity/harness.py`, `scripts/parity/README.md`, and the two
+`.ai_out/` reports. Scratch (`.tmp/nojq-bin`, the measurement script) deleted. No commit, no
+CHANGELOG entry, ticket left `status: open`.

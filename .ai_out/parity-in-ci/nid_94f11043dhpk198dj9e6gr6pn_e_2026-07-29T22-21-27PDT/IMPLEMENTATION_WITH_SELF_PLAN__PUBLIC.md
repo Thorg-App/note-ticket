@@ -6,13 +6,13 @@
    after `Run tests`, in the existing `test` job. Header comment marks it MIGRATION-ONLY, points at
    `scripts/parity/README.md`, and states the T6 deletion + the measured 6-of-14 justification.
 2. **`scripts/parity/harness.py` + `run.py`** — new `require_jq()` preflight, called next to
-   `require_dump()`. **CORRECTED IN ROUND 1** (the claim below was overstated; see
-   `IMPLEMENTATION_ITERATION__PUBLIC.md` finding 1 for the measured behavior). Measured with a
-   PATH stripped of only `jq`: `check_query.run()` returns **False**, so a jq-less CI run goes
-   RED, not green. What actually degrades silently is `_check_jsonl` alone — its four filter
-   invocations compare two empty 127s and it still reports "identical" (33 → 16 lines) — while
-   other sub-checks fail for unrelated-looking reasons (`rc=127, expected 141`). The guard's
-   value is a message that names the real cause, not preventing a green build.
+   `require_dump()`. **CORRECTED IN ROUND 2** — see `IMPLEMENTATION_ITERATION__PUBLIC.md` §1 and
+   its Round 2 section for the audit trail of the two superseded claims. Measured (round 2, PATH
+   stripped of only `jq`): nothing passes vacuously — the run goes **red**, but all three failures
+   misdiagnose it and none names jq: `_check_jsonl` blames *fixture drift*
+   (`.status == "open"` matched 0 rows, expected at least 8), `_check_query_broken_pipe` reports
+   `rc=127 on both sides, expected 141`, and the control-character divergence "changed". The
+   guard's value is one message that names jq, not preventing a green build.
 3. **`scripts/parity/README.md`** — new "Requirements" section (node, python3, git, GNU coreutils,
    jq + why jq is mandatory); "Lifetime" is now an explicit delete-list that includes the CI step.
 4. **`docs-internal/migration-to-ts-high-level.md`** — the parity paragraph says it runs in CI, and

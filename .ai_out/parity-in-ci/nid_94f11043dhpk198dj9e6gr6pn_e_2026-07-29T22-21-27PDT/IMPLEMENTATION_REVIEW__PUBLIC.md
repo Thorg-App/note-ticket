@@ -119,3 +119,121 @@ harness is migration-only tooling.
 the ticket asked and I proved it fails on a real divergence. Iteration is for finding 1 (a shipped
 code comment whose stated rationale contradicts measurement) and finding 2 (the T6 work-order
 breadcrumb). Both are text edits.
+
+---
+
+# ROUND 2 — convergence check, commit 9f01f5e (on ed71586)
+
+Scope: only my round-1 findings, the corrected `require_jq()` rationale, the new
+`QueryInvocation` mechanism, the workflow, and regressions. Fresh instance, read-only for code.
+
+## Regressions — none (real numbers)
+
+| Check | Result |
+|---|---|
+| `make parity` (`.tmp/r2-parity.log`) | exit **0** — `graph OK scenarios=69 failures=0`, `query OK … identical over 8 invocations (33 lines)`, `slug OK titles=13` |
+| `make test` (`.tmp/r2-test.log`) | exit **0** — 12 features, **208 scenarios passed / 0 failed**, 1368 steps, 5.7s |
+| Working tree | clean; no source/CI file touched by me |
+
+## Round-1 findings — disposition check
+
+| # | Round-1 finding | Verdict |
+|---|---|---|
+| 1 | `require_jq()` rationale contradicts measurement | **NOT fixed — now wrong in a new way** (see below) |
+| 1b | Per-invocation non-zero row minimum | **Genuinely fixed**, verified by mutation |
+| 2 | T6 delete-set breadcrumb on the ticket | **Fixed** — bullet added to `_tickets/ts-port-6-cutover-delete-bash-packaging-docs.md`, and it goes further than I asked (fold surviving declared divergences into BDD before deleting the README). Good. |
+| 3 | `if: ${{ !cancelled() }}` | **Fixed**, semantics verified |
+| 4 | `timeout-minutes` | **Fixed** as 20 on the job, with WHY; the +5 over my suggestion is fine |
+| 5 | CLAUDE.md mentions CI | **Fixed** |
+| 6 | Ticket status | Left to TOP_LEVEL_AGENT — legitimate, not re-raised |
+| 7 | `rg`-vs-`grep` | REJECTED with sound scope-creep rationale — not re-raised |
+
+## 🚨 BLOCKING (round 2)
+
+### R2-1. The corrected `require_jq()` rationale is falsified by the *same commit* — 1b invalidated it
+
+`scripts/parity/harness.py:181-188` (docstring) and `scripts/parity/README.md:102-105`.
+
+The new docstring states, as a measurement:
+
+> `_check_jsonl` silently stops measuring the four filter invocations (33 -> 16 lines
+> compared) and still says "identical".
+
+That was true of `ed71586`. It is **false of `9f01f5e`**, because `min_lines` (finding 1b)
+landed in the same commit and now fires on exactly those invocations. Re-measured here with a
+PATH stripped of only `jq`, calling `check_query._check_jsonl()` directly to bypass the guard:
+
+```
+(False, 'query [\'query\', \'.status == "open"\'] matched 0 rows, expected at least 8
+         -- fixture drift, the comparison is measuring (almost) nothing')
+```
+
+`_check_jsonl` fails on the **third** invocation; there is no "16 lines" and no "identical".
+The `SystemExit` message has the same defect ("the filter comparisons would measure nothing").
+This is precisely the "differently-wrong comment" failure mode: round 1's finding was about a
+shipped comment the next agent will trust, and the replacement is still not what the code does.
+
+**The good news is that the fix strengthens the guard's WHY.** What a jq-less run now produces
+is three *misdiagnoses*, none naming jq — that is a better argument for refusing to start than
+the vacuity story ever was. Suggested wording (docstring, measured this round):
+
+> Measured with a PATH stripped of only jq: nothing passes vacuously — the run goes red, but
+> every message misdiagnoses it. `_check_jsonl` blames **fixture drift** (`.status == "open"`
+> matched 0 rows, expected at least 8), `_check_query_broken_pipe` reports `rc=127 … expected
+> 141`, and the control-character divergence "changed". Refuse to start, so the message names
+> jq instead of sending the next maintainer after the fixtures.
+
+and for the `SystemExit`: `"jq is not on PATH -- `query <filter>` exits 127 on both sides, and
+every resulting failure misdiagnoses it (fixture drift, 127 vs 141). Install jq and re-run."`
+Then the same one-sentence correction in `scripts/parity/README.md` "Requirements", plus a
+CORRECTED-IN-ROUND-2 note in `IMPLEMENTATION_ITERATION__PUBLIC.md` §1 and
+`IMPLEMENTATION_WITH_SELF_PLAN__PUBLIC.md` (whose "33 → 16 lines" claim is now stale too).
+
+No functional change. ~5 lines of text.
+
+## ✅ Verified good (round 2)
+
+**`QueryInvocation(args, min_lines)` is not vacuous, and it is not fragile.** Mutations run by
+monkeypatching the fixture lists in-memory (no source edit):
+
+| Mutation / perturbation | Result |
+|---|---|
+| baseline | `ok=True`, 33 lines |
+| drop `--tags` from the `Tagged` fixture (count unchanged) | `ok=False` — `query ['query', '.tags \| length > 0'] matched 0 rows, expected at least 1` |
+| drop the `Tagged` fixture entirely | `ok=False` — `query ['query'] matched 7 rows, expected at least 8` |
+| **add** a plain create fixture | `ok=True` (37 lines) |
+| **add** a `status: closed` edge fixture (shifts open/total) | `ok=True` (36 lines) |
+
+So the implementer's mutation table reproduces, and the CLAUDE.md robust-test rule holds in
+both directions I could think of: adding a ticket fixture — including one that is *not* open,
+the case that could plausibly have tripped the `.status == "open"` minimum — keeps parity green,
+while removing coverage fails. Minima are declared, not exact counts (8+8+8+1+0+0+8+0 = 33 =
+today's tight baseline), and the three `0`s are the deliberately-empty cases, still guarded by
+the byte-compare and exit-code arms. `namedtuple` over bare tuples matches the repo's
+no-`Pair`/`Triple` rule.
+
+**Workflow is valid and still build-failing.** pyyaml parses it; job keys are exactly
+`runs-on`, `steps`, `timeout-minutes: 20`; the parity step is
+`{"name": "Run bash-vs-TS parity harness", "if": "${{ !cancelled() }}", "run": "make parity"}`
+with **no `continue-on-error`**. `!cancelled()` only changes *whether the step runs* (it now
+runs after a failed `make test`); a non-zero `make parity` still fails the step and therefore
+the job. Failure propagation is not weakened — confirmed by the semantics of the expression and
+the absence of any suppressing key.
+
+## 💡 NICE-TO-HAVE (round 2, non-blocking)
+
+- `!cancelled()` also runs parity when `setup-node` itself failed, where `make parity` will die
+  for an unrelated reason on an already-red job. Harmless noise; `if: ${{ !cancelled() }}` is
+  still the right 80/20 over enumerating step outcomes.
+- `min_lines=0` is inert by construction (nothing is `< 0`). It reads as documentation, which is
+  fine and the comment says so — but if a future edit made `.nosuchfield` start matching, only
+  the byte-compare would notice. Not worth an `expected_lines` exact-match mechanism today.
+
+## Verdict
+
+**NEEDS-ITERATION** — remaining blocker is exactly one: **R2-1**, the `require_jq()` rationale
+(docstring + `SystemExit` message + `scripts/parity/README.md`, echoed in the two PUBLIC docs)
+asserts a jq-less behaviour that the `min_lines` guard in the same commit replaced. Everything
+else in this round is verified fixed, both suites are green, and the CI step remains genuinely
+build-failing. This is a text-only fix with the corrected, measured wording supplied above; no
+further review round should be needed after it.

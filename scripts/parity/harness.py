@@ -180,17 +180,16 @@ def require_dump():
 def require_jq():
     """`query <filter>` spawns external `jq` on BOTH sides, so without jq the run is misleading.
 
-    Measured with a PATH stripped of only jq: `check_query.run()` returns False, so CI goes red
-    -- but for confusing reasons. What it reports is `rc=127 on both sides, expected 141` plus a
-    changed control-character divergence, while `_check_jsonl` silently stops measuring the four
-    filter invocations (33 -> 16 lines compared) and still says "identical". Refuse to start, so
-    the message names the real cause instead of leaving the next maintainer to chase a 127.
+    Measured with a PATH stripped of only jq: nothing passes vacuously -- the run goes red, but
+    all three failures misdiagnose it and none names jq. `_check_jsonl` blames fixture drift
+    (`.status == "open"` matched 0 rows, expected at least 8), `_check_query_broken_pipe` reports
+    `rc=127 on both sides, expected 141`, and the control-character divergence "changed". Refuse
+    to start, so the message names jq instead of sending the next maintainer after the fixtures.
     """
     if shutil.which("jq") is None:
         raise SystemExit(
-            "jq is not on PATH -- `query <filter>` would exit 127 on both sides: the filter "
-            "comparisons would measure nothing and the rest would fail confusingly. "
-            "Install jq and re-run."
+            "jq is not on PATH -- `query <filter>` exits 127 on both sides, and every resulting "
+            "failure misdiagnoses it (fixture drift, 127 vs 141). Install jq and re-run."
         )
 
 

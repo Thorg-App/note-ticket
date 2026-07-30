@@ -34,3 +34,41 @@ parity README do. Ticket nid_94f11043… still `status: open`.
 
 Verdict written: NEEDS-ITERATION (docs/comment accuracy + T6 breadcrumb only; no functional
 change required).
+
+---
+
+# Round 2 (convergence check) — commit 9f01f5e
+
+Fresh instance. Read-only for code; only `.tmp/` scratch written (`r2_mutate_query.py`,
+`r2_nojq.py`, logs). `git status --porcelain` empty at exit.
+
+## Empirical results
+
+| Check | Result |
+|---|---|
+| `make parity` | exit **0** — graph 69 scen/0 fail, `query identical over 8 invocations (33 lines)`, slug 13 (`.tmp/r2-parity.log`) |
+| `make test` | exit **0** — 12 features, **208 scenarios / 1368 steps passed, 0 failed**, 5.7s (`.tmp/r2-test.log`) |
+| Workflow YAML | pyyaml-valid; job keys `runs-on`,`steps`,`timeout-minutes: 20`; parity step = `{"name":..., "if":"${{ !cancelled() }}", "run":"make parity"}`, no `continue-on-error` → still build-failing |
+| min_lines non-vacuous (MUT-1) | drop `--tags` from Tagged → `ok=False`, tags filter matched 0 expected ≥1 |
+| min_lines non-vacuous (MUT-2) | drop Tagged fixture → `ok=False`, bare query 7 expected ≥8 |
+| Robust (ROBUST-1) | +1 create fixture → `ok=True` (37 lines) |
+| Robust (ROBUST-2) | +1 `status: closed` edge fixture → `ok=True` (36 lines) — the open/total ratio shift does not trip `.status=="open"` min 8 |
+| **jq-less re-measure** | `_check_jsonl` now returns **False**: `query ['query', '.status == "open"'] matched 0 rows, expected at least 8 -- fixture drift...`. It does **NOT** report "identical (16 lines)" any more |
+
+Method note: mutations done by monkeypatching `check_query.CREATE_ARGS` / `EDGE_FILES`
+in-memory (no source edit) — cleaner than round 1's file patch + restore. Reusable.
+
+## Key conclusion
+
+Findings 1b, 2, 3, 4, 5 genuinely fixed and verified. Finding 1 is the problem: the
+*corrected* rationale is **again false**, because 1b (shipped in the same commit) changed
+the very behavior the docstring describes. With jq missing, `_check_jsonl` no longer
+"silently stops measuring … and still says identical (33 → 16)"; it fails early with a
+**misleading "fixture drift"** diagnosis. Sum check: 8+8+8+1+0+0+8+0 = 33 = the tight
+baseline, so every jq-dependent invocation now has a live minimum.
+
+Silver lining for the fix: this makes the guard MORE justified — without it, a jq-less run
+accuses the fixtures. That is the sentence the docstring should carry.
+
+Verdict written: NEEDS-ITERATION (one ~3-line wording fix in `harness.py` + `README.md`,
+plus a correction note in the two PUBLIC docs; no functional change).

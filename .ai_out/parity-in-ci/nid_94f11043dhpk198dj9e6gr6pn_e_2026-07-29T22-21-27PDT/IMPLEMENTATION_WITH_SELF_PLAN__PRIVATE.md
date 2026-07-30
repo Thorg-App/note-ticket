@@ -59,6 +59,26 @@ T6 ticket got the parity delete-list bullet.
 
 Re-verified: `make parity` exit 0, `make test` exit 0 (208/0), workflow YAML parses.
 
+## Round 2 iteration (2026-07-30, after review of 9f01f5e) — ONE blocker, text only
+R2-1: my round-1 jq rationale was ALSO wrong, for a subtle reason worth remembering:
+**it was measured against `ed71586`, but the `min_lines` guard (finding 1b) shipped in the SAME
+commit (`9f01f5e`) and changed the very behavior the comment described.** Lesson: when a commit
+adds a guard AND a comment about pre-guard behavior, re-measure the POST-guard tree.
+
+Measured myself (PATH farm = real PATH minus only jq, sub-checks called directly):
+- `_check_jsonl` → False: `query ['query', '.status == "open"'] matched 0 rows, expected at least 8
+  -- fixture drift, ...` (3rd invocation; no "16 lines", no "identical")
+- `_check_query_broken_pipe` → False: `rc=127 on both sides, expected 141`
+- `_check_control_character_divergence` → False: `TS query .id now fails on a control character`
+=> THREE misdiagnoses, none naming jq. That, not vacuity, is the guard's WHY.
+
+Rewrote: `require_jq()` docstring, its `SystemExit` message, `scripts/parity/README.md`
+"Requirements". Audit trail: CORRECTED-IN-ROUND-2 banner on §1 of the iteration report (round-1
+text kept verbatim) + item 2 of `..._SELF_PLAN__PUBLIC.md`. No logic/workflow/fixture change.
+
+Re-verified: `make parity` exit 0 (33 lines, 69 graph scenarios), `make test` exit 0 (208/0/1368),
+jq-less `run.py` exit 1 with the new message. Logs: `.tmp/r2-parity.log`, `.tmp/r2-test.log`.
+
 ## State
-ROUND 1 COMPLETE. Not committed (TOP_LEVEL_AGENT commits, closes the ticket, owns CHANGELOG).
+ROUND 2 COMPLETE. Not committed (TOP_LEVEL_AGENT commits, closes the ticket, owns CHANGELOG).
 No CHANGELOG entry written (CI + migration-only tooling).

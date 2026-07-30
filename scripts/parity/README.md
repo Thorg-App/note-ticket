@@ -100,9 +100,10 @@ agree, and `check_graph._check_closed_mtime_tie` byte-compares that case.
 ## Requirements
 
 `node`, `python3`, `git`, GNU coreutils, and **`jq`** (`query <filter>` spawns the real `jq` on
-both sides — without it both exit 127 with empty output, so `_check_jsonl`'s filter comparisons
-still report OK while measuring nothing (measured: 33 → 16 lines compared) and other checks fail
-for unrelated-looking reasons. `run.py` refuses to start rather than report either).
+both sides — without it both exit 127 with empty output, and the run goes red with three
+misdiagnoses, none naming jq: "fixture drift" from the row-count minimums, `rc=127 ... expected
+141` from the broken-pipe check, and a "changed" control-character divergence. `run.py` refuses to
+start so the message names jq).
 
 ## Lifetime
 
