@@ -1,5 +1,14 @@
 # Third Party Licenses
 
+## npm dependencies — none are distributed
+
+The CLI has **zero runtime npm dependencies**: `dist/ticket.mjs` is esbuild's bundle of
+`src/` and the Node standard library, and no third-party code lands in it. `esbuild`,
+`typescript` and `@types/node` are `devDependencies` used only to build and typecheck, and
+packaged installs deliberately do not ship `node_modules/`. Nothing from them is
+redistributed, so nothing from them is listed here. Add an entry here the moment a real
+runtime dependency is introduced.
+
 ## wedow/ticket
 **Source:** https://github.com/wedow/ticket
 **License:** MIT  

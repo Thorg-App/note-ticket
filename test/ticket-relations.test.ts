@@ -36,12 +36,25 @@ describe("TicketRelation reading", () => {
     it("treats a missing field as an empty relation instead of failing as bash did", () => {
         assert.deepEqual(DEPENDENCY.idsOf(ticketOf([])), []);
     });
+
+    // DIVERGENCE #13, the NON-ARRAY sub-case. Reachable by hand-editing, and bash read the
+    // raw text, so `deps: foo` was neither an array nor an error to it.
+    it("reads a scalar value as a single-element relation", () => {
+        assert.deepEqual(DEPENDENCY.idsOf(ticketOf(["deps: foo"])), ["foo"]);
+    });
 });
 
 describe("TicketRelation adding", () => {
     it("appends the id to an empty array", () => {
         const updated = DEPENDENCY.withAdded(ticketOf(["deps: []"]), ONE);
         assert.equal(rawField(updated, "deps"), `[${ONE}]`);
+    });
+
+    // bash's insert was `sed "s/\\]/, $dep_id]/"`, and a scalar has no `]` to insert before,
+    // so it printed `Added dependency: …` and wrote nothing at all.
+    it("re-serializes a scalar value as an array when adding to it", () => {
+        const updated = DEPENDENCY.withAdded(ticketOf(["deps: foo"]), ONE);
+        assert.equal(rawField(updated, "deps"), `[foo, ${ONE}]`);
     });
 
     it("appends after the existing ids, in order", () => {

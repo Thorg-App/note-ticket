@@ -6,13 +6,9 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 
 ## Architecture
 
-**Core script:** Single-file bash implementation (`ticket`, ~1000 lines). Uses awk for performant bulk operations on large ticket sets.
+**The CLI is TypeScript on Node.** `src/cli/` (dispatch + one module per command) and `src/core/` (data model), bundled by esbuild into `dist/ticket.mjs` — one file, zero runtime npm deps. `dist/` is gitignored and never committed.
 
-**TypeScript port (in flight):** Strangler-fig migration to a Node CLI; plan at `docs-internal/migration-to-ts-high-level.md`. Commands named in the `TS_COMMANDS` variable in `ticket` are `exec`'d to `node <script-dir>/dist/ticket.mjs`. Sources in `src/` (`src/cli/` dispatch + commands, `src/core/` data model), bundled by esbuild via `make build` (zero runtime npm deps). Rollback of any command = remove the name from `TS_COMMANDS`.
-
-Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a delegating shim: the only bash a user still reaches is the dispatch plus the `Unknown command` fallback (an unrecognized name is not in the list, so it still runs `init_tickets_dir` first and reports a missing tickets dir BEFORE the help — pinned behavior). The `cmd_*` bodies are kept UNREACHABLE on purpose: they are `make parity`'s differential oracle, which diffs a copy of `./ticket` with the delegation lists emptied against the TS bundle. Deleting them would make every parity check compare TS to TS. They go at T6, with `scripts/parity/`.
-
-`dep` is served whole by `TS_COMMANDS` since T5 phase B, which makes `cmd_dep`'s own delegation via the second list `TS_DEP_SUBCOMMANDS` unreachable. That assignment is nonetheless load-bearing until T6: the parity harness's pinned bash copy empties BOTH lists and fails loudly if either assignment goes missing, and emptying it is half of rolling `dep` back to bash. Both lists go through `_ts_serves`/`_exec_ts`, whose `-n "$2"` guard stops an emptied list from substring-matching an empty command name.
+**`./ticket` is a ~90-line bash launcher with zero ticket logic.** It resolves its own directory **through symlinks** (`tk` on PATH is typically a symlink into a checkout, and the bundle and sources sit next to the real file), rebuilds `dist/ticket.mjs` when it is missing or older than any file under `src/`, then `TICKET_INVOKED_AS="$0" exec node "$BUNDLE" "$@"`. **Everything it prints goes to stderr**, so `tk query | jq` stays byte-clean even on the invocation that builds. `src/` is required: a tree without sources fails loudly rather than serving a stale bundle forever. Packaged installs build at PACKAGE time instead — see "Releases & Packaging".
 
 `src/core/` is the shared data-model layer (CLI **and** the planned graph visualization import it) and has **zero CLI knowledge** — no argv, no output formatting, no console:
 
@@ -35,7 +31,7 @@ Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a deleg
 - `ticket-row.ts` — the four bash `printf` row formats plus `identified()` (`<id> [<status>] <title>`, the shape the graph commands share), one place
 - `ticket-lookup.ts` — the ONE place an `IdResolution` becomes a user-facing failure; carries bash's two different wordings (`ticket_path`'s vs `dep tree`'s)
 - `pager.ts` / `child-exit.ts` / `spawned-child.ts` — `show`'s `$TICKET_PAGER` handoff (TTY only) and the shared "adopt the child's exit code, 127 when the binary is missing" rule; `SpawnedChild` is the ONE place that policy lives, for `jq`, `$PAGER` and `$EDITOR` alike
-- `terminal.ts` — `Terminal` (`[ -t 0 ]`, `[ -t 1 ]`, read stdin), injected via `CommandEnvironment`. WHY an interface: the terminal arms of `edit` and `add-note` are unreachable from BDD and the parity harness, so only a unit test can say "both streams are terminals"
+- `terminal.ts` — `Terminal` (`[ -t 0 ]`, `[ -t 1 ]`, read stdin), injected via `CommandEnvironment`. WHY an interface: the terminal arms of `edit` and `add-note` are unreachable from BDD, so only a unit test can say "both streams are terminals"
 - `store-resolver.ts` — bash `init_tickets_dir` semantics: `forReadCommand()`/`forWriteCommand()` require an existing dir, `forCreateCommand()` mkdir -p's it. `create` is the ONLY command allowed to, and bash does it BEFORE parsing args
 - `command-environment.ts` / `program-name.ts` — the ambient process a command runs in: invoked program name (usage text interpolates it — `TICKET_INVOKED_AS`, never a hardcoded `ticket`), clock, new-id and default-assignee sources. `CommandEnvironment.forProcess()` is the one place the real environment is bound; tests pass their own
 - `commands/status.ts` — `StatusUpdate.applied()` is the pure frontmatter change (a new field lands FIRST, as bash's `sed` insert did); `STATUS_WRAPPERS` carries `start`/`close`/`reopen`
@@ -46,22 +42,11 @@ Since T5 phase C `TS_COMMANDS` names **every** command, so `./ticket` is a deleg
 - `exit-codes.ts` — every exit code in one place, including `128 + signal` for a signalled child
 - `broken-pipe.ts` — node ignores SIGPIPE, so a closed stdout is turned into exit 141 here
 
-Bash behavior is the contract; parity is verified empirically via `make parity` (differential harness, `scripts/parity/README.md`; runs in CI alongside `make test`; delete at T6), not guessed. The harness diffs against a *pinned copy* of `ticket` with BOTH delegation lists (`TS_COMMANDS` and `TS_DEP_SUBCOMMANDS`) emptied — running `./ticket` itself would compare TS to TS for anything already ported. Known trap areas: byte-wise (`LC_ALL=C`) path ordering, JSONL escaping, frontmatter key order, `printf` padding widths and trailing spaces, `dep tree` sibling ordering, `show`'s section order (awk hash order, i.e. unspecified — compared as sets), `closed`'s mtime order (nanoseconds, `ls -t` name tie-break, a symlink's OWN mtime via `lstat`) with its 100-file scan cap applied before filtering, and exit codes inside a pipeline (a short reader kills bash's `awk`/`jq` with SIGPIPE). Write commands are diffed by `check_write.py`, which runs each side on identical fresh repos and compares the transcript **plus every byte under `_tickets/`**, and whether each entry is still a symlink (ids/timestamps neutralised); a case may declare `diverges=True` to pin a difference. Every write command is covered; adding a case is a `Case(...)` entry. What the harness canNOT reach is anything gated on a TTY — `edit`'s editor launch and `add-note`'s "no note provided" arm are unit-tested instead.
-
-Key functions:
-- `find_tickets_dir()` - Resolves tickets dir to `<git-repo-root>/_tickets` via `git rev-parse --show-toplevel`; `TICKETS_DIR` env var overrides
-- `generate_id()` - Creates IDs in format `nid_<25-char-random-[a-z0-9]>_e` (decoupled from filename)
-- `title_to_filename()` - Converts title to slug for filename, handles collisions
-- `ticket_path()` - Resolves partial IDs by searching frontmatter `id:` fields (single awk pass)
-- `id_from_file()` - Extracts `id:` from a file's YAML frontmatter
-- `_file_to_jsonl()` - Shared awk-based JSONL generator (used by create and query)
-- `yaml_field()` / `update_yaml_field()` - YAML frontmatter manipulation via sed
-- `cmd_*()` - Command handlers
-- `cmd_ready()`, `cmd_blocked()`, `cmd_ls()` - awk-based bulk listing with sorting
+**Deliberate divergences from the historical bash implementation** — the 20 numbered entries in `docs-internal/migration-to-ts-high-level.md` ("Deliberate divergences from bash"). ~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER, so the numbering is stable: never renumber, only append. Behavior changes there carry an owner approval id.
 
 Data model: Filenames are title-based (e.g., `my-note.md`). The `id` field in frontmatter is the stable identifier. `title` is stored in frontmatter (double-quoted). No `# heading` for title in body.
 
-Dependencies: bash, git, sed, awk, find. Optional: ripgrep (faster grep).
+Dependencies at runtime: **node**, **git** (repo-root resolution), plus bash/coreutils/`find` for the launcher. **npm** only when the launcher has to build. **jq** only for `query <jq-filter>`.
 
 ## Testing
 
@@ -99,8 +84,15 @@ Example:
 
 ### Package Structure
 
-Single package:
-- `ticket-core` - Core script and all commands
+Single package: `ticket-core` — the launcher, the sources, and a bundle built at package time.
+
+**`pkg/install-manifest.txt` is the single source of truth for what a complete install needs on disk.** The AUR `PKGBUILD`, `scripts/publish-homebrew.sh` and the launcher BDD's isolated tool copy (`features/steps/ticket_steps.py`) all read it. Add a new top-level file the tool needs at runtime → add it there, nowhere else.
+
+**Packages build the bundle in their own build/install phase**, then install `dist/ticket.mjs` alongside the sources and `touch` it last. WHY-NOT letting the launcher build on demand there: the install prefix is root-owned, so esbuild fails with `mkdir dist: permission denied` (verified empirically, both directions). Nothing prebuilt is committed to the repo or attached to a release — the release flow stays "tag it".
+
+**`make package-smoke` (`scripts/package-smoke.sh`, also a CI step) is the guard on all of that.** It replays the install steps both packages share into a read-only scratch prefix and drives `tk` through the installed symlink. WHY it exists separately from `make test`: every other gate drives a WRITABLE checkout, so none of them could catch a formula that installs an incomplete tree — which is how `bin.install "ticket" => "tk"` shipped dead for months. It does NOT run `brew`/`makepkg`; those semantics still need one real run before a release tag.
+
+**CALLED OUT, accepted for now:** building at install time means Homebrew/AUR users need npm and network at `brew install`/`makepkg` time. Fine for a single-user tool. If it ever goes multi-user, the fix is a prebuilt-bundle release artifact — file a ticket, do not smuggle one in.
 
 ### Release Flow
 
@@ -116,8 +108,8 @@ Single package:
 
 The release workflow (`.github/workflows/release.yml`) automatically:
 1. Creates GitHub release with changelog body
-2. Runs `scripts/publish-homebrew.sh` - updates all formulas in tap
-3. Runs `scripts/publish-aur.sh` - updates all AUR packages
+2. Runs `scripts/publish-homebrew.sh` - updates the `ticket-core` formula in the tap
+3. Runs `scripts/publish-aur.sh` - updates the `ticket-core` AUR package
 
 ### Package Managers
 

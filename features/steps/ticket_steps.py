@@ -28,6 +28,11 @@ REPO = Path(__file__).resolve().parent.parent.parent
 
 def get_ticket_script(context):
     """Get the ticket script path, defaulting to ./ticket or using TICKET_SCRIPT env var."""
+    # A scenario that materialized an isolated copy of the tool must drive THAT copy, not
+    # the developer's checkout, whichever way the checkout is normally located.
+    isolated = getattr(context, 'ticket_script_override', None)
+    if isolated:
+        return isolated
     ticket_script = os.environ.get('TICKET_SCRIPT')
     if ticket_script:
         return ticket_script
@@ -637,7 +642,6 @@ def _path_without(binary_name):
 
     WHY $REPO/.tmp and not the system temp dir: the links in the farm have to be
     EXECUTED, and TMPDIR can be a noexec mount (/dev/shm on this machine).
-    scripts/parity/harness.py places its executable scratch copy there for the same reason.
     """
     scratch = REPO / '.tmp'
     scratch.mkdir(parents=True, exist_ok=True)
@@ -1229,3 +1233,160 @@ def step_ticket_located_in_subfolder(context, ticket_id, subfolder):
     expected_dir = Path(context.test_dir) / '_tickets' / subfolder
     assert ticket_path.parent == expected_dir, \
         f"Expected ticket '{ticket_id}' in {expected_dir} but found it in {ticket_path.parent}"
+
+
+# ============================================================================
+# Piping and bulk-fixture steps
+# ============================================================================
+
+@given(r'(?P<count>\d+) tickets exist')
+def step_many_tickets_exist(context, count):
+    """Create N minimal tickets, enough output to overflow a pipe buffer.
+
+    Written directly rather than through the CLI: the point is the SIZE of a listing, and
+    N create invocations would dominate the scenario's runtime.
+    """
+    for index in range(int(count)):
+        create_ticket(context, f'bulk-{index:05d}', f'Bulk ticket {index:05d}')
+
+
+@when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" piped into "(?P<reader>[^"]+)"')
+def step_run_command_piped_into(context, command, reader):
+    """Run a command with `reader` consuming its stdout, and adopt the COMMAND's exit code.
+
+    WHY `bash -o pipefail` and not the default shell: a pipeline's status is its LAST
+    command's, so without pipefail every such scenario would assert `head`'s 0 and could
+    never see the CLI's broken-pipe code.
+    """
+    command = command.replace('\\"', '"')
+    ticket_script = get_ticket_script(context)
+    cmd = command.replace('ticket ', f'{ticket_script} ', 1)
+
+    result = subprocess.run(
+        f'set -o pipefail; {cmd} | {reader}',
+        shell=True,
+        executable='/bin/bash',
+        cwd=getattr(context, 'working_dir', context.test_dir),
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+
+    context.result = result
+    context.stdout = result.stdout.strip()
+    context.stderr = result.stderr.strip()
+    context.returncode = result.returncode
+    context.last_command = command
+
+
+# ============================================================================
+# Launcher (./ticket wrapper) steps
+# ============================================================================
+#
+# WHY an isolated COPY of the tool: these scenarios delete and back-date the BUNDLE, and
+# doing that to the developer's own dist/ would break every other scenario and leave the
+# working tree without a build. The copy carries the wrapper, the manifests and src/, and
+# SYMLINKS node_modules so the on-demand build needs no network.
+
+def _install_manifest():
+    """Everything a complete install of the tool needs on disk, from the ONE list that says so.
+
+    Read from pkg/install-manifest.txt rather than repeated here: the packaging (PKGBUILD,
+    Homebrew formula) needs exactly this set, and two hand-maintained copies would drift --
+    silently, since a scenario copying a file the packages forget still passes.
+    """
+    lines = (REPO / 'pkg' / 'install-manifest.txt').read_text().splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.startswith('#')]
+
+# A stand-in bundle that announces itself, so a scenario can tell "the wrapper rebuilt" from
+# "the wrapper ran what was already there" by looking at stdout alone.
+MARKER_BUNDLE_TEXT = 'MARKER BUNDLE'
+
+# Gap between the bundle's mtime and the sources', in seconds. `find -newer` compares
+# mtimes, so any gap works; a wide one keeps the intent obvious in a listing.
+_MTIME_GAP_SECONDS = 60
+
+
+def _isolated_tool_copy(context):
+    """Materialize a throwaway copy of the tool and point later steps at its wrapper.
+
+    Under `$REPO/.tmp`, NOT the system temp dir: the copy's `ticket` is EXECUTED, and the
+    system temp dir is mounted `noexec` in this project's dev container.
+    """
+    scratch = REPO / '.tmp'
+    scratch.mkdir(exist_ok=True)
+    root = Path(tempfile.mkdtemp(prefix='ticket_tool_', dir=str(scratch)))
+    # Registered BEFORE the copy, so a failure mid-copy is still cleaned up.
+    context.tool_dir = root
+    context.ticket_script_override = str(root / 'ticket')
+    project = Path(context.project_dir)
+    # The symlink below is what keeps the copy's build offline -- and it is also a way to
+    # write INTO the developer's node_modules if it does not exist yet, since npm would then
+    # create it through the dangling link. `make test` builds first so this holds; say so
+    # loudly rather than silently mutating the real tree.
+    assert (project / 'node_modules').is_dir(), \
+        f"[{project / 'node_modules'}] is missing; run `make build` before driving behave directly"
+    for name in _install_manifest():
+        source = project / name
+        if source.is_dir():
+            shutil.copytree(source, root / name)
+        else:
+            shutil.copy2(source, root / name)
+    os.symlink(project / 'node_modules', root / 'node_modules')
+    return root
+
+
+def _set_tree_mtime(root, mtime):
+    for path in [root, *root.rglob('*')]:
+        os.utime(path, (mtime, mtime))
+
+
+def _write_marker_bundle(root):
+    bundle = root / 'dist' / 'ticket.mjs'
+    bundle.parent.mkdir(parents=True, exist_ok=True)
+    bundle.write_text(f'process.stdout.write("{MARKER_BUNDLE_TEXT}\\n");\n')
+    return bundle
+
+
+@given(r'an isolated copy of the tool with no built bundle')
+def step_isolated_tool_without_bundle(context):
+    _isolated_tool_copy(context)
+
+
+@given(r'an isolated copy of the tool whose bundle is older than its sources')
+def step_isolated_tool_with_stale_bundle(context):
+    root = _isolated_tool_copy(context)
+    now = time.time()
+    bundle = _write_marker_bundle(root)
+    _set_tree_mtime(root / 'src', now)
+    os.utime(bundle, (now - _MTIME_GAP_SECONDS, now - _MTIME_GAP_SECONDS))
+
+
+@given(r'an isolated copy of the tool whose bundle is newer than its sources')
+def step_isolated_tool_with_fresh_bundle(context):
+    root = _isolated_tool_copy(context)
+    now = time.time()
+    bundle = _write_marker_bundle(root)
+    _set_tree_mtime(root / 'src', now - _MTIME_GAP_SECONDS)
+    os.utime(bundle, (now, now))
+
+
+@given(r'the isolated copy has a source file that cannot be built')
+def step_isolated_tool_with_broken_source(context):
+    """Make the copy's build fail, without touching anything outside it."""
+    (Path(context.tool_dir) / 'src' / 'cli' / 'main.ts').write_text('this is ( not ( typescript\n')
+
+
+@given(r'the isolated copy has no sources')
+def step_isolated_tool_without_sources(context):
+    """An install shape the tool does not support: nothing to build from, ever."""
+    shutil.rmtree(Path(context.tool_dir) / 'src')
+
+
+@then(r'the isolated copy should have a built bundle')
+def step_isolated_tool_bundle_built(context):
+    bundle = Path(context.tool_dir) / 'dist' / 'ticket.mjs'
+    assert bundle.is_file(), f"No bundle was built at [{bundle}]"
+    text = bundle.read_text()
+    assert MARKER_BUNDLE_TEXT not in text, \
+        "The bundle is still the marker stand-in; the wrapper did not rebuild it"

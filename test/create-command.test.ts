@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -207,6 +207,11 @@ class CreateRun {
         writeFileSync(join(this.ticketsDir, filename), text);
     }
 
+    /** Take a ticket FILENAME with a directory, which is not a ticket but does own the name. */
+    makeDirectory(name: string): void {
+        mkdirSync(join(this.ticketsDir, name));
+    }
+
     /** @returns everything the command wrote to stdout, byte for byte. */
     run(args: readonly string[]): string {
         const environment = new CommandEnvironment(
@@ -280,5 +285,34 @@ describe("CreateCommand", () => {
         created.writeTicket("parent.md", PARENT_FILE);
         assert.throws(() => created.run(["Kid", "--parent", "zzz"]), CliError);
         assert.throws(() => created.fileText("kid.md"));
+    });
+
+    // DIVERGENCE #5: bash's json_escape handled `\` and `"` only, so a raw tab landed inside
+    // the JSON string and made the line `create` printed unparseable. This is the point where
+    // such a value is BORN, so it is pinned here as well as on `query`.
+    it("prints a parseable JSON line for a title containing a tab", () => {
+        const emitted = JSON.parse(created.run(["a\tb"])) as { title: string };
+        assert.equal(emitted.title, "a\tb");
+    });
+
+    // DIVERGENCE #11, the JSON half: bash printed `"title":"\"line1","line2\"":""`.
+    it("prints a parseable JSON line for a title containing a newline", () => {
+        const emitted = JSON.parse(created.run(["line1\nline2"])) as { title: string };
+        assert.equal(emitted.title, "line1\nline2");
+    });
+
+    // DIVERGENCE #11, the filename half: bash created a file literally named `line1<LF>line2.md`.
+    it("drops a newline from the filename it derives from the title", () => {
+        created.run(["line1\nline2"]);
+        assert.equal(created.fileText("line1line2.md").includes("id: "), true);
+    });
+
+    // DIVERGENCE #12: bash tested `[[ -f ]]`, false for a directory, and then redirected its
+    // output INTO it and died with `Is a directory`. The question is whether the NAME is
+    // taken, not whether a regular file holds it.
+    it("suffixes the filename when the slug is taken by a DIRECTORY", () => {
+        created.makeDirectory("taken.md");
+        created.run(["Taken"]);
+        assert.equal(created.fileText("taken-1.md").includes("id: "), true);
     });
 });

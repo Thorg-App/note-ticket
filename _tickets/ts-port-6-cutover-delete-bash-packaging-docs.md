@@ -1,11 +1,12 @@
 ---
+closed_iso: 2026-07-30T23:52:51Z
 id: nid_fhmxugci00tfkeu3eyeggv6gq_e
 title: 'TS port 6: cutover, delete bash, packaging + docs'
-status: in_progress
+status: closed
 deps: [nid_zesi8c4t7lyw6jgmqqsjqd54k_e, nid_8cislepljqvv88ayndtjlw34k_e, nid_2ziai8ka9l0yak2lxnwlu9lk2_e]
 links: []
 created_iso: '2026-07-29T21:57:25Z'
-status_updated_iso: '2026-07-30T22:23:06Z'
+status_updated_iso: 2026-07-30T23:52:51Z
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -50,3 +51,63 @@ Scope:
 - BDD: a scenario for the wrapper's build-on-demand arm (no bundle -> first invocation builds and succeeds, stdout uncontaminated by build output) and one for the stale-bundle arm (src newer than dist -> rebuilt).
 
 Acceptance: git grep finds no awk-based ticket logic and no `cmd_*` bash function; the only bash left is the wrapper; make test green; fresh-clone install (no dist, no node_modules) verified end to end.
+
+---
+
+## RESOLUTION (2026-07-30) — DONE
+
+Commits: `42ccf92` (cutover), `0ef05a5` (review fixes), `132df86` (packaging + docs),
+`375ab65` (packaging review fixes). Change log entry `oaxsbqgtgg61135ywl8ii88ck`.
+
+Run as two phases, each MAKER -> REVIEWER, each converged in 2 rounds.
+
+### Acceptance — met
+- `git grep` finds no awk ticket logic and no `cmd_*` bash function; every remaining hit is a
+  historical record (`_tickets/`, `_change_log/`, `.ai_out/`) or a WHY-comment explaining what
+  bash used to do. The only bash holding ticket logic is the 89-line launcher.
+- `make test` 261 scenarios / 1729 steps, 429 unit tests, `make typecheck` clean,
+  `make package-smoke` OK.
+- Cold-start verified end to end: no `dist/`, no `node_modules/`, `tk` a symlink.
+
+### Deviations from this ticket's text (both owner-acked 2026-07-30)
+1. **Packages build at PACKAGE time, not on first run.** The ticket assumed an installed `tk`
+   would build on first use with `npm` in `depends`. That is non-functional: a package prefix
+   is root-owned, so esbuild fails `mkdir dist: permission denied` and `tk` is broken on
+   arrival (proved on a `chmod -R a-w` prefix). `npm` is a build-only dep; the installed
+   bundle is touched last so the launcher never judges it stale. Still build-from-source —
+   nothing prebuilt is committed or attached to a release. This also removes the
+   network-at-first-run concern this ticket itself CALLED OUT.
+2. **The pinned "unknown command reports the missing tickets dir first" quirk is dropped.**
+   `tk <unknown>` now reports `Unknown command: <name>` + help. It was an artifact of bash's
+   `case` default arm, nothing pinned it, and naming a resource the command never reads is a
+   POLS violation. Recorded as divergence #20.
+
+### Divergence whitelist survived the harness deletion
+All 19 entries were audited into BDD/unit pins BEFORE `scripts/parity/` was deleted, then
+moved verbatim (plus #20) into `docs-internal/migration-to-ts-high-level.md`, numbering
+intact — ~14 code comments cite them BY NUMBER. **Never renumber, only append.**
+
+Two claimed pins were fictional and were caught by review mutation-testing, not by reading:
+#7's `query | head -1` half was an assertion that a constant equals 141, and #13's non-array
+scalar `deps:` sub-case was covered by nothing. Both are now real tests.
+
+### Packaging bugs found (all were green-gates failures)
+- The install manifest's `while read` drops the last entry (`src`) without a trailing
+  newline, in both bash consumers but not the Python one -> a package with no sources, a `tk`
+  dead at runtime, `make test` green.
+- `publish-homebrew.sh` rendered a bare `libexec.install` (installing nothing) if the manifest
+  was unreadable, because the failed redirect did not fail the function.
+- Pre-existing: the formula installed the single `ticket` file, which cannot work now that the
+  launcher needs its sources; and it referenced a `LICENSE` file this repo does not have.
+
+Root cause of all three: nothing exercised the packaged layout. `make package-smoke` now does,
+and is mutation-proven to catch the original single-file breakage.
+
+### NOT verified here — do before the next tag
+No `fakeroot`/`makepkg`/`brew` in this container. The layout is simulation-verified only.
+Run a real `makepkg` + `namcap` and a `brew install --build-from-source` once.
+`cp -a --no-preserve=ownership` was applied on convention and is unverified.
+
+### Follow-up
+`nid_7qxhyhxhwbxi7yh0f8j7n79et_e` — help text omits the `-a/--assignee` default (unrelated,
+noticed in passing).

@@ -1,6 +1,6 @@
 /**
  * The graph commands (`dep tree`, `dep cycle`, `show`) and the id lookup they share.
- * Every expected string here was captured from bash `./ticket`; see also `make parity`.
+ * Every expected string here was captured from bash `./ticket` with the (now deleted) differential parity harness.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -177,6 +177,32 @@ describe("ShowCommand.render", () => {
     it("repeats a link listed twice under Linked", () => {
         const shown = shownFor([{ id: "a", links: ["dup", "dup"] }, { id: "dup", title: "Twice" }]);
         assert.ok(shown.endsWith("\n## Linked\n\n- dup [open] Twice\n- dup [open] Twice\n"));
+    });
+
+    // The other half of divergence #8, and the deliberate behavior change in it (owner
+    // approval on nid_qxt3z5unr9k220aqttbw84a6a_e): bash appended one Blocking row per
+    // matching `deps` ENTRY, so a ticket naming the target twice was printed twice.
+    it("lists a dependent that names the target twice ONCE under Blocking", () => {
+        const shown = shownFor([
+            { id: "a" },
+            { id: "waiter", title: "Waiting", deps: ["a", "a"] },
+        ]);
+        assert.ok(shown.endsWith("\n## Blocking\n\n- waiter [open] Waiting\n"));
+    });
+
+    // bash iterated an awk associative array, whose order is unspecified. TS uses
+    // enumeration (path) order, which for these tickets is the order they were loaded in.
+    it("orders Blocking rows by enumeration order, not by id", () => {
+        const shown = shownFor([
+            { id: "a" },
+            { id: "zzz", title: "Later id first", deps: ["a"] },
+            { id: "aaa", title: "Earlier id second", deps: ["a"] },
+        ]);
+        assert.ok(
+            shown.endsWith(
+                "\n## Blocking\n\n- zzz [open] Later id first\n- aaa [open] Earlier id second\n",
+            ),
+        );
     });
 
     it("orders the sections Blockers, Blocking, Children, Linked", () => {

@@ -8,8 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # The suites run thousands of subprocesses with no per-call timeout, and this repo has a
-    # known "awk reads stdin and hangs forever" class -- fail in minutes, not on the 6h default.
+    # The suites run thousands of subprocesses with no per-call timeout -- fail in minutes,
+    # not on the 6h default.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -20,18 +20,45 @@ jobs:
         with:
           node-version: '22'
 
-      # `make test` builds dist/ticket.mjs first (bash `ticket` delegates TS_COMMANDS to it)
+      # The packaged install path, end to end, on a checkout that has NO dist/ and NO
+      # node_modules/: `tk` is a symlink into the checkout, and the wrapper must resolve
+      # through it, build the bundle on demand, and still leave stdout carrying nothing but
+      # the CLI's own output. MUST stay BEFORE `make test`, which builds dist/ itself and
+      # would leave nothing cold to test.
+      - name: Smoke-test the build-on-demand install path
+        run: |
+          set -euo pipefail
+          test ! -e dist/ticket.mjs
+          test ! -e node_modules
+          mkdir -p "$HOME/bin"
+          ln -s "$PWD/ticket" "$HOME/bin/tk"
+          export PATH="$HOME/bin:$PATH"
+          tk help > help.out
+          test -f dist/ticket.mjs
+          # Line 1 proves all three at once: stdout is uncontaminated by build chatter, the
+          # symlink resolved to this checkout, and $0 reached the CLI as the program name.
+          head -1 help.out | grep -qx 'tk - minimal ticket system with dependency tracking'
+          rm -f help.out
+          # `help` is the one command that needs no tickets directory, so it alone would not
+          # cover git-based resolution on a cold box. These do.
+          mkdir "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
+          git init -q . && git config user.name 'CI Smoke'
+          tk create "Cold smoke ticket" > create.out
+          tk ls > ls.out
+          grep -q 'Cold smoke ticket' ls.out
+          test "$(wc -l < ls.out)" -eq 1
+
+      # The fastest gate, and BEFORE the suites: a BDD failure must not hide type errors.
+      - name: Typecheck
+        run: make typecheck
+
+      # `make test` = build + unit tests + the BDD suite, which drives ./ticket itself.
       - name: Run tests
         run: make test
 
-      # MIGRATION-ONLY -- DELETE AT T6 together with scripts/parity/ (see its README
-      # "Lifetime"). The differential harness is the only check that a ported command is
-      # byte-identical to bash: of 14 measured mutations of dist/ticket.mjs it catches, 6 are
-      # invisible to `make test`, so those regressions would ship green without this step.
-      # Needs python3 + jq (both preinstalled on ubuntu-latest); the harness fails loudly
-      # rather than vacuously if either is missing.
-      # `!cancelled()`: run even when `make test` failed, so one push reports both signals.
-      # This is NOT continue-on-error -- a parity diff still fails the job.
-      - name: Run bash-vs-TS parity harness
-        if: ${{ !cancelled() }}
-        run: make parity
+      # The PACKAGED shape: read-only prefix, prebuilt bundle, no node_modules. The smoke
+      # step above and the BDD suite both drive a WRITABLE checkout, so neither would catch
+      # a formula/PKGBUILD that installs an incomplete tree -- which is exactly how the old
+      # `bin.install "ticket"` formula shipped broken. Needs a built dist/, hence after.
+      - name: Smoke-test the packaged install layout
+        run: make package-smoke

@@ -19,7 +19,7 @@ const WHOLE_NUMBER = /^[0-9]+$/;
  *     (bash printed `head: invalid number of lines: 'abc'`, which is not a message about a
  *     flag the user typed) -- and it is reported even when there is nothing to list, where
  *     bash returned before `head` ran and ignored the typo entirely.
- * Verified against ./ticket; see scripts/parity/README.md.
+ * Verified against ./ticket; see docs-internal/migration-to-ts-high-level.md (divergence #4).
  */
 export class RowLimit {
     private constructor(private readonly rows: number) {}

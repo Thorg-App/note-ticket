@@ -30,7 +30,7 @@ export class DepCycleCommand {
      * `Cycle N: a -> b -> a` followed by one indented row per member, blank line between
      * cycles.
      *
-     * DIVERGENCE (deliberate, whitelisted #1 in `scripts/parity/README.md`): bash aborted
+     * DIVERGENCE (deliberate, divergence #1 in `docs-internal/migration-to-ts-high-level.md`): bash aborted
      * its DFS at the first cycle and left the nodes it had entered marked "visiting", so it
      * printed walks that were not cycles and missed real ones. This reports every cycle
      * once, keyed by its members.

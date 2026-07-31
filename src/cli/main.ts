@@ -28,7 +28,7 @@ type ReadCommandBody = (store: TicketStore, options: ListOptions) => string;
 
 /**
  * CLI entrypoint. Mirrors the bash `case` dispatch in ./ticket for the commands
- * listed in that script's TS_COMMANDS.
+ * `./ticket` is a thin launcher that exec's this bundle for EVERY invocation.
  */
 class Cli {
     static run(argv: string[]): number {

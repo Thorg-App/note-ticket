@@ -1,9 +1,7 @@
 node_modules/
-# Build output: rebuilt by `make build`. Committed only at release tags (see
-# docs-internal/migration-to-ts-high-level.md — Distribution).
+# Build output: never committed. Distribution is build-from-source, and `./ticket`
+# rebuilds this on demand whenever it is missing or older than src/.
 dist/
 # Transpiled unit tests (npm test output).
 dist-test/
-# Parity harness bundle (make parity output).
-dist-parity/
 .tmp/

@@ -139,3 +139,10 @@ Feature: Ticket Query
     Then the command should succeed
     And the output should contain "query-001"
     And the output should not contain "query-002"
+
+  # The OTHER broken-pipe path: here the external jq child is really signalled, and the CLI
+  # adopts its death as 128+SIGPIPE rather than flattening it to 1.
+  Scenario: A large filtered query into a short reader adopts jq's signal death
+    Given 3000 tickets exist
+    When I run "ticket query '.id'" piped into "head -1"
+    Then the exit code should be 141
