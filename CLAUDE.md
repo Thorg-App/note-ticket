@@ -103,7 +103,7 @@ Single package: `ticket-core` — the launcher, the sources, and a bundle built 
 
 **CALLED OUT, accepted for now:** building at install time means Homebrew/AUR users need npm and network at `brew install`/`makepkg` time. Fine for a single-user tool. If it ever goes multi-user, the fix is a prebuilt-bundle release artifact — file a ticket, do not smuggle one in.
 
-**npm publishing is a local, manual step** (`scripts/publish-npm.sh`, token from `$NPM_PUBLISH_TOKEN`) and is deliberately NOT part of the tag-triggered release workflow — see `docs-internal/how-to-publish-to-npm.md`.
+**npm publishing is a local, manual step** (`scripts/publish-npm.sh`, token from `$NPM_PUBLISH_TOKEN`) and is deliberately NOT part of the tag-triggered release workflow — see `docs-internal/how-to-publish-to-npm.md`. It bumps the version itself (**patch by default**, `minor`/`major`/`<x.y.z>`/`--no-bump` override) and commits that bump BEFORE uploading, so every published tarball corresponds to a commit; a dry run and any pre-commit failure revert the bump.
 
 ### Release Flow
 
