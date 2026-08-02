@@ -27,31 +27,11 @@ jobs:
           echo "$CONTENT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      # The GitHub release is all this workflow does. npm is the only registry this
+      # package is published to, and that stays a local, manual step -- see
+      # docs-internal/how-to-publish-to-npm.md.
       - name: Create Release
         id: release
         uses: softprops/action-gh-release@v1
         with:
           body: ${{ steps.changelog.outputs.body }}
-
-      - name: Get tarball SHA256
-        id: sha
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          curl -sL "https://github.com/${{ github.repository }}/archive/refs/tags/${VERSION}.tar.gz" -o release.tar.gz
-          SHA=$(sha256sum release.tar.gz | cut -d' ' -f1)
-          echo "sha256=$SHA" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Update Homebrew tap
-        env:
-          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
-        run: |
-          chmod +x scripts/publish-homebrew.sh
-          ./scripts/publish-homebrew.sh "${{ steps.sha.outputs.version }}" "${{ steps.sha.outputs.sha256 }}"
-
-      - name: Update AUR packages
-        env:
-          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
-        run: |
-          chmod +x scripts/publish-aur.sh
-          ./scripts/publish-aur.sh "${{ steps.sha.outputs.version }}" "${{ steps.sha.outputs.sha256 }}"

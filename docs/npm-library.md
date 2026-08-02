@@ -25,8 +25,8 @@ Everything below is exported from the package root (`note-ticket`); the CLI inte
 deliberately are not. Every exported symbol carries a doc comment that your editor will show
 on hover — this page is the map, the types themselves are the reference.
 
-Installing the package also puts the CLI on your bin path, as `ticket` and as `tk`. Its usage is
-documented in [cli.md](cli.md).
+Installing the package also puts the `ticket` CLI on your bin path. Its usage is documented in
+[cli.md](cli.md).
 
 ---
 

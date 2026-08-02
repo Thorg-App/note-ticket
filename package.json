@@ -23,8 +23,7 @@
   },
   "types": "./dist-lib/index.d.ts",
   "bin": {
-    "ticket": "./dist/ticket.mjs",
-    "tk": "./dist/ticket.mjs"
+    "ticket": "./dist/ticket.mjs"
   },
   "files": [
     "dist-lib/",

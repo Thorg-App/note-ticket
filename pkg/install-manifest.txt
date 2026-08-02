@@ -2,22 +2,18 @@
 # root. Directories are copied whole.
 #
 # "and rebuild" is why the npm manifests are here: a checkout builds its own bundle on
-# demand. A PACKAGED install never rebuilds (its prefix is read-only and the bundle is
-# built by the package), so for it those three files are inert -- present for symmetry and
-# provenance, not because a package needs a build toolchain on disk.
+# demand. A COPIED install into a read-only prefix never rebuilds, so for it those three
+# files are inert -- present for symmetry and provenance, not because such an install needs
+# a build toolchain on disk.
 #
-# THE SINGLE SOURCE OF TRUTH for that list. Three places consume it and would otherwise
-# each keep their own copy and drift:
-#   - pkg/aur/ticket-core/PKGBUILD          (package() reads this file from the tarball)
-#   - scripts/publish-homebrew.sh           (interpolates it into the generated formula)
+# THE SINGLE SOURCE OF TRUTH for that list. Two places consume it and would otherwise each
+# keep their own copy and drift:
+#   - scripts/package-smoke.sh              (the read-only-prefix install it replays)
 #   - features/steps/ticket_steps.py        (the isolated tool copy the launcher BDD drives)
 #
 # NOT listed here: dist/ticket.mjs. It is BUILT, not copied — from src/ via package.json's
-# `build` script. Both packages build it BEFORE installing this set (PKGBUILD `build()`
-# precedes `package()`; the formula's `npm run build` precedes `libexec.install`) and then
-# install the bundle separately; the BDD copy is the one consumer that builds afterwards,
-# on demand. `./ticket` itself refuses to run without src/, so the sources are part of a
-# complete install, not an optional extra.
+# `build` script — and installed separately. `./ticket` itself refuses to run without src/,
+# so the sources are part of a complete install, not an optional extra.
 #
 # Blank lines and `#` comments are ignored. A consumer MUST tolerate a missing trailing
 # newline (`while read -r x || [[ -n "$x" ]]`) — dropping the last entry ships a broken

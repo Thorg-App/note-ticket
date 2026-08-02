@@ -2,17 +2,16 @@
 #
 # Smoke-test the PACKAGED install layout (`make package-smoke`).
 #
-# WHY this exists: the Homebrew formula shipped `bin.install "ticket" => "tk"` -- one file,
-# no sources -- and was dead on arrival for months, because nothing in the repo ever built
-# the packaged shape. CI's other smoke step drives a symlink into a CHECKOUT, which is a
-# different shape: writable, no bundle, sources rebuilt on demand. This one is the package:
-# a read-only prefix, a prebuilt bundle, sources that must never be rebuilt.
+# WHY this exists: an install that COPIES the tool into a read-only prefix (a distro
+# package, a deployment image, a shared /opt tree) is a shape no other gate reaches. CI's
+# other smoke step drives a symlink into a CHECKOUT: writable, no bundle, sources rebuilt on
+# demand. This one is the copied install: a read-only prefix, a prebuilt bundle, sources that
+# must never be rebuilt. An incomplete copy -- the launcher without its `src/` tree -- is
+# dead on arrival, and this is the only thing that catches it.
 #
-# It is a SMOKE TEST, not a package-manager emulator: it replays the install steps that
-# `pkg/aur/ticket-core/PKGBUILD`'s package() and the formula's `def install` share, reading
-# the same pkg/install-manifest.txt they read. It does not run makepkg or brew (neither is
-# available in CI here), and it reuses the repo's already-built bundle instead of running a
-# clean `npm install` -- `make build`/`make test` already cover building.
+# It reads pkg/install-manifest.txt, the single source of truth for what a complete install
+# needs, and reuses the repo's already-built bundle instead of running a clean `npm install`
+# -- `make build`/`make test` already cover building.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +35,7 @@ _discard_scratch
 
 [[ -f "$REPO/dist/ticket.mjs" ]] || _fail "no dist/ticket.mjs; run 'make build' first"
 
-# --- install, the way both packages do -------------------------------------------------
+# --- install, the way a copied install does --------------------------------------------
 mkdir -p "$SHARE" "$PREFIX/bin"
 # `|| [[ -n "$entry" ]]`: a manifest without a trailing newline must not lose its last entry.
 while read -r entry || [[ -n "$entry" ]]; do
@@ -47,9 +46,8 @@ done < "$REPO/pkg/install-manifest.txt"
 install -Dm644 "$REPO/dist/ticket.mjs" "$BUNDLE"
 touch "$BUNDLE"
 chmod 755 "$SHARE/ticket"
-# Both packages install BOTH names: `ticket` (documented) and `tk` (historical shorthand).
+# `ticket` is the one installed name.
 ln -s "$SHARE/ticket" "$PREFIX/bin/ticket"
-ln -s "$SHARE/ticket" "$PREFIX/bin/tk"
 # node_modules is deliberately NOT installed: a packaged install must run without it.
 [[ ! -e "$SHARE/node_modules" ]] || _fail "node_modules leaked into the install"
 chmod -R a-w "$SHARE"
@@ -76,7 +74,7 @@ _run_installed() {
     local out err rc=0
     out="$SCRATCH/$label.out"
     err="$SCRATCH/$label.err"
-    # `command`: a developer shell can EXPORT a `tk` function (this one did), which bash
+    # `command`: a developer shell can EXPORT a function of this name (this one did), which bash
     # inherits and which would run their installed tool instead of the one just staged.
     ( cd "$REPO_UNDER_TEST" && command "$program" "$@" ) > "$out" 2> "$err" || rc=$?
     [[ $rc -eq 0 ]] || _fail "$program $* exited $rc; stderr: $(cat "$err")"
@@ -84,10 +82,8 @@ _run_installed() {
     grep -q "$expected" "$out" || _fail "$program $* stdout lacks [$expected]"
 }
 
-# `<name> - ...` also proves the program name reached the CLI through the symlink -- and that
-# each installed name reports ITSELF in its usage text.
+# `ticket - ...` also proves the program name reached the CLI through the symlink.
 _run_installed ticket help 'ticket - minimal ticket system' help
-_run_installed tk help-tk 'tk - minimal ticket system' help
 _run_installed ticket create full_path create "Packaged smoke ticket"
 _run_installed ticket ls 'Packaged smoke ticket' ls
 # Second run: still no rebuild attempt against the read-only prefix.

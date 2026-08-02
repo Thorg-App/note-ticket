@@ -237,31 +237,30 @@ WHY: this is a single-user build tool, and the release flow stays "tag it" with 
 artifact anyone has to keep in sync with `src/`. This **supersedes** the earlier
 recommendation in this document to commit `dist/ticket.mjs` at release tags.
 
+**SUPERSEDED IN PART (2026-08-02):** T6 also shipped a Homebrew tap and an AUR package. Those
+were never this fork's to publish — the tap belonged to the upstream project — so the formula,
+the `PKGBUILD` and their release-workflow steps are **deleted**. The distribution channels are
+now **npm (`note-ticket`) and a git checkout**, and the CLI is installed under the single name
+`ticket`. The build-from-source decision above still holds.
+
 Two shapes follow from that, and they are not the same thing:
 
 1. **A git checkout** — `./ticket` builds `dist/ticket.mjs` on demand, on the first
    invocation and again after any `git pull` that touches `src/`. This is the developer and
-   `ln -s "$PWD/ticket" ~/.local/bin/tk` path. It needs `npm` and, once, the network.
-2. **A package (Homebrew / AUR)** — the bundle is built in the package's own **build/install
-   phase** and installed alongside the sources; `dist/ticket.mjs` is `touch`ed last so the
-   launcher never judges it stale. `npm` is a *build* dependency only.
+   `ln -s "$PWD/ticket" ~/.local/bin/ticket` path. It needs `npm` and, once, the network.
+2. **An npm install** — ships the bundle prebuilt (`prepack` builds it) and runs node
+   directly through the `bin` entry. No launcher, no sources, no build on the user's box.
 
-**WHY-NOT let the packaged install build on demand too:** it cannot. The install prefix is
-root-owned and read-only to the user the tool runs as. Verified empirically on a simulated
-prefix (`chmod -R a-w`): with a prebuilt bundle and no `node_modules/`, `tk help`/`create`/`ls`
-all work; without one, esbuild fails with `mkdir dist: permission denied` and the launcher
-exits 1. So a package that only copied the launcher and the sources would be dead on arrival.
-
-**CALLED OUT (accepted, not solved):** building at install time means Homebrew/AUR users need
-npm and network at `brew install` / `makepkg` time, and the devDependency tree (esbuild,
-typescript) lands on an end-user box for the duration of the build. That is a poor fit for a
-general-audience tool and is accepted only because this one is single-user. **If it ever goes
-multi-user, revisit with a follow-up ticket for a prebuilt-bundle release artifact** — do not
-quietly re-add one.
+A third shape still has to work and is guarded by `make package-smoke`: **the tool COPIED into
+a read-only prefix** (a deployment image, a shared `/opt` tree). There the launcher cannot
+build. Verified empirically on a simulated prefix (`chmod -R a-w`): with a prebuilt bundle and
+no `node_modules/`, `ticket help`/`create`/`ls` all work; without one, esbuild fails with
+`mkdir dist: permission denied` and the launcher exits 1. So an install that copied only the
+launcher and the sources would be dead on arrival.
 
 `pkg/install-manifest.txt` is the **single source of truth** for what a complete install needs
-on disk. The AUR `PKGBUILD`, `scripts/publish-homebrew.sh` and the launcher's BDD isolated tool
-copy all read it, because three hand-maintained copies of that list would drift silently.
+on disk. `scripts/package-smoke.sh` and the launcher's BDD isolated tool copy both read it,
+because hand-maintained copies of that list drift silently.
 
 Runtime dependency lists changed from `bash/coreutils/findutils/gawk` to
 **`bash` + `nodejs` + `git` + `coreutils`/`findutils`** (the launcher's `readlink`/`dirname`/

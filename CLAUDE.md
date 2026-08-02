@@ -2,13 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-User docs are split by surface: `README.md` is the landing page, `docs/cli.md` is the CLI reference, `docs/npm-library.md` is the library-consumer guide. Run `ticket help` for the command reference. Always update `docs/cli.md` when adding/changing commands and flags, and `docs/npm-library.md` when the exported library surface changes. Docs say `ticket`, not the `tk` shorthand (both names are installed).
+User docs are split by surface: `README.md` is the landing page, `docs/cli.md` is the CLI reference, `docs/npm-library.md` is the library-consumer guide. Run `ticket help` for the command reference. Always update `docs/cli.md` when adding/changing commands and flags, and `docs/npm-library.md` when the exported library surface changes. Docs say `ticket` — the only installed name.
 
 ## Architecture
 
 **The CLI is TypeScript on Node.** `src/cli/` (dispatch + one module per command) and `src/core/` (data model), bundled by esbuild into `dist/ticket.mjs` — one file, zero runtime npm deps. `dist/` is gitignored and never committed.
 
-**`./ticket` is a ~90-line bash launcher with zero ticket logic.** It resolves its own directory **through symlinks** (`tk` on PATH is typically a symlink into a checkout, and the bundle and sources sit next to the real file), rebuilds `dist/ticket.mjs` when it is missing or older than any file under `src/`, then `TICKET_INVOKED_AS="$0" exec node "$BUNDLE" "$@"`. **Everything it prints goes to stderr**, so `tk query | jq` stays byte-clean even on the invocation that builds. `src/` is required: a tree without sources fails loudly rather than serving a stale bundle forever. Packaged installs build at PACKAGE time instead — see "Releases & Packaging".
+**`./ticket` is a ~90-line bash launcher with zero ticket logic.** It resolves its own directory **through symlinks** (`ticket` on PATH is typically a symlink into a checkout, and the bundle and sources sit next to the real file), rebuilds `dist/ticket.mjs` when it is missing or older than any file under `src/`, then `TICKET_INVOKED_AS="$0" exec node "$BUNDLE" "$@"`. **Everything it prints goes to stderr**, so `ticket query | jq` stays byte-clean even on the invocation that builds. `src/` is required: a tree without sources fails loudly rather than serving a stale bundle forever. An npm install never involves the launcher at all — see "Releases & Packaging".
 
 `src/core/` is the shared data-model layer (CLI **and** the planned graph visualization import it) and has **zero CLI knowledge** — no argv, no output formatting, no console:
 
@@ -55,7 +55,7 @@ Dependencies at runtime: **node**, **git** (repo-root resolution), plus bash/cor
 
 ## Library API (npm)
 
-The package publishes a library entry alongside the CLI bin (installed under BOTH names, `ticket` and the historical `tk`): `package.json` `exports` points at `dist-lib/index.js` (+ `.d.ts`), emitted by `npm run build:lib` (`tsc -p tsconfig.lib.json`, gitignored like every build output). `prepack` builds both the CLI bundle and `dist-lib/`, so `npm pack`/`npm publish` is self-contained; `npm` `files` ships only `dist-lib/`, `dist/ticket.mjs` and the docs — no sources, no launcher. The Homebrew/AUR install flow is unchanged and does not use npm's `files`. `make build-lib` is a `make test` prerequisite so declaration-emit breakage surfaces in CI. Library behavior changes need unit tests in `test/ticket-manager.test.ts` (the BDD suite covers only the CLI surface).
+The package publishes a library entry alongside the CLI bin (installed as `ticket`): `package.json` `exports` points at `dist-lib/index.js` (+ `.d.ts`), emitted by `npm run build:lib` (`tsc -p tsconfig.lib.json`, gitignored like every build output). `prepack` builds both the CLI bundle and `dist-lib/`, so `npm pack`/`npm publish` is self-contained; `npm` `files` ships only `dist-lib/`, `dist/ticket.mjs` and the docs — no sources, no launcher. `make build-lib` is a `make test` prerequisite so declaration-emit breakage surfaces in CI. Library behavior changes need unit tests in `test/ticket-manager.test.ts` (the BDD suite covers only the CLI surface).
 
 ## Testing
 
@@ -91,17 +91,13 @@ Example:
 
 ## Releases & Packaging
 
-### Package Structure
+### Distribution
 
-Single package: `ticket-core` — the launcher, the sources, and a bundle built at package time.
+**npm (`note-ticket`) is the ONLY place this package is published.** No Homebrew tap, no AUR, no other distro package — do not add references to any. The other supported install is a symlink into a git checkout, which builds on demand. The CLI is installed under ONE name: `ticket` (the `tk` shorthand is gone; it survives only in historical comments and CHANGELOG entries).
 
-**`pkg/install-manifest.txt` is the single source of truth for what a complete install needs on disk.** The AUR `PKGBUILD`, `scripts/publish-homebrew.sh` and the launcher BDD's isolated tool copy (`features/steps/ticket_steps.py`) all read it. Add a new top-level file the tool needs at runtime → add it there, nowhere else.
+**`pkg/install-manifest.txt` is the single source of truth for what a complete install needs on disk.** `scripts/package-smoke.sh` and the launcher BDD's isolated tool copy (`features/steps/ticket_steps.py`) read it. Add a new top-level file the tool needs at runtime → add it there, nowhere else.
 
-**Packages build the bundle in their own build/install phase**, then install `dist/ticket.mjs` alongside the sources and `touch` it last. WHY-NOT letting the launcher build on demand there: the install prefix is root-owned, so esbuild fails with `mkdir dist: permission denied` (verified empirically, both directions). Nothing prebuilt is committed to the repo or attached to a release — the release flow stays "tag it".
-
-**`make package-smoke` (`scripts/package-smoke.sh`, also a CI step) is the guard on all of that.** It replays the install steps both packages share into a read-only scratch prefix and drives the tool through the installed symlinks (both `ticket` and `tk`). WHY it exists separately from `make test`: every other gate drives a WRITABLE checkout, so none of them could catch a formula that installs an incomplete tree — which is how `bin.install "ticket" => "tk"` shipped dead for months. It does NOT run `brew`/`makepkg`; those semantics still need one real run before a release tag.
-
-**CALLED OUT, accepted for now:** building at install time means Homebrew/AUR users need npm and network at `brew install`/`makepkg` time. Fine for a single-user tool. If it ever goes multi-user, the fix is a prebuilt-bundle release artifact — file a ticket, do not smuggle one in.
+**`make package-smoke` (`scripts/package-smoke.sh`, also a CI step) is the guard on the COPIED-install shape**: it replays a copy into a read-only scratch prefix (prebuilt bundle, no `node_modules/`) and drives the tool through the installed symlink. WHY it exists separately from `make test`: every other gate drives a WRITABLE checkout, so none of them could catch an install that copies an incomplete tree — a launcher without its `src/` is dead on arrival, and that shipped once already. WHY a read-only prefix is the interesting case: the launcher cannot rebuild there (esbuild fails with `mkdir dist: permission denied`), so the bundle must be installed already built and `touch`ed last.
 
 **npm publishing is a local, manual step** (`scripts/publish-npm.sh`, token from `$NPM_PUBLISH_TOKEN`) and is deliberately NOT part of the tag-triggered release workflow — see `docs-internal/how-to-publish-to-npm.md`. It bumps the version itself (**patch by default**, `minor`/`major`/`<x.y.z>`/`--no-bump` override) and commits that bump BEFORE uploading, so every published tarball corresponds to a commit; a dry run and any pre-commit failure revert the bump. `./publish_to_npm_with_version_bump.sh` at the repo root is a thin forwarder to it — the visible entry point, zero logic of its own.
 
@@ -117,14 +113,4 @@ Single package: `ticket-core` — the launcher, the sources, and a bundle built 
 
 ### CI Publishing
 
-The release workflow (`.github/workflows/release.yml`) automatically:
-1. Creates GitHub release with changelog body
-2. Runs `scripts/publish-homebrew.sh` - updates the `ticket-core` formula in the tap
-3. Runs `scripts/publish-aur.sh` - updates the `ticket-core` AUR package
-
-### Package Managers
-
-- **Homebrew:** `wedow/homebrew-tools` tap
-- **AUR:** Individual repos at `aur.archlinux.org/<pkgname>.git`
-
-Both are updated automatically by CI. AUR repos are created on first push if they don't exist.
+The release workflow (`.github/workflows/release.yml`) creates the GitHub release with the changelog body — and nothing else. Publishing to npm stays local and manual (above).
