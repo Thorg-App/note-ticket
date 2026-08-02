@@ -1,16 +1,16 @@
 ---
 id: nid_t9w0uv9z3eytl974830ke884n_e
-title: "Add supported for punted status"
-status: open
+title: Add supported for punted status
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-08-02T18:41:27Z
-status_updated_iso: 2026-08-02T18:41:27Z
+created_iso: '2026-08-02T18:41:27Z'
+status_updated_iso: '2026-08-02T18:44:56Z'
 type: task
 priority: 3
 assignee: nickolaykondratyev
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 Add support for 'punted' in the list of valid statuses
 
 ```ts file=[$(git.repo_root)/src/core/ticket.ts] Lines=[19-24]
