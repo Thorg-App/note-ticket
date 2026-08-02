@@ -1,16 +1,16 @@
 ---
 id: nid_guxqqi5vozkjgviicj23psamc_e
-title: "create a document on how to publish this to NPM"
-status: open
+title: create a document on how to publish this to NPM
+status: in_progress
 deps: []
 links: []
-created_iso: 2026-08-02T16:12:54Z
-status_updated_iso: 2026-08-02T16:12:54Z
+created_iso: '2026-08-02T16:12:54Z'
+status_updated_iso: '2026-08-02T16:14:32Z'
 type: task
 priority: 3
 assignee: nickolaykondratyev
+pwd: /home/nickolaykondratyev/git_repos/note-ticket
 ---
-
 Create a document on how to publish this library to NPM,
 
 I have NPM publish token at 'NPM_PUBLISH_TOKEN' environment variable,
