@@ -15,12 +15,18 @@ export const TICKET_STATUS_IN_PROGRESS = "in_progress";
 export const TICKET_STATUS_CLOSED = "closed";
 /** Legacy status found in old files; `create`/`status` never write it. */
 export const TICKET_STATUS_DONE = "done";
+/**
+ * Deferred to the future. NOT "active" (`ready`/`blocked` skip it), yet NOT finished
+ * either — a punted dependency still blocks its dependents.
+ */
+export const TICKET_STATUS_PUNTED = "punted";
 
 /** The statuses `TicketStatus` is the union of — the argument `setStatus`/`ticket status` take. */
 export const VALID_TICKET_STATUSES = [
     TICKET_STATUS_OPEN,
     TICKET_STATUS_IN_PROGRESS,
     TICKET_STATUS_CLOSED,
+    TICKET_STATUS_PUNTED,
 ] as const;
 
 /**

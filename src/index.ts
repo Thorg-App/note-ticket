@@ -19,6 +19,7 @@ export {
     TICKET_STATUS_IN_PROGRESS,
     TICKET_STATUS_CLOSED,
     TICKET_STATUS_DONE,
+    TICKET_STATUS_PUNTED,
     VALID_TICKET_STATUSES,
     type TicketStatus,
 } from "./core/ticket.js";

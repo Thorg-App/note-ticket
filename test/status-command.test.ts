@@ -94,14 +94,14 @@ describe("StatusCommand argument handling", () => {
     it("prints the invoked program name in the status usage line", () => {
         assert.deepEqual(usageLinesOf(() => StatusCommand.run(UNUSED_STORE, [], environment())), [
             "Usage: tk status <id> <status>",
-            "Valid statuses: open in_progress closed",
+            "Valid statuses: open in_progress closed punted",
         ]);
     });
 
     it("rejects a status command missing its status argument", () => {
         assert.deepEqual(usageLinesOf(() => StatusCommand.run(UNUSED_STORE, ["some-id"], environment())), [
             "Usage: tk status <id> <status>",
-            "Valid statuses: open in_progress closed",
+            "Valid statuses: open in_progress closed punted",
         ]);
     });
 

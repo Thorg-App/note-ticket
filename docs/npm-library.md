@@ -38,7 +38,7 @@ Installing the package also puts the `ticket` CLI on your bin path. Its usage is
 | **`FileTicketManager`** | The file-backed implementation of `TicketManager`. |
 | **`Ticket`** | One ticket file in memory. Immutable — `with…` returns a new one. |
 | **`NewTicketInput`** | What `create` takes (`Partial<CreateOptions>`). |
-| **`TicketStatus`** | `"open" \| "in_progress" \| "closed"` — the statuses this tool WRITES. |
+| **`TicketStatus`** | `"open" \| "in_progress" \| "closed" \| "punted"` — the statuses this tool WRITES. |
 | **`TicketField`** | The on-disk frontmatter key names, in one place. |
 | **`TicketNotFoundError` / `AmbiguousTicketIdError`** | Id resolution failures. |
 | **`CorruptTicketFileError` / `FileSystemError`** | A `.md` file that is not a ticket / an OS-level failure. |

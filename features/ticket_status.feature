@@ -26,6 +26,21 @@ Feature: Ticket Status Management
     And the output should be "Updated test-0001 -> open"
     And ticket "test-0001" should have field "status" with value "open"
 
+  Scenario: Set status to punted
+    When I run "ticket status test-0001 punted"
+    Then the command should succeed
+    And the output should be "Updated test-0001 -> punted"
+    And ticket "test-0001" should have field "status" with value "punted"
+
+  Scenario: Punting a closed ticket removes closed_iso
+    When I run "ticket close test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a valid "closed_iso" timestamp
+    When I run "ticket status test-0001 punted"
+    Then the command should succeed
+    And ticket "test-0001" should have field "status" with value "punted"
+    And ticket "test-0001" should not have field "closed_iso"
+
   Scenario: Start command sets status to in_progress
     When I run "ticket start test-0001"
     Then the command should succeed
@@ -49,13 +64,13 @@ Feature: Ticket Status Management
     When I run "ticket status test-0001 invalid"
     Then the command should fail
     And the output should contain "Error: invalid status 'invalid'"
-    And the output should contain "open in_progress closed"
+    And the output should contain "open in_progress closed punted"
 
   Scenario: Status command with no arguments prints usage and the valid statuses
     When I run "ticket status"
     Then the command should fail
     And stderr should contain "status <id> <status>"
-    And stderr should contain "Valid statuses: open in_progress closed"
+    And stderr should contain "Valid statuses: open in_progress closed punted"
 
   Scenario: Status command with an id but no status prints usage
     When I run "ticket status test-0001"
