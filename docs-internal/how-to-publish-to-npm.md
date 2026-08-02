@@ -21,6 +21,10 @@ first anyway.
 ./scripts/publish-npm.sh             # patch bump + the real thing
 ```
 
+`./publish_to_npm_with_version_bump.sh` at the repo root is a thin forwarder to the same
+script (same arguments, works from any cwd) — there so the release entry point is visible
+without digging through `scripts/`.
+
 The script:
 
 1. refuses a dirty working tree (a published version can never be re-published, and a
