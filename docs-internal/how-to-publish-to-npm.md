@@ -18,29 +18,43 @@ first anyway.
 
 ```bash
 ./scripts/publish-npm.sh --dry-run   # builds, tests, packs; uploads nothing
-./scripts/publish-npm.sh             # the real thing
+./scripts/publish-npm.sh             # patch bump + the real thing
 ```
 
 The script:
 
-1. refuses a dirty working tree (a published version can never be re-published),
+1. refuses a dirty working tree (a published version can never be re-published, and a
+   clean tree is what makes the bump revert in step 5 safe),
 2. writes the token to a `0600` npmrc under `mktemp -d`, pointed at by
    `NPM_CONFIG_USERCONFIG` and deleted on exit — the token never reaches the repo,
    `~/.npmrc`, or any process's argv,
 3. runs `make typecheck build build-lib` + `npm test`,
-4. `npm publish --access public` (which triggers `prepack`),
-5. prints the `git tag` command to run next.
+4. bumps `package.json` (+ `package-lock.json`) — **patch by default** — and commits it
+   as `release: v<version>`, so every published tarball corresponds to a commit,
+5. `npm publish --access public` (which triggers `prepack`). If anything fails before the
+   commit — and on every dry run — the bump is reverted and the checkout is left as found,
+6. prints the `git tag` command to run next.
 
 ## Versioning
 
-`package.json` `version` is the published version and is bumped by hand, in the same
-commit that moves `## [Unreleased]` in `CHANGELOG.md` to the new version + date. Then:
+```bash
+./scripts/publish-npm.sh             # 0.1.0 -> 0.1.1  (default: patch)
+./scripts/publish-npm.sh minor       # 0.1.0 -> 0.2.0
+./scripts/publish-npm.sh major       # 0.1.0 -> 1.0.0
+./scripts/publish-npm.sh 1.4.2       # explicit version
+./scripts/publish-npm.sh --no-bump   # publish package.json's version as-is
+```
+
+The bump argument is passed straight to `npm version --no-git-tag-version`, so anything
+that accepts (`prerelease`, `premajor`, …) works too. Tagging stays manual:
 
 ```bash
-git commit -am "release: v0.2.0"
-./scripts/publish-npm.sh
-git tag v0.2.0 && git push && git push origin v0.2.0
+./scripts/publish-npm.sh             # commits "release: v0.1.1" and publishes
+git tag v0.1.1 && git push && git push origin v0.1.1
 ```
+
+Move `## [Unreleased]` in `CHANGELOG.md` to the new version + date before publishing —
+the script bumps `package.json` only, it does not touch the changelog.
 
 The tag push runs `.github/workflows/release.yml` (GitHub release + Homebrew tap + AUR).
 **npm is NOT wired into that workflow** — publishing to npm is deliberately a local,
