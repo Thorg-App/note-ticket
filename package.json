@@ -1,7 +1,7 @@
 {
   "name": "note-ticket",
   "version": "0.1.0",
-  "description": "Markdown-frontmatter ticket tracker: `tk` CLI plus a TicketManager library API",
+  "description": "Markdown-frontmatter ticket tracker: `ticket` CLI plus a TicketManager library API",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -23,11 +23,13 @@
   },
   "types": "./dist-lib/index.d.ts",
   "bin": {
+    "ticket": "./dist/ticket.mjs",
     "tk": "./dist/ticket.mjs"
   },
   "files": [
     "dist-lib/",
     "dist/ticket.mjs",
+    "docs/",
     "CHANGELOG.md",
     "THIRD_PARTY_LICENSES.md"
   ],

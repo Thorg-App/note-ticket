@@ -60,7 +60,7 @@ class TicketCore < Formula
   license "MIT"
 
   # node runs the CLI and supplies the npm used below; git resolves the repo root that
-  # anchors _tickets/. jq is needed only for \`tk query <jq-filter>\`, so it is not a hard dep.
+  # anchors _tickets/. jq is needed only for \`ticket query <jq-filter>\`, so it is not a hard dep.
   depends_on "node"
   depends_on "git"
 
@@ -82,14 +82,17 @@ class TicketCore < Formula
     touch libexec/"dist/ticket.mjs"
 
     chmod 0755, libexec/"ticket"
+    # \`ticket\` is the documented name; \`tk\` stays as the historical shorthand.
+    bin.install_symlink libexec/"ticket" => "ticket"
     bin.install_symlink libexec/"ticket" => "tk"
     prefix.install "LICENSE.md"
   end
 
   test do
     system "git", "init", testpath/"repo"
+    system "#{bin}/ticket", "help"
     system "#{bin}/tk", "help"
-    assert_match "full_path", shell_output("cd #{testpath}/repo && #{bin}/tk create Hello")
+    assert_match "full_path", shell_output("cd #{testpath}/repo && #{bin}/ticket create Hello")
   end
 end
 EOF

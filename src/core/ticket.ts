@@ -5,13 +5,18 @@
 
 import { Frontmatter, FrontmatterValue, type FrontmatterJsonValue, TicketDocument } from "./frontmatter.js";
 
-/** Statuses `create`/`status` accept. `done` also occurs in legacy files. */
+// Statuses `create`/`status` accept. `done` also occurs in legacy files.
+
+/** What `create` writes, and what `reopen` returns a ticket to. */
 export const TICKET_STATUS_OPEN = "open";
+/** Being worked on — still "active", so `ready`/`blocked` list it. */
 export const TICKET_STATUS_IN_PROGRESS = "in_progress";
+/** Work is over; a closed dependency no longer blocks. */
 export const TICKET_STATUS_CLOSED = "closed";
 /** Legacy status found in old files; `create`/`status` never write it. */
 export const TICKET_STATUS_DONE = "done";
 
+/** The statuses `TicketStatus` is the union of — the argument `setStatus`/`ticket status` take. */
 export const VALID_TICKET_STATUSES = [
     TICKET_STATUS_OPEN,
     TICKET_STATUS_IN_PROGRESS,
@@ -58,17 +63,29 @@ export class TicketField {
 /** Key `query` appends after the frontmatter fields. */
 const JSON_KEY_FULL_PATH = "full_path";
 
+/**
+ * One ticket file, in memory.
+ *
+ * IMMUTABLE: every `with…` method returns a NEW ticket and changes nothing on disk. Persist
+ * the result with `TicketManager.save` / `TicketStore.save`.
+ *
+ * Accessors return INTERPRETED values (quotes stripped, arrays split); the mutators take RAW
+ * frontmatter text, exactly as it is to appear after the `key: `.
+ */
 export class Ticket {
     constructor(
-        /** Absolute path of the file this ticket was read from. */
+        /** Path of the file this ticket was read from — the path `save` writes back to. */
         readonly path: string,
+        /** Frontmatter block + body, preserving the file's bytes and key order. */
         readonly document: TicketDocument,
     ) {}
 
+    /** Parse file text. Does NOT validate that it is a ticket — `TicketStore.load` does that. */
     static parse(path: string, text: string): Ticket {
         return new Ticket(path, TicketDocument.parse(text));
     }
 
+    /** The frontmatter block, for fields this class has no named accessor for. */
     get frontmatter(): Frontmatter {
         return this.document.frontmatter;
     }
@@ -106,10 +123,12 @@ export class Ticket {
         return this.frontmatter.getArray(key);
     }
 
+    /** Ids this ticket waits on, in file order. NOT deduplicated — the file may repeat one. */
     get deps(): readonly string[] {
         return this.arrayField(TicketField.DEPS);
     }
 
+    /** Ids of related tickets. `link` keeps this symmetric, but hand edits need not. */
     get links(): readonly string[] {
         return this.arrayField(TicketField.LINKS);
     }
@@ -124,14 +143,17 @@ export class Ticket {
         return priority === undefined || priority === "" ? DEFAULT_PRIORITY : priority;
     }
 
+    /** `""` when the file carries no `assignee` line. */
     get assignee(): string {
         return this.frontmatter.getString(TicketField.ASSIGNEE) ?? "";
     }
 
+    /** FULL id of the parent ticket, `""` when there is none. */
     get parent(): string {
         return this.frontmatter.getString(TicketField.PARENT) ?? "";
     }
 
+    /** Exactly `status == "closed"` — the legacy `done` is NOT closed here; see `isFinished`. */
     get isClosed(): boolean {
         return this.status === TICKET_STATUS_CLOSED;
     }
@@ -149,6 +171,7 @@ export class Ticket {
         return this.isClosed || this.status === TICKET_STATUS_DONE;
     }
 
+    /** Markdown after the closing `---`, verbatim (the description, `## Notes`, …). */
     get body(): string {
         return this.document.body();
     }
@@ -179,18 +202,29 @@ export class Ticket {
         return JSON.stringify(this.toJsonRecord());
     }
 
+    /**
+     * This ticket with `key` set to `rawValue` — the RAW on-disk text, so a value that needs
+     * quoting (a title) or brackets (an array) must arrive already quoted or bracketed. Use
+     * `TicketField` for `key`.
+     *
+     * An existing key keeps its position; a NEW key becomes the FIRST field (see
+     * `Frontmatter.withField` for why).
+     */
     withField(key: string, rawValue: string): Ticket {
         return this.withFrontmatter(this.frontmatter.withField(key, rawValue));
     }
 
+    /** This ticket without `key`. Idempotent — an absent key returns an equivalent ticket. */
     withoutField(key: string): Ticket {
         return this.withFrontmatter(this.frontmatter.withoutField(key));
     }
 
+    /** `withField` for id arrays: `["a", "b"]` is written as the inline `[a, b]`. */
     withArrayField(key: string, items: readonly string[]): Ticket {
         return this.withField(key, FrontmatterValue.serializeArray(items));
     }
 
+    /** The whole file as text — byte-identical to what was parsed when nothing changed. */
     text(): string {
         return this.document.text();
     }
