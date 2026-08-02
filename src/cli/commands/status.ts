@@ -1,9 +1,8 @@
+import { StatusUpdate } from "../../core/status-update.js";
 import {
     TICKET_STATUS_CLOSED,
     TICKET_STATUS_IN_PROGRESS,
     TICKET_STATUS_OPEN,
-    type Ticket,
-    TicketField,
     type TicketStatus,
     VALID_TICKET_STATUSES,
 } from "../../core/ticket.js";
@@ -48,29 +47,6 @@ export const STATUS_WRAPPERS = {
     close: { command: "close", status: TICKET_STATUS_CLOSED },
     reopen: { command: "reopen", status: TICKET_STATUS_OPEN },
 } as const satisfies Record<string, StatusWrapper>;
-
-/**
- * The frontmatter change a status move makes. Pure — no I/O, no output — so the resulting
- * file bytes (key order included) can be asserted directly.
- */
-export class StatusUpdate {
-    /**
-     * The ticket with its status and stamps updated. `closed_iso` records when work ENDED, so
-     * it is written only while the ticket is closed and dropped again on any other status —
-     * a reopened ticket that kept a `closed_iso` would misreport as finished work.
-     *
-     * A field the file does not have yet is inserted as the FIRST frontmatter entry
-     * (`Frontmatter.withField`), which is where bash's `sed` insert lands it.
-     */
-    static applied(ticket: Ticket, status: TicketStatus, now: string): Ticket {
-        const updated = ticket
-            .withField(TicketField.STATUS, status)
-            .withField(TicketField.STATUS_UPDATED_ISO, now);
-        return status === TICKET_STATUS_CLOSED
-            ? updated.withField(TicketField.CLOSED_ISO, now)
-            : updated.withoutField(TicketField.CLOSED_ISO);
-    }
-}
 
 /**
  * `status <id> <status>` and its fixed-status wrappers: move one ticket to a new status and

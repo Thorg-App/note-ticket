@@ -5,16 +5,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { FixedClock } from "../src/core/clock.js";
+import { type NewTicketFacts, NewTicketDocument } from "../src/core/new-ticket.js";
 import { Ticket } from "../src/core/ticket.js";
 import { TicketStore } from "../src/core/ticket-store.js";
 import { CliError, UsageError } from "../src/cli/cli-error.js";
 import { CommandEnvironment } from "../src/cli/command-environment.js";
-import {
-    CreateCommand,
-    CreateOptionsParser,
-    type NewTicketFacts,
-    NewTicketDocument,
-} from "../src/cli/commands/create.js";
+import { CreateCommand, CreateOptionsParser } from "../src/cli/commands/create.js";
 
 const NOW = "2026-07-30T10:03:41Z";
 const ID = "nid_aaaaaaaaaaaaaaaaaaaaaaaaa_e";

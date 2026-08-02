@@ -4,4 +4,6 @@ node_modules/
 dist/
 # Transpiled unit tests (npm test output).
 dist-test/
+# Library build (npm package entry): JS + .d.ts emitted by `npm run build:lib`.
+dist-lib/
 .tmp/

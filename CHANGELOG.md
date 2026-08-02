@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- npm library API: the package now publishes a typed `TicketManager` interface with a file-backed `FileTicketManager` implementation (`import { FileTicketManager } from "note-ticket"`), covering `list`/`get`/`create`/`setStatus`/`addNote`/`save` with the CLI's exact on-disk behavior. `npm install note-ticket` also installs the `tk` bin. `package.json` gained `exports`/`types`/`bin`/`files`/`prepack`; `npm run build:lib` emits `dist-lib/` (JS + declarations).
 - `status_updated_iso` field: ISO8601 timestamp set at creation and updated on every status change
 - `closed_iso` field automatically set when ticket is closed, removed when reopened
 - Ticket IDs now use `nid_` prefix and `_e` suffix (e.g. `nid_7f209dtd2styppry2w3uqlg8c_e`). Existing tickets are not affected.

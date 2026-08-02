@@ -22,6 +22,35 @@ and never again; node and git are still required to run the tool.
 git clone <repo> && cd note-ticket && ln -s "$PWD/ticket" ~/.local/bin/tk
 ```
 
+## Using as a library (npm)
+
+The package also ships a typed library API, so another Node/TypeScript tool can manage
+tickets programmatically instead of shelling out to `tk`:
+
+```bash
+npm install note-ticket
+```
+
+```typescript
+import { FileTicketManager, TicketNotFoundError } from "note-ticket";
+
+// `<git-repo-root>/_tickets` from cwd ($TICKETS_DIR overrides), or name a directory
+// explicitly with FileTicketManager.forDirectory(path).
+const manager = FileTicketManager.forRepository();
+
+const ticket = manager.create({ title: "My ticket", tags: "backend,api" });
+manager.setStatus(ticket.id, "in_progress");
+manager.addNote(ticket.id, "progress so far …");
+manager.get("partial-id");   // CLI id-resolution rules; throws TicketNotFoundError /
+                             // AmbiguousTicketIdError
+manager.list();              // every ticket, in the order `tk ls` lists them
+```
+
+`TicketManager` (the interface `FileTicketManager` implements) is the documented contract
+to depend on; the implementation reuses the exact code the CLI runs, so both write
+byte-identical files. Field-level edits go through the immutable `Ticket` accessors and
+`manager.save(...)`. Installing the package also puts the `tk` CLI on your bin path.
+
 Tickets may be organized into nested subfolders (e.g. `_tickets/backend/api/foo.md`)
 by simply moving the files. Every command searches all nesting levels; identity is
 the `id` in the frontmatter, not the path. New tickets are always created at the top
