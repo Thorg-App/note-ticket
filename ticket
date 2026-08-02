@@ -4,7 +4,7 @@
 #
 # ZERO ticket logic lives here. Every command, every byte of output and every exit code
 # comes from dist/ticket.mjs (sources in src/). This file only:
-#   1. finds its own checkout, through symlinks (it is installed on PATH as `tk`),
+#   1. finds its own checkout, through symlinks (it is installed on PATH as `ticket`),
 #   2. makes sure the bundle exists and is no older than src/, building it on demand,
 #   3. exec's node, replacing itself so the CLI owns the process.
 #
@@ -14,7 +14,7 @@
 # step at all.
 set -euo pipefail
 
-# EVERYTHING this script prints goes to STDERR. `tk query | jq` and `tk ls | head` must see
+# EVERYTHING this script prints goes to STDERR. `ticket query | jq` and `ticket ls | head` must see
 # the CLI's bytes and nothing else, including on the invocation that builds the bundle.
 _log() { printf 'ticket: %s\n' "$*" >&2; }
 _fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -23,7 +23,7 @@ _require_command() {
     command -v "$1" >/dev/null 2>&1 || _fail "$1 is required but is not on PATH${2:-}"
 }
 
-# The directory holding this script, with every symlink resolved: `tk` on PATH is typically
+# The directory holding this script, with every symlink resolved: `ticket` on PATH is typically
 # a symlink into the checkout, and the bundle and the sources sit next to the REAL file,
 # never next to the link.
 _script_dir() {
@@ -66,7 +66,7 @@ _build_bundle() {
     _require_command npm " (install Node.js, which ships npm)"
     _log "building [$BUNDLE]"
     # `</dev/null`: the build must never consume the caller's stdin, which belongs to the
-    # command being launched (`... | tk add-note <id>` reads its note from there).
+    # command being launched (`... | ticket add-note <id>` reads its note from there).
     (
         cd "$SCRIPT_DIR"
         # esbuild is a devDependency, so a fresh clone has no node_modules at all.

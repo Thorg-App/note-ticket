@@ -15,21 +15,24 @@ needed only for `ticket query <jq-filter>`.
 From a git checkout, the launcher builds its own bundle (`dist/ticket.mjs`) on the first run and
 again whenever `src/` changes — so a `git pull` needs no build step. That first build needs
 **npm** and network access; everything the launcher prints while building goes to stderr, so
-`ticket query | jq` stays clean even then. Installing from Homebrew or the AUR builds the bundle
-at install time instead — so those installs need npm and network *then*, and never again; node
-and git are still required to run the tool.
+`ticket query | jq` stays clean even then. An `npm install` needs neither: it ships a prebuilt
+bundle and runs node directly, no launcher involved.
 
 ## Install
 
 ```bash
+# npm — puts `ticket` on your bin path (and ships the library API)
+npm install note-ticket
+
+# or from a git checkout, which rebuilds itself on `git pull`
 git clone <repo> && cd note-ticket && ln -s "$PWD/ticket" ~/.local/bin/ticket
 ```
 
-Copying the `ticket` file alone is **not** enough — it is a launcher that needs the `src/` tree
-next to it. Symlink it, or copy the whole checkout.
+npm is the only place this package is published — there is no Homebrew, AUR or other distro
+package.
 
-Homebrew, the AUR and npm all install the CLI under both names: `ticket` and the older `tk`
-shorthand. This document uses `ticket` throughout.
+Copying the `ticket` file alone out of a checkout is **not** enough — it is a launcher that
+needs the `src/` tree next to it. Symlink it, or copy the whole checkout.
 
 ## Commands
 
@@ -78,6 +81,16 @@ Commands:
 ```
 
 `ticket help` prints the same text.
+
+## Agent setup
+
+Add this line to the repository's `CLAUDE.md` or `AGENTS.md`:
+
+```
+This project uses a CLI ticket system for task management. Run `ticket help` when you need to use it.
+```
+
+Capable models pick it up from there; smaller ones may need more guidance.
 
 ## Where tickets live
 

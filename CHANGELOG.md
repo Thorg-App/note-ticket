@@ -2,11 +2,16 @@
 
 ## [Unreleased]
 
+### Removed
+- **The `tk` shorthand is no longer installed.** `npm install note-ticket` creates one command, `ticket`. Scripts that call `tk` must call `ticket` (or keep their own alias).
+- **Homebrew and AUR packaging is gone** — the formula, the `PKGBUILD`, their publish scripts and their release-workflow steps. This fork was never published to that tap or to the AUR, so the documented `brew tap wedow/tools && brew install ticket-core` and `yay -S ticket-core` never worked. **npm is the only registry this package is published to**; the other supported install is a symlink into a git checkout.
+- `ORIGINAL_README.md` (the upstream project's README) is deleted: it documented installs that do not exist for this fork. Its unique content — the agent-setup snippet — moved into `docs/cli.md`.
+
 ### Added
-- The CLI is now installed under its long name `ticket` as well as the `tk` shorthand — npm `bin`, the Homebrew formula and the AUR package all create both. The documentation uses `ticket` throughout; `tk` keeps working.
+- The CLI is installed under its long name `ticket`. The documentation uses `ticket` throughout.
 - Documentation split by surface: `README.md` is now a landing page pointing at `docs/cli.md` (the full CLI reference) and `docs/npm-library.md` (the library-consumer guide: key interfaces, `NewTicketInput` defaults, `Ticket` accessors, `DepGraph`, the error types and the guarantees). `docs/` ships in the npm tarball.
 - The library entry now exports every type named in a public signature — `Frontmatter`, `FrontmatterValue`, `TicketDocument`, `FrontmatterEntry`, `FrontmatterJsonValue`, `BlockedTicket`, `DepCycle`, `TreeRow`, `TreeOptions`, `FileOperation` — so a consumer can declare variables of the types the API hands back.
-- npm library API: the package now publishes a typed `TicketManager` interface with a file-backed `FileTicketManager` implementation (`import { FileTicketManager } from "note-ticket"`), covering `list`/`get`/`create`/`setStatus`/`addNote`/`save` with the CLI's exact on-disk behavior. `npm install note-ticket` also installs the CLI (`ticket`, and `tk`). `package.json` gained `exports`/`types`/`bin`/`files`/`prepack`; `npm run build:lib` emits `dist-lib/` (JS + declarations).
+- npm library API: the package now publishes a typed `TicketManager` interface with a file-backed `FileTicketManager` implementation (`import { FileTicketManager } from "note-ticket"`), covering `list`/`get`/`create`/`setStatus`/`addNote`/`save` with the CLI's exact on-disk behavior. `npm install note-ticket` also installs the CLI (`ticket`). `package.json` gained `exports`/`types`/`bin`/`files`/`prepack`; `npm run build:lib` emits `dist-lib/` (JS + declarations).
 - `status_updated_iso` field: ISO8601 timestamp set at creation and updated on every status change
 - `closed_iso` field automatically set when ticket is closed, removed when reopened
 - Ticket IDs now use `nid_` prefix and `_e` suffix (e.g. `nid_7f209dtd2styppry2w3uqlg8c_e`). Existing tickets are not affected.

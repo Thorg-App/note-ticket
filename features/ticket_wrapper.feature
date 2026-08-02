@@ -1,6 +1,6 @@
 Feature: The launcher builds the TypeScript bundle on demand
-  Distribution is build-from-source: there is no committed bundle, so `./ticket` (installed
-  as `tk`) has to produce a current one by itself. It must do that without ever letting
+  A checkout install is build-from-source: there is no committed bundle, so `./ticket`
+  (symlinked onto PATH under that name) has to produce a current one by itself. It must do that without ever letting
   build output reach stdout, and it must not rebuild when the bundle is already current.
 
   Scenario: A missing bundle is built on the first invocation

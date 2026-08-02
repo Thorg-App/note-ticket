@@ -21,7 +21,7 @@ jobs:
           node-version: '22'
 
       # The packaged install path, end to end, on a checkout that has NO dist/ and NO
-      # node_modules/: `tk` is a symlink into the checkout, and the wrapper must resolve
+      # node_modules/: `ticket` is a symlink into the checkout, and the wrapper must resolve
       # through it, build the bundle on demand, and still leave stdout carrying nothing but
       # the CLI's own output. MUST stay BEFORE `make test`, which builds dist/ itself and
       # would leave nothing cold to test.
@@ -31,20 +31,20 @@ jobs:
           test ! -e dist/ticket.mjs
           test ! -e node_modules
           mkdir -p "$HOME/bin"
-          ln -s "$PWD/ticket" "$HOME/bin/tk"
+          ln -s "$PWD/ticket" "$HOME/bin/ticket"
           export PATH="$HOME/bin:$PATH"
-          tk help > help.out
+          ticket help > help.out
           test -f dist/ticket.mjs
           # Line 1 proves all three at once: stdout is uncontaminated by build chatter, the
           # symlink resolved to this checkout, and $0 reached the CLI as the program name.
-          head -1 help.out | grep -qx 'tk - minimal ticket system with dependency tracking'
+          head -1 help.out | grep -qx 'ticket - minimal ticket system with dependency tracking'
           rm -f help.out
           # `help` is the one command that needs no tickets directory, so it alone would not
           # cover git-based resolution on a cold box. These do.
           mkdir "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
           git init -q . && git config user.name 'CI Smoke'
-          tk create "Cold smoke ticket" > create.out
-          tk ls > ls.out
+          ticket create "Cold smoke ticket" > create.out
+          ticket ls > ls.out
           grep -q 'Cold smoke ticket' ls.out
           test "$(wc -l < ls.out)" -eq 1
 
@@ -56,9 +56,9 @@ jobs:
       - name: Run tests
         run: make test
 
-      # The PACKAGED shape: read-only prefix, prebuilt bundle, no node_modules. The smoke
-      # step above and the BDD suite both drive a WRITABLE checkout, so neither would catch
-      # a formula/PKGBUILD that installs an incomplete tree -- which is exactly how the old
-      # `bin.install "ticket"` formula shipped broken. Needs a built dist/, hence after.
+      # The COPIED-INSTALL shape: read-only prefix, prebuilt bundle, no node_modules. The
+      # smoke step above and the BDD suite both drive a WRITABLE checkout, so neither would
+      # catch an install that copies an incomplete tree (the launcher without its src/).
+      # Needs a built dist/, hence after.
       - name: Smoke-test the packaged install layout
         run: make package-smoke

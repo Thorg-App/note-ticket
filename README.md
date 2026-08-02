@@ -26,18 +26,15 @@ manager.setStatus(ticket.id, "in_progress");
 ## Install
 
 ```bash
-# Homebrew (macOS/Linux)
-brew tap wedow/tools && brew install ticket-core
-
-# Arch Linux (AUR)
-yay -S ticket-core
-
-# npm — the library, and the CLI on your bin path
+# npm — the library, and the `ticket` CLI on your bin path
 npm install note-ticket
 
 # From a git checkout (auto-rebuilds on git pull)
 git clone <repo> && cd note-ticket && ln -s "$PWD/ticket" ~/.local/bin/ticket
 ```
+
+npm is the only place this package is published; there is no Homebrew, AUR or other
+distro package.
 
 The CLI needs **node** and **git** at runtime (plus a POSIX shell for the launcher); **jq** only
 for `ticket query <jq-filter>`. Details, and what needs npm when, are in
@@ -50,7 +47,6 @@ for `ticket query <jq-filter>`. Details, and what needs npm when, are in
 | [docs/cli.md](docs/cli.md) | Full CLI reference: commands, ids, dependency graph, errors, scripting. |
 | [docs/npm-library.md](docs/npm-library.md) | Library API: `TicketManager`, `Ticket`, `DepGraph`, the error types, and the guarantees. |
 | [CHANGELOG.md](CHANGELOG.md) | Release history. |
-| [ORIGINAL_README.md](ORIGINAL_README.md) | The upstream project's README, kept for provenance. |
 
 ## License
 

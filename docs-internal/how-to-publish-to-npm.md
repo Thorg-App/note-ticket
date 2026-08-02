@@ -1,7 +1,7 @@
 # How to publish `note-ticket` to npm
 
 The package publishes two surfaces from one tarball: the CLI bin (`dist/ticket.mjs`, linked
-as both `ticket` and `tk`) and the library entry (`dist-lib/index.js` + `.d.ts`). `prepack` builds both, so
+as `ticket`) and the library entry (`dist-lib/index.js` + `.d.ts`). `prepack` builds both, so
 publishing needs no manual build step — but `scripts/publish-npm.sh` runs the gates
 first anyway.
 
@@ -60,7 +60,7 @@ git tag v0.1.1 && git push && git push origin v0.1.1
 Move `## [Unreleased]` in `CHANGELOG.md` to the new version + date before publishing —
 the script bumps `package.json` only, it does not touch the changelog.
 
-The tag push runs `.github/workflows/release.yml` (GitHub release + Homebrew tap + AUR).
+The tag push runs `.github/workflows/release.yml`, which only creates the GitHub release.
 **npm is NOT wired into that workflow** — publishing to npm is deliberately a local,
 manual step. To automate it, add an `NPM_PUBLISH_TOKEN` repo secret and a step running
 this script; nothing else in the flow changes.
@@ -70,14 +70,13 @@ this script; nothing else in the flow changes.
 `npm pack --dry-run` to see it. `package.json` `files` ships `dist-lib/`,
 `dist/ticket.mjs`, `docs/`, `CHANGELOG.md`, `THIRD_PARTY_LICENSES.md`; npm always adds
 `README.md`, `LICENSE.md` and `package.json`. **No `src/`, no `ticket` launcher** — an
-npm install runs the prebuilt bundle directly via the `bin` entry, so the Homebrew/AUR
-build-at-install-time flow is untouched.
+npm install runs the prebuilt bundle directly via the `bin` entry, and never builds.
 
 ## Verify after publishing
 
 ```bash
 cd "$(mktemp -d)" && npm install note-ticket
-npx tk help
+npx ticket help
 node -e "import('note-ticket').then(m => console.log(Object.keys(m)))"
 ```
 

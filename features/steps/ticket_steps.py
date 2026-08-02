@@ -1291,9 +1291,10 @@ def step_run_command_piped_into(context, command, reader):
 def _install_manifest():
     """Everything a complete install of the tool needs on disk, from the ONE list that says so.
 
-    Read from pkg/install-manifest.txt rather than repeated here: the packaging (PKGBUILD,
-    Homebrew formula) needs exactly this set, and two hand-maintained copies would drift --
-    silently, since a scenario copying a file the packages forget still passes.
+    Read from pkg/install-manifest.txt rather than repeated here: the read-only-prefix
+    install `make package-smoke` replays needs exactly this set, and two hand-maintained
+    copies would drift -- silently, since a scenario copying a file that install forgets
+    still passes.
     """
     lines = (REPO / 'pkg' / 'install-manifest.txt').read_text().splitlines()
     return [line.strip() for line in lines if line.strip() and not line.startswith('#')]
