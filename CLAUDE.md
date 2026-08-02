@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-See @README.md for usage documentation. Run `tk help` for command reference. Always update the README.md usage content when adding/changing commands and flags.
+User docs are split by surface: `README.md` is the landing page, `docs/cli.md` is the CLI reference, `docs/npm-library.md` is the library-consumer guide. Run `ticket help` for the command reference. Always update `docs/cli.md` when adding/changing commands and flags, and `docs/npm-library.md` when the exported library surface changes. Docs say `ticket`, not the `tk` shorthand (both names are installed).
 
 ## Architecture
 
@@ -28,7 +28,7 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 - `status-update.ts` — `StatusUpdate.applied()`: the pure status/timestamp frontmatter change (a new field lands FIRST, as bash's `sed` insert did). Shared by the `status` family and `TicketManager.setStatus`
 - `ticket-note.ts` — `TicketNote.appendedTo()`: the pure note layout `add-note` and `TicketManager.addNote` append
 
-**`src/lib/` is the npm library facade** (see "Library API" below): `ticket-manager.ts` (the documented `TicketManager` interface + `NewTicketInput`), `file-ticket-manager.ts` (`FileTicketManager`, the file-backed implementation reusing the same core pieces the CLI uses, so both write byte-identical files), `ticket-manager-error.ts` (`TicketNotFoundError`/`AmbiguousTicketIdError` — the lib-side rendering of `IdResolution`, parallel to the CLI's `ticket-lookup.ts`). `src/index.ts` is the package entry and deliberately exports nothing from `src/cli/`.
+**`src/lib/` is the npm library facade** (see "Library API" below; consumer-facing guide: `docs/npm-library.md`): `ticket-manager.ts` (the documented `TicketManager` interface + `NewTicketInput`), `file-ticket-manager.ts` (`FileTicketManager`, the file-backed implementation reusing the same core pieces the CLI uses, so both write byte-identical files), `ticket-manager-error.ts` (`TicketNotFoundError`/`AmbiguousTicketIdError` — the lib-side rendering of `IdResolution`, parallel to the CLI's `ticket-lookup.ts`). `src/index.ts` is the package entry and deliberately exports nothing from `src/cli/`.
 
 `src/cli/` pieces shared by the ported commands:
 
@@ -55,7 +55,7 @@ Dependencies at runtime: **node**, **git** (repo-root resolution), plus bash/cor
 
 ## Library API (npm)
 
-The package publishes a library entry alongside the `tk` bin: `package.json` `exports` points at `dist-lib/index.js` (+ `.d.ts`), emitted by `npm run build:lib` (`tsc -p tsconfig.lib.json`, gitignored like every build output). `prepack` builds both the CLI bundle and `dist-lib/`, so `npm pack`/`npm publish` is self-contained; `npm` `files` ships only `dist-lib/`, `dist/ticket.mjs` and the docs — no sources, no launcher. The Homebrew/AUR install flow is unchanged and does not use npm's `files`. `make build-lib` is a `make test` prerequisite so declaration-emit breakage surfaces in CI. Library behavior changes need unit tests in `test/ticket-manager.test.ts` (the BDD suite covers only the CLI surface).
+The package publishes a library entry alongside the CLI bin (installed under BOTH names, `ticket` and the historical `tk`): `package.json` `exports` points at `dist-lib/index.js` (+ `.d.ts`), emitted by `npm run build:lib` (`tsc -p tsconfig.lib.json`, gitignored like every build output). `prepack` builds both the CLI bundle and `dist-lib/`, so `npm pack`/`npm publish` is self-contained; `npm` `files` ships only `dist-lib/`, `dist/ticket.mjs` and the docs — no sources, no launcher. The Homebrew/AUR install flow is unchanged and does not use npm's `files`. `make build-lib` is a `make test` prerequisite so declaration-emit breakage surfaces in CI. Library behavior changes need unit tests in `test/ticket-manager.test.ts` (the BDD suite covers only the CLI surface).
 
 ## Testing
 
@@ -99,7 +99,7 @@ Single package: `ticket-core` — the launcher, the sources, and a bundle built 
 
 **Packages build the bundle in their own build/install phase**, then install `dist/ticket.mjs` alongside the sources and `touch` it last. WHY-NOT letting the launcher build on demand there: the install prefix is root-owned, so esbuild fails with `mkdir dist: permission denied` (verified empirically, both directions). Nothing prebuilt is committed to the repo or attached to a release — the release flow stays "tag it".
 
-**`make package-smoke` (`scripts/package-smoke.sh`, also a CI step) is the guard on all of that.** It replays the install steps both packages share into a read-only scratch prefix and drives `tk` through the installed symlink. WHY it exists separately from `make test`: every other gate drives a WRITABLE checkout, so none of them could catch a formula that installs an incomplete tree — which is how `bin.install "ticket" => "tk"` shipped dead for months. It does NOT run `brew`/`makepkg`; those semantics still need one real run before a release tag.
+**`make package-smoke` (`scripts/package-smoke.sh`, also a CI step) is the guard on all of that.** It replays the install steps both packages share into a read-only scratch prefix and drives the tool through the installed symlinks (both `ticket` and `tk`). WHY it exists separately from `make test`: every other gate drives a WRITABLE checkout, so none of them could catch a formula that installs an incomplete tree — which is how `bin.install "ticket" => "tk"` shipped dead for months. It does NOT run `brew`/`makepkg`; those semantics still need one real run before a release tag.
 
 **CALLED OUT, accepted for now:** building at install time means Homebrew/AUR users need npm and network at `brew install`/`makepkg` time. Fine for a single-user tool. If it ever goes multi-user, the fix is a prebuilt-bundle release artifact — file a ticket, do not smuggle one in.
 

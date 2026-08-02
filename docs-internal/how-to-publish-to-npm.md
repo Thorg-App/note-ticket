@@ -1,7 +1,7 @@
 # How to publish `note-ticket` to npm
 
-The package publishes two surfaces from one tarball: the `tk` bin (`dist/ticket.mjs`)
-and the library entry (`dist-lib/index.js` + `.d.ts`). `prepack` builds both, so
+The package publishes two surfaces from one tarball: the CLI bin (`dist/ticket.mjs`, linked
+as both `ticket` and `tk`) and the library entry (`dist-lib/index.js` + `.d.ts`). `prepack` builds both, so
 publishing needs no manual build step — but `scripts/publish-npm.sh` runs the gates
 first anyway.
 
@@ -50,7 +50,7 @@ this script; nothing else in the flow changes.
 ## What ships
 
 `npm pack --dry-run` to see it. `package.json` `files` ships `dist-lib/`,
-`dist/ticket.mjs`, `CHANGELOG.md`, `THIRD_PARTY_LICENSES.md`; npm always adds
+`dist/ticket.mjs`, `docs/`, `CHANGELOG.md`, `THIRD_PARTY_LICENSES.md`; npm always adds
 `README.md`, `LICENSE.md` and `package.json`. **No `src/`, no `ticket` launcher** — an
 npm install runs the prebuilt bundle directly via the `bin` entry, so the Homebrew/AUR
 build-at-install-time flow is untouched.

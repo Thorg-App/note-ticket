@@ -47,6 +47,8 @@ done < "$REPO/pkg/install-manifest.txt"
 install -Dm644 "$REPO/dist/ticket.mjs" "$BUNDLE"
 touch "$BUNDLE"
 chmod 755 "$SHARE/ticket"
+# Both packages install BOTH names: `ticket` (documented) and `tk` (historical shorthand).
+ln -s "$SHARE/ticket" "$PREFIX/bin/ticket"
 ln -s "$SHARE/ticket" "$PREFIX/bin/tk"
 # node_modules is deliberately NOT installed: a packaged install must run without it.
 [[ ! -e "$SHARE/node_modules" ]] || _fail "node_modules leaked into the install"
@@ -67,26 +69,28 @@ git init -q "$REPO_UNDER_TEST"
 git -C "$REPO_UNDER_TEST" config user.name 'Package Smoke'
 export PATH="$PREFIX/bin:$PATH"
 
-# Drives the INSTALLED symlink, and holds stderr to the same standard the checkout smoke
-# test does: empty. Any launcher chatter here means it tried to rebuild.
-_run_tk() {
-    local label="$1" expected="$2"; shift 2
+# Drives an INSTALLED symlink by name, and holds stderr to the same standard the checkout
+# smoke test does: empty. Any launcher chatter here means it tried to rebuild.
+_run_installed() {
+    local program="$1" label="$2" expected="$3"; shift 3
     local out err rc=0
     out="$SCRATCH/$label.out"
     err="$SCRATCH/$label.err"
     # `command`: a developer shell can EXPORT a `tk` function (this one did), which bash
     # inherits and which would run their installed tool instead of the one just staged.
-    ( cd "$REPO_UNDER_TEST" && command tk "$@" ) > "$out" 2> "$err" || rc=$?
-    [[ $rc -eq 0 ]] || _fail "tk $* exited $rc; stderr: $(cat "$err")"
-    [[ ! -s "$err" ]] || _fail "tk $* wrote to stderr (a rebuild attempt?): $(cat "$err")"
-    grep -q "$expected" "$out" || _fail "tk $* stdout lacks [$expected]"
+    ( cd "$REPO_UNDER_TEST" && command "$program" "$@" ) > "$out" 2> "$err" || rc=$?
+    [[ $rc -eq 0 ]] || _fail "$program $* exited $rc; stderr: $(cat "$err")"
+    [[ ! -s "$err" ]] || _fail "$program $* wrote to stderr (a rebuild attempt?): $(cat "$err")"
+    grep -q "$expected" "$out" || _fail "$program $* stdout lacks [$expected]"
 }
 
-# `tk - ...` also proves the program name reached the CLI through the symlink.
-_run_tk help 'tk - minimal ticket system' help
-_run_tk create full_path create "Packaged smoke ticket"
-_run_tk ls 'Packaged smoke ticket' ls
+# `<name> - ...` also proves the program name reached the CLI through the symlink -- and that
+# each installed name reports ITSELF in its usage text.
+_run_installed ticket help 'ticket - minimal ticket system' help
+_run_installed tk help-tk 'tk - minimal ticket system' help
+_run_installed ticket create full_path create "Packaged smoke ticket"
+_run_installed ticket ls 'Packaged smoke ticket' ls
 # Second run: still no rebuild attempt against the read-only prefix.
-_run_tk ls-again 'Packaged smoke ticket' ls
+_run_installed ticket ls-again 'Packaged smoke ticket' ls
 
 echo "package-smoke: OK"

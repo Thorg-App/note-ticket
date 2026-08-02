@@ -12,11 +12,11 @@ depends=('bash' 'nodejs' 'git' 'coreutils' 'findutils')
 # npm is BUILD-ONLY. See build() -- the bundle is produced here, not on the user's first run,
 # because /usr is not writable by the user the tool runs as.
 makedepends=('npm')
-optdepends=('jq: filtering for the `query` command (`tk query <jq-filter>`)')
+optdepends=('jq: filtering for the `query` command (`ticket query <jq-filter>`)')
 source=("ticket-$pkgver.tar.gz::https://github.com/wedow/ticket/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
-# Where the tool's own tree lives. /usr/bin/tk is a symlink into it; the launcher resolves
+# Where the tool's own tree lives. /usr/bin/ticket (and /usr/bin/tk) symlink into it; the launcher resolves
 # symlinks to find its sources and bundle.
 _installdir="usr/share/$pkgname"
 
@@ -60,6 +60,8 @@ package() {
 
     chmod 755 "$pkgdir/$_installdir/ticket"
     install -dm755 "$pkgdir/usr/bin"
+    # `ticket` is the documented name; `tk` stays as the historical shorthand.
+    ln -s "/$_installdir/ticket" "$pkgdir/usr/bin/ticket"
     ln -s "/$_installdir/ticket" "$pkgdir/usr/bin/tk"
 
     install -Dm644 LICENSE.md "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
