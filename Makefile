@@ -1,4 +1,4 @@
-.PHONY: test build typecheck unit-test package-smoke
+.PHONY: test build build-lib typecheck unit-test package-smoke
 
 # node_modules is a directory whose mtime is unreliable as a target; the stamp
 # makes `npm install` run only when the manifest changes.
@@ -15,6 +15,11 @@ build: $(NPM_STAMP)
 typecheck: $(NPM_STAMP)
 	npm run --silent typecheck
 
+# The npm package's library entry (dist-lib/): tsc emit, which `typecheck`'s noEmit run
+# cannot prove — declaration emit has its own failure modes.
+build-lib: $(NPM_STAMP)
+	npm run --silent build:lib
+
 # node:test unit tests over src/core + src/cli. BDD stays the acceptance harness; these
 # cover the algorithms and the arms BDD cannot reach (anything gated on a terminal).
 unit-test: $(NPM_STAMP)
@@ -26,7 +31,7 @@ unit-test: $(NPM_STAMP)
 # path entirely. The on-demand path is not left untested: features/ticket_wrapper.feature
 # exercises it against an isolated copy of the tool, and CI smoke-tests a checkout with no
 # dist/ at all before this target ever runs.
-test: build unit-test
+test: build build-lib unit-test
 	uv run --with behave behave
 
 # The PACKAGED shape (read-only prefix, prebuilt bundle, no node_modules), which no other

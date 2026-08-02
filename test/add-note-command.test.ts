@@ -5,10 +5,11 @@ import { join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 
 import { FixedClock } from "../src/core/clock.js";
+import { TicketNote } from "../src/core/ticket-note.js";
 import { TicketStore } from "../src/core/ticket-store.js";
 import { CliError, UsageError } from "../src/cli/cli-error.js";
+import { AddNoteCommand, NoteText } from "../src/cli/commands/add-note.js";
 import { CommandEnvironment } from "../src/cli/command-environment.js";
-import { AddNoteCommand, NoteText, TicketNote } from "../src/cli/commands/add-note.js";
 import type { Terminal } from "../src/cli/terminal.js";
 
 const NOW = "2026-07-30T12:00:00Z";

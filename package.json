@@ -1,14 +1,46 @@
 {
   "name": "note-ticket",
-  "version": "0.0.0",
-  "private": true,
-  "description": "TypeScript implementation of the ticket CLI (./ticket is a thin launcher for it)",
+  "version": "0.1.0",
+  "description": "Markdown-frontmatter ticket tracker: `tk` CLI plus a TicketManager library API",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thorg-App/note-ticket.git"
+  },
+  "keywords": [
+    "ticket",
+    "issue-tracker",
+    "markdown",
+    "frontmatter",
+    "cli"
+  ],
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist-lib/index.d.ts",
+      "import": "./dist-lib/index.js"
+    }
+  },
+  "types": "./dist-lib/index.d.ts",
+  "bin": {
+    "tk": "./dist/ticket.mjs"
+  },
+  "files": [
+    "dist-lib/",
+    "dist/ticket.mjs",
+    "CHANGELOG.md",
+    "THIRD_PARTY_LICENSES.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/ticket.mjs --banner:js=\"#!/usr/bin/env node\"",
+    "build:lib": "tsc -p tsconfig.lib.json",
     "build:test": "esbuild test/*.test.ts --bundle --platform=node --format=esm --target=node18 --outdir=dist-test --sourcemap",
     "test": "npm run --silent build:test && node --test dist-test/*.test.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build && npm run build:lib"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { FixedClock } from "../src/core/clock.js";
+import { StatusUpdate } from "../src/core/status-update.js";
 import { Ticket } from "../src/core/ticket.js";
 import { TicketStore } from "../src/core/ticket-store.js";
 import { UsageError } from "../src/cli/cli-error.js";
 import { CommandEnvironment } from "../src/cli/command-environment.js";
-import { STATUS_WRAPPERS, StatusCommand, StatusUpdate } from "../src/cli/commands/status.js";
+import { STATUS_WRAPPERS, StatusCommand } from "../src/cli/commands/status.js";
 
 const NOW = "2026-07-30T11:00:00Z";
 const CREATED = "2024-01-01T00:00:00Z";

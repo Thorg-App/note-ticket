@@ -1,4 +1,5 @@
 import { LINE_SEPARATOR } from "../../core/text.js";
+import { TicketNote } from "../../core/ticket-note.js";
 import type { TicketStore } from "../../core/ticket-store.js";
 import { CliError, UsageError } from "../cli-error.js";
 import type { CommandEnvironment } from "../command-environment.js";
@@ -11,16 +12,6 @@ const USAGE = "Usage: ticket add-note <id> [note text]";
 
 /** With no text to append and no stdin to read it from, there is nothing to do. */
 const NO_NOTE = "no note provided";
-
-/** The section notes are collected under. */
-const NOTES_HEADING = "## Notes";
-
-/**
- * bash `grep -q '^## Notes' "$file"`: any line STARTING with the heading, anywhere in the
- * FILE. So `## Notesish` counts as the section already existing, and so would the heading
- * inside a frontmatter block — both verified against ./ticket.
- */
-const NOTES_HEADING_PRESENT = /^## Notes/m;
 
 /** bash `note="$*"` with a default IFS. */
 const ARGUMENT_SEPARATOR = " ";
@@ -54,24 +45,6 @@ export class NoteText {
             throw new CliError(NO_NOTE);
         }
         return terminal.readStdin().replace(TRAILING_NEWLINES, "");
-    }
-}
-
-/** The bytes `add-note` appends, and the only place that knows the note layout. */
-export class TicketNote {
-    /**
-     * The exact bytes bash's two `printf … >> "$file"` calls appended.
-     *
-     * @param file the whole current file text. WHY the whole FILE and not the body decides the
-     *   heading: bash's `grep -q '^## Notes'` scanned every line, frontmatter included, and
-     *   appending a second `## Notes` under an existing one would fork the section.
-     */
-    static appendedTo(file: string, note: string, timestamp: string): string {
-        const heading = NOTES_HEADING_PRESENT.test(file)
-            ? ""
-            : `${LINE_SEPARATOR}${NOTES_HEADING}${LINE_SEPARATOR}`;
-        const stamp = `${LINE_SEPARATOR}**${timestamp}**${LINE_SEPARATOR}`;
-        return `${heading}${stamp}${LINE_SEPARATOR}${note}${LINE_SEPARATOR}`;
     }
 }
 

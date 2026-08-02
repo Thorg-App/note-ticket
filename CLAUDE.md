@@ -24,6 +24,11 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 - `text.ts` — `LINE_SEPARATOR`; import it rather than re-declaring `"\n"` in a seventh module
 - `dep-graph.ts` — `DepGraph`: ready/blocked, cycles, dependency-tree layout rows
 - `ticket-relations.ts` — `TicketRelation.DEPENDENCY`/`.LINK`: the add/remove/membership rules for the `deps` and `links` id arrays, shared by `dep`/`undep`/`link`/`unlink`
+- `new-ticket.ts` — `CreateOptions` (raw new-ticket values) + `CreateOptionsDefaults` (the one place the defaults live) + `NewTicketFacts` + `NewTicketDocument` (the file a new ticket starts life as, key order = contract). Pure; shared by CLI `create` and `TicketManager.create`
+- `status-update.ts` — `StatusUpdate.applied()`: the pure status/timestamp frontmatter change (a new field lands FIRST, as bash's `sed` insert did). Shared by the `status` family and `TicketManager.setStatus`
+- `ticket-note.ts` — `TicketNote.appendedTo()`: the pure note layout `add-note` and `TicketManager.addNote` append
+
+**`src/lib/` is the npm library facade** (see "Library API" below): `ticket-manager.ts` (the documented `TicketManager` interface + `NewTicketInput`), `file-ticket-manager.ts` (`FileTicketManager`, the file-backed implementation reusing the same core pieces the CLI uses, so both write byte-identical files), `ticket-manager-error.ts` (`TicketNotFoundError`/`AmbiguousTicketIdError` — the lib-side rendering of `IdResolution`, parallel to the CLI's `ticket-lookup.ts`). `src/index.ts` is the package entry and deliberately exports nothing from `src/cli/`.
 
 `src/cli/` pieces shared by the ported commands:
 
@@ -34,8 +39,8 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 - `terminal.ts` — `Terminal` (`[ -t 0 ]`, `[ -t 1 ]`, read stdin), injected via `CommandEnvironment`. WHY an interface: the terminal arms of `edit` and `add-note` are unreachable from BDD, so only a unit test can say "both streams are terminals"
 - `store-resolver.ts` — bash `init_tickets_dir` semantics: `forReadCommand()`/`forWriteCommand()` require an existing dir, `forCreateCommand()` mkdir -p's it. `create` is the ONLY command allowed to, and bash does it BEFORE parsing args
 - `command-environment.ts` / `program-name.ts` — the ambient process a command runs in: invoked program name (usage text interpolates it — `TICKET_INVOKED_AS`, never a hardcoded `ticket`), clock, new-id and default-assignee sources. `CommandEnvironment.forProcess()` is the one place the real environment is bound; tests pass their own
-- `commands/status.ts` — `StatusUpdate.applied()` is the pure frontmatter change (a new field lands FIRST, as bash's `sed` insert did); `STATUS_WRAPPERS` carries `start`/`close`/`reopen`
-- `commands/add-note.ts` — the ONLY write that APPENDS bytes (`TicketStore.appendTo`) instead of rewriting through `save`, because bash used `>>` and a rename would replace a symlinked ticket with a regular file. `TicketNote.appendedTo()` is the pure note layout; `NoteText` is the argument/stdin/TTY choice
+- `commands/status.ts` — `TicketStatusArgument.parsed` (the ONE place text becomes a `TicketStatus`); `STATUS_WRAPPERS` carries `start`/`close`/`reopen`; the pure change itself is core's `status-update.ts`
+- `commands/add-note.ts` — the ONLY write that APPENDS bytes (`TicketStore.appendTo`) instead of rewriting through `save`, because bash used `>>` and a rename would replace a symlinked ticket with a regular file. The note layout is core's `ticket-note.ts`; `NoteText` is the argument/stdin/TTY choice
 - `row-limit.ts` — `closed`'s `--limit=`; a plain count only (bash forwarded it to `head -n`)
 - `jq.ts` — spawns the external `jq` for `query <filter>`; jq stays a real dependency, never reimplemented
 - `cli-error.ts` — `CliError`; `main.ts` renders it (and core's `CorruptTicketFileError`) as `Error: <message>`, exit 1 (or the error's own `exitCode`). `UsageError` is the subclass for bash's un-prefixed `Usage: …` lines
@@ -47,6 +52,10 @@ See @README.md for usage documentation. Run `tk help` for command reference. Alw
 Data model: Filenames are title-based (e.g., `my-note.md`). The `id` field in frontmatter is the stable identifier. `title` is stored in frontmatter (double-quoted). No `# heading` for title in body.
 
 Dependencies at runtime: **node**, **git** (repo-root resolution), plus bash/coreutils/`find` for the launcher. **npm** only when the launcher has to build. **jq** only for `query <jq-filter>`.
+
+## Library API (npm)
+
+The package publishes a library entry alongside the `tk` bin: `package.json` `exports` points at `dist-lib/index.js` (+ `.d.ts`), emitted by `npm run build:lib` (`tsc -p tsconfig.lib.json`, gitignored like every build output). `prepack` builds both the CLI bundle and `dist-lib/`, so `npm pack`/`npm publish` is self-contained; `npm` `files` ships only `dist-lib/`, `dist/ticket.mjs` and the docs — no sources, no launcher. The Homebrew/AUR install flow is unchanged and does not use npm's `files`. `make build-lib` is a `make test` prerequisite so declaration-emit breakage surfaces in CI. Library behavior changes need unit tests in `test/ticket-manager.test.ts` (the BDD suite covers only the CLI surface).
 
 ## Testing
 
