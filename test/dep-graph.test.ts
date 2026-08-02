@@ -106,6 +106,15 @@ describe("DepGraph.ready", () => {
         assert.deepEqual(idsOf(graphOf([{ id: "a", deps: ["ghost"] }]).ready()), []);
     });
 
+    it("excludes a punted ticket", () => {
+        assert.deepEqual(idsOf(graphOf([{ id: "a", status: "punted" }]).ready()), []);
+    });
+
+    it("excludes an open ticket with a punted dependency", () => {
+        const graph = graphOf([{ id: "a", deps: ["b"] }, { id: "b", status: "punted" }]);
+        assert.deepEqual(idsOf(graph.ready()), []);
+    });
+
     it("sorts by priority before id", () => {
         const graph = graphOf([
             { id: "a", priority: "3" },
@@ -159,6 +168,16 @@ describe("DepGraph.blocked", () => {
     it("excludes a closed ticket even with open dependencies", () => {
         const closedBlocked = graphOf([{ id: "a", status: "closed", deps: ["b"] }, { id: "b" }]);
         assert.deepEqual(closedBlocked.blocked().map((blocked) => blocked.ticket.id), []);
+    });
+
+    it("counts a punted dependency as a blocker of an open ticket", () => {
+        const puntedBlocker = graphOf([{ id: "a", deps: ["b"] }, { id: "b", status: "punted" }]);
+        assert.deepEqual(puntedBlocker.blocked()[0]?.blockerIds, ["b"]);
+    });
+
+    it("excludes a punted ticket even with open dependencies", () => {
+        const puntedBlocked = graphOf([{ id: "a", status: "punted", deps: ["b"] }, { id: "b" }]);
+        assert.deepEqual(puntedBlocked.blocked().map((blocked) => blocked.ticket.id), []);
     });
 });
 

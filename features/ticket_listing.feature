@@ -83,6 +83,24 @@ Feature: Ticket Listing
     Then the command should succeed
     And the output should not contain "ready-001"
 
+  # A punted ticket is deferred work: not actionable itself, and unlike a closed one it
+  # still blocks its dependents (ticket nid_t9w0uv9z3eytl974830ke884n_e).
+  Scenario: Ready excludes punted tickets
+    Given a ticket exists with ID "ready-001" and title "Punted ticket"
+    And ticket "ready-001" has status "punted"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should not contain "ready-001"
+
+  Scenario: Ready excludes an open ticket whose dependency is punted
+    Given a ticket exists with ID "ready-001" and title "Dependent ticket"
+    And a ticket exists with ID "ready-002" and title "Punted dependency"
+    And ticket "ready-001" depends on "ready-002"
+    And ticket "ready-002" has status "punted"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should not contain "ready-001"
+
   Scenario: Ready shows priority in output
     Given a ticket exists with ID "ready-001" and title "Priority ticket"
     When I run "ticket ready"
@@ -125,6 +143,32 @@ Feature: Ticket Listing
     When I run "ticket blocked"
     Then the command should succeed
     And the output should not contain "block-001"
+
+  Scenario: Blocked shows an open ticket whose dependency is punted
+    Given a ticket exists with ID "block-001" and title "Dependent ticket"
+    And a ticket exists with ID "block-002" and title "Punted dependency"
+    And ticket "block-001" depends on "block-002"
+    And ticket "block-002" has status "punted"
+    When I run "ticket blocked"
+    Then the command should succeed
+    And the output should contain "block-001"
+    And the output should contain "<- [block-002]"
+
+  Scenario: Blocked excludes punted tickets
+    Given a ticket exists with ID "block-001" and title "Punted blocked"
+    And a ticket exists with ID "block-002" and title "Blocker"
+    And ticket "block-001" depends on "block-002"
+    And ticket "block-001" has status "punted"
+    When I run "ticket blocked"
+    Then the command should succeed
+    And the output should not contain "block-001"
+
+  Scenario: List without a status filter shows punted tickets
+    Given a ticket exists with ID "list-0001" and title "Punted ticket"
+    And ticket "list-0001" has status "punted"
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output should contain "list-0001"
 
   Scenario: Blocked shows only unclosed blockers
     Given a ticket exists with ID "block-001" and title "Blocked ticket"
