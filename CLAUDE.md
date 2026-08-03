@@ -47,7 +47,7 @@ User docs are split by surface: `README.md` is the landing page, `docs/cli.md` i
 - `exit-codes.ts` — every exit code in one place, including `128 + signal` for a signalled child
 - `broken-pipe.ts` — node ignores SIGPIPE, so a closed stdout is turned into exit 141 here
 
-**Deliberate divergences from the historical bash implementation** — the 20 numbered entries in `docs-internal/migration-to-ts-high-level.md` ("Deliberate divergences from bash"). ~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER, so the numbering is stable: never renumber, only append. Behavior changes there carry an owner approval id.
+**Deliberate divergences from the historical bash implementation** — the 21 numbered entries in `docs-internal/migration-to-ts-high-level.md` ("Deliberate divergences from bash"). ~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER, so the numbering is stable: never renumber, only append. Behavior changes there carry an owner approval id.
 
 Data model: Filenames are title-based (e.g., `my-note.md`). The `id` field in frontmatter is the stable identifier. `title` is stored in frontmatter (double-quoted). No `# heading` for title in body.
 

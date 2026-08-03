@@ -118,7 +118,7 @@ describe("CliError", () => {
         assert.equal(new CliError("nope").stderrText, "Error: nope\n");
     });
 
-    it("leaves detail lines un-prefixed, as bash's TICKETS_DIR hint is", () => {
+    it("leaves detail lines un-prefixed, as the no-git-repo hint is", () => {
         const error = new CliError("not inside a git repository", ["Run inside a git repo"]);
         assert.equal(error.stderrText, "Error: not inside a git repository\nRun inside a git repo\n");
     });

@@ -56,14 +56,16 @@ Feature: Ticket Directory Resolution
     Then the command should fail
     And the output should contain "not inside a git repository"
 
-  Scenario: TICKETS_DIR env var takes priority over git root
+  # Divergence #21: the env override bash had is gone — the git root always wins, even for a
+  # shell that still exports the old variable.
+  Scenario: TICKETS_DIR env var is ignored
     Given a ticket exists with ID "root-0001" and title "Root ticket"
     And a separate tickets directory exists at "other-tickets" with ticket "other-0001" titled "Other ticket"
     And I am in subdirectory "src"
     When I run "ticket ls" with TICKETS_DIR set to "other-tickets"
     Then the command should succeed
-    And the output should contain "other-0001"
-    And the output should not contain "root-0001"
+    And the output should contain "root-0001"
+    And the output should not contain "other-0001"
 
   Scenario: Show command works from subdirectory
     Given a ticket exists with ID "test-0001" and title "Test ticket"

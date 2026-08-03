@@ -15,7 +15,7 @@ export class CliError extends Error {
     /**
      * @param message the `Error: `-prefixed first line.
      * @param detailLines follow-up lines printed WITHOUT the prefix, as bash does for its
-     *   "Run inside a git repo, or set TICKETS_DIR env var" hint.
+     *   "Run inside a git repo" hint.
      * @param exitCode process exit code; 1 for every usage error, overridden only where bash
      *   produced a different one (a missing `jq` exits 127, the shell's "command not found").
      */

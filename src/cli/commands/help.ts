@@ -43,7 +43,7 @@ Commands:
   add-note <id> [text]     Append timestamped note (or pipe via stdin)
   query [jq-filter]        Output tickets as JSONL (includes full_path)
 
-Tickets live at <git-repo-root>/_tickets (override with TICKETS_DIR env var).
+Tickets live at <git-repo-root>/_tickets.
 Tickets stored as markdown files in _tickets/ (filenames derived from title)
 IDs are stored in frontmatter at 'id' field;
 Tickets may be organized into nested subfolders (e.g. _tickets/backend/api/foo.md)

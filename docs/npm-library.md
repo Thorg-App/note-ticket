@@ -11,7 +11,7 @@ npm install note-ticket
 ```typescript
 import { FileTicketManager, TicketNotFoundError } from "note-ticket";
 
-// `<git-repo-root>/_tickets` from cwd ($TICKETS_DIR overrides).
+// `<git-repo-root>/_tickets` from cwd.
 const manager = FileTicketManager.forRepository();
 
 const ticket = manager.create({ title: "My ticket", tags: "backend,api" });
@@ -53,12 +53,12 @@ Lower-level pieces (`TicketStore`, `TicketsDirectory`, `IdResolver`, `TicketId`,
 ## Getting a manager
 
 ```typescript
-FileTicketManager.forRepository(cwd?, options?)   // $TICKETS_DIR, else <git-repo-root>/_tickets
+FileTicketManager.forRepository(cwd?, options?)   // <git-repo-root>/_tickets
 FileTicketManager.forDirectory(ticketsDir, options?)  // an explicit directory
 ```
 
-`forRepository` throws a plain `Error` when `cwd` is not inside a git repository and
-`TICKETS_DIR` is unset. Neither factory requires the directory to exist yet — `create` makes it.
+`forRepository` throws a plain `Error` when `cwd` is not inside a git repository —
+`forDirectory` is the way to point the library somewhere else. Neither factory requires the directory to exist yet — `create` makes it.
 `manager.ticketsDir` reports the directory in use.
 
 `options` is a `FileTicketManagerOptions`, and exists so a test can hold the non-deterministic
