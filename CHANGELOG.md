@@ -6,6 +6,7 @@
 - New `punted` status (`ticket status <id> punted`): the ticket is deferred to the future. A punted ticket is not listed by `ready`/`blocked`, still appears in status-unfiltered listings (`ls`, `query`), and — unlike `closed` — keeps blocking tickets that depend on it.
 
 ### Removed
+- **BREAKING: the `TICKETS_DIR` environment variable is gone.** The tickets directory is always `<git-repo-root>/_tickets`. An exported override silently redirected every command in that shell — including ones run against a different repo — and offered nothing that working from the intended checkout does not. Outside a git repo the error hint is now `Run inside a git repo`. Library consumers who need an arbitrary directory keep using `FileTicketManager.forDirectory(dir)`.
 - **The `tk` shorthand is no longer installed.** `npm install note-ticket` creates one command, `ticket`. Scripts that call `tk` must call `ticket` (or keep their own alias).
 - **Homebrew and AUR packaging is gone** — the formula, the `PKGBUILD`, their publish scripts and their release-workflow steps. This fork was never published to that tap or to the AUR, so the documented `brew tap wedow/tools && brew install ticket-core` and `yay -S ticket-core` never worked. **npm is the only registry this package is published to**; the other supported install is a symlink into a git checkout.
 - `ORIGINAL_README.md` (the upstream project's README) is deleted: it documented installs that do not exist for this fork. Its unique content — the agent-setup snippet — moved into `docs/cli.md`.

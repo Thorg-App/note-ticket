@@ -92,8 +92,8 @@ scenario or a unit test; the mapping is in
 The list below is now a **contract summary**, not a to-do: these are the behaviors to preserve
 when touching the code, even where BDD scenarios are thin.
 
-- Tickets dir: `TICKETS_DIR` env override, else `git rev-parse --show-toplevel` +
-  `/_tickets`; read commands error when dir missing, `create` mkdir -p's it.
+- Tickets dir: `git rev-parse --show-toplevel` + `/_tickets`, with no env override
+  (see divergence #21); read commands error when dir missing, `create` mkdir -p's it.
 - Discovery: recursive, follow symlinks, prune hidden **directories** (whole
   subtree), hidden **files** are tickets; deterministic byte-wise path order
   (`LC_ALL=C sort` → compare Buffers, not JS UTF-16 strings).
@@ -268,7 +268,7 @@ Runtime dependency lists changed from `bash/coreutils/findutils/gawk` to
 
 ## Deliberate divergences from bash
 
-The 20 entries below are the places where the TS CLI intentionally does NOT reproduce bash.
+The 21 entries below are the places where the TS CLI intentionally does NOT reproduce bash.
 **~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER**, so the numbering
 is frozen: never renumber, only append.
 
@@ -470,6 +470,19 @@ on 2026-07-30 (`nid_r3mp6uylht7t77iwxtuqvhxv2_e`), and #20 on
    violation. **Approved by the owner on 2026-07-30 (`nid_fhmxugci00tfkeu3eyeggv6gq_e`).**
    Pinned by `features/ticket_directory.feature` → "An unknown command is reported without
    needing a tickets directory".
+
+21. **There is no `TICKETS_DIR` override; the tickets directory is always
+   `<git-repo-root>/_tickets`.** bash read a `TICKETS_DIR` environment variable and used it in
+   preference to the repo root, and the TS port carried that over. It is gone: an EXPORTED
+   override silently redirects every command in that shell, including ones run from a different
+   repo, which is the failure mode a per-repo store exists to prevent — and it bought nothing
+   that `cd`-ing to the intended checkout does not. Outside a git repo the CLI now says
+   `not inside a git repository` with the hint `Run inside a git repo` (the hint previously
+   named the variable). Library consumers who need an arbitrary directory use
+   `FileTicketManager.forDirectory`, which is unchanged.
+   **Approved by the owner on 2026-08-02 (`nid_qww0tzdmc8g2njyc4fnmsn0da_e`).**
+   Pinned by `features/ticket_directory.feature` → "TICKETS_DIR env var is ignored" and
+   `test/ticket-store.test.ts` → "ignores a TICKETS_DIR environment variable".
 
 Two notes carried over from the harness README, still true of the TS side:
 `harness.HOSTILE_TITLES` deliberately contained no `|` (#3), no tab (#5) and no newline (#11).

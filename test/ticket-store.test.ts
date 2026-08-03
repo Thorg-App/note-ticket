@@ -597,15 +597,28 @@ describe("TicketStore permission failures", { skip: ROOT_SKIP }, () => {
 });
 
 describe("TicketsDirectory.resolve", () => {
-    it("prefers the TICKETS_DIR override", () => {
-        assert.deepEqual(TicketsDirectory.resolve({ TICKETS_DIR: "/custom" }, "/"), {
+    // Divergence #21: the override bash had is gone. This asserts on the ENVIRONMENT rather
+    // than on a parameter, because the parameter is what was deleted — only reading
+    // `process.env` could bring the behavior back, and only this shape would catch it.
+    it("ignores a TICKETS_DIR environment variable", (t) => {
+        const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+        const previous = process.env.TICKETS_DIR;
+        process.env.TICKETS_DIR = "/custom";
+        t.after(() => {
+            if (previous === undefined) {
+                delete process.env.TICKETS_DIR;
+            } else {
+                process.env.TICKETS_DIR = previous;
+            }
+        });
+        assert.deepEqual(TicketsDirectory.resolve(process.cwd()), {
             kind: "resolved",
-            path: "/custom",
+            path: join(repoRoot, "_tickets"),
         });
     });
 
     it("anchors to the enclosing git repo root", () => {
-        const resolution = TicketsDirectory.resolve({}, process.cwd());
+        const resolution = TicketsDirectory.resolve(process.cwd());
         assert.equal(resolution.kind === "resolved" && resolution.path.endsWith("/_tickets"), true);
     });
 
@@ -621,7 +634,7 @@ describe("TicketsDirectory.resolve", () => {
             } catch {
                 /* not a repo: exactly the precondition this test needs */
             }
-            assert.deepEqual(TicketsDirectory.resolve({}, outside), { kind: "no-git-repo" });
+            assert.deepEqual(TicketsDirectory.resolve(outside), { kind: "no-git-repo" });
         } finally {
             rmSync(outside, { recursive: true, force: true });
         }

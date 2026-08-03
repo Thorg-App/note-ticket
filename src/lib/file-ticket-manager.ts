@@ -49,15 +49,14 @@ export class FileTicketManager implements TicketManager {
     }
 
     /**
-     * A manager over the directory the CLI would use from `cwd`: `$TICKETS_DIR` if set,
-     * else `<git-repo-root>/_tickets`.
+     * A manager over the directory the CLI would use from `cwd`: `<git-repo-root>/_tickets`.
      *
-     * @throws Error when `cwd` is not inside a git repository and `TICKETS_DIR` is unset.
+     * @throws Error when `cwd` is not inside a git repository.
      */
     static forRepository(cwd: string = process.cwd(), options: FileTicketManagerOptions = {}): FileTicketManager {
-        const resolution = TicketsDirectory.resolve(process.env, cwd);
+        const resolution = TicketsDirectory.resolve(cwd);
         if (resolution.kind === "no-git-repo") {
-            throw new Error(`'${cwd}' is not inside a git repository and TICKETS_DIR is not set`);
+            throw new Error(`'${cwd}' is not inside a git repository`);
         }
         return FileTicketManager.forDirectory(resolution.path, options);
     }

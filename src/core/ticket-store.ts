@@ -22,7 +22,6 @@ import { Git } from "./git.js";
 import { Ticket } from "./ticket.js";
 import { MissingFrontmatterBlockError, MissingTicketIdError } from "./ticket-file-error.js";
 
-const TICKETS_DIR_ENV_VAR = "TICKETS_DIR";
 const TICKETS_DIR_NAME = "_tickets";
 const TICKET_FILE_EXTENSION = ".md";
 const FILE_ENCODING = "utf8";
@@ -35,15 +34,16 @@ export type TicketsDirResolution =
     | { readonly kind: "no-git-repo" };
 
 /**
- * Resolves the tickets directory: an explicit `TICKETS_DIR` wins, otherwise it is
- * `<git-repo-root>/_tickets`, so commands work from any subdirectory.
+ * Resolves the tickets directory: always `<git-repo-root>/_tickets`, so commands work
+ * from any subdirectory.
+ *
+ * WHY-NOT an env override: one repo means one ticket store. A `TICKETS_DIR` variable
+ * existed and was removed — an exported override silently redirected every command in
+ * that shell, including ones run against a DIFFERENT repo, and it bought nothing a
+ * checkout of the intended repo does not.
  */
 export class TicketsDirectory {
-    static resolve(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd()): TicketsDirResolution {
-        const override = env[TICKETS_DIR_ENV_VAR];
-        if (override) {
-            return { kind: "resolved", path: override };
-        }
+    static resolve(cwd: string = process.cwd()): TicketsDirResolution {
         const repoRoot = Git.repoRoot(cwd);
         if (repoRoot === undefined) {
             return { kind: "no-git-repo" };

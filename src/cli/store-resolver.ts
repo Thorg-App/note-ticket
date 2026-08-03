@@ -3,7 +3,7 @@ import { CliError } from "./cli-error.js";
 
 /** Stderr wording of bash `init_tickets_dir`, which several BDD scenarios assert. */
 const NO_GIT_REPO_MESSAGE = "not inside a git repository";
-const NO_GIT_REPO_HINT = "Run inside a git repo, or set TICKETS_DIR env var";
+const NO_GIT_REPO_HINT = "Run inside a git repo";
 
 /**
  * Opens the tickets directory, mirroring bash `init_tickets_dir`: the directory must

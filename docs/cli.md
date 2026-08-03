@@ -2,7 +2,7 @@
 
 Install `ticket` on your PATH and run it inside any git repository. Tickets are stored at the
 repository root under `<git-repo-root>/_tickets`, resolved via `git rev-parse --show-toplevel`.
-Override with the `TICKETS_DIR` env var.
+That location is fixed — there is no override.
 
 For the library API, see [npm-library.md](npm-library.md).
 

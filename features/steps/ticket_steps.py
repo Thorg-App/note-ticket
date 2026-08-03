@@ -541,7 +541,11 @@ def step_run_command_no_stdin(context, command):
 
 @when(r'I run "(?P<command>(?:[^"\\]|\\.)+)" with TICKETS_DIR set to "(?P<tickets_dir>[^"]+)"')
 def step_run_command_with_env(context, command, tickets_dir):
-    """Run a ticket CLI command with custom TICKETS_DIR."""
+    """Run a ticket CLI command with TICKETS_DIR exported.
+
+    The variable is no longer read (divergence #21); this step exists so a scenario can
+    prove that an inherited TICKETS_DIR does NOT redirect the tickets directory.
+    """
     command = command.replace('\\"', '"')
     ticket_script = get_ticket_script(context)
     cmd = command.replace('ticket ', f'{ticket_script} ', 1)
