@@ -5,6 +5,9 @@
 ### Added
 - New `punted` status (`ticket status <id> punted`): the ticket is deferred to the future. A punted ticket is not listed by `ready`/`blocked`, still appears in status-unfiltered listings (`ls`, `query`), and — unlike `closed` — keeps blocking tickets that depend on it.
 
+### Changed
+- Every new ticket now carries a `tags` line — `tags: []` when no `--tags` were given — so a fresh ticket is ready to hand-edit tags into, the same way `deps: []`/`links: []` already work. Previously the field was written only when tags were supplied.
+
 ### Removed
 - **BREAKING: the `TICKETS_DIR` environment variable is gone.** The tickets directory is always `<git-repo-root>/_tickets`. An exported override silently redirected every command in that shell — including ones run against a different repo — and offered nothing that working from the intended checkout does not. Outside a git repo the error hint is now `Run inside a git repo`. Library consumers who need an arbitrary directory keep using `FileTicketManager.forDirectory(dir)`.
 - **The `tk` shorthand is no longer installed.** `npm install note-ticket` creates one command, `ticket`. Scripts that call `tk` must call `ticket` (or keep their own alias).

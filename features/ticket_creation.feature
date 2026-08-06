@@ -135,6 +135,11 @@ Feature: Ticket Creation
     Then the command should succeed
     And the created ticket should have field "links" with value "[]"
 
+  Scenario: Ticket has empty tags by default
+    When I run "ticket create 'No tags'"
+    Then the command should succeed
+    And the created ticket should have field "tags" with value "[]"
+
   Scenario: Ticket has created_iso timestamp
     When I run "ticket create 'Timestamped'"
     Then the command should succeed

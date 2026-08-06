@@ -129,7 +129,7 @@ writes its flags: nothing is validated or normalized.
 | `assignee` | `git config user.name` | `""` omits the line entirely. |
 | `externalRef` | `""` | Written as the hyphenated `external-ref:` key. |
 | `parent` | `""` | May be a PARTIAL id; the full id is stored. Resolved BEFORE anything is written, so an unresolvable parent creates no file. |
-| `tags` | `""` | Comma-separated, exactly as typed: `"a,b"` → `tags: [a, b]`. |
+| `tags` | `""` | Comma-separated, exactly as typed: `"a,b"` → `tags: [a, b]`. Always written — `""` yields `tags: []`. |
 
 ```typescript
 const ticket = manager.create({

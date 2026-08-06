@@ -484,6 +484,17 @@ on 2026-07-30 (`nid_r3mp6uylht7t77iwxtuqvhxv2_e`), and #20 on
    Pinned by `features/ticket_directory.feature` → "TICKETS_DIR env var is ignored" and
    `test/ticket-store.test.ts` → "ignores a TICKETS_DIR environment variable".
 
+22. **A fresh ticket ALWAYS carries a `tags` line, `tags: []` when none were given.** bash
+   omitted the field entirely when `--tags` was absent (it was written only for non-empty
+   tags, like `assignee`/`external-ref`/`parent`). Now `create` always emits it, so a new
+   ticket comes ready for a hand-edit to add tags without first remembering the field's name
+   and syntax — the same courtesy `deps: []`/`links: []` already extend. `tags` stays LAST in
+   the frontmatter, after the optional `parent` line. The lone build block for `tags` in
+   `NewTicketDocument.tagsValue` cites this number.
+   **Approved by the owner on 2026-08-06 (`nid_dzwr4djukvk97b5sempjig34m_e`).**
+   Pinned by `features/ticket_creation.feature` → "Ticket has empty tags by default" and
+   `test/create-command.test.ts` → "writes the frontmatter order and a body of one blank line".
+
 Two notes carried over from the harness README, still true of the TS side:
 `harness.HOSTILE_TITLES` deliberately contained no `|` (#3), no tab (#5) and no newline (#11).
 And for ticket files with *identical* mtimes, bash `ls -t` broke the tie with `strcoll`, i.e.
