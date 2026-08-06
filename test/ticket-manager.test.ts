@@ -50,6 +50,7 @@ describe("FileTicketManager.create", () => {
                 `status_updated_iso: ${NOW}`,
                 "type: task",
                 "priority: 2",
+                "tags: []",
                 "---",
                 "",
                 "Body text",

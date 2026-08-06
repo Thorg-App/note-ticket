@@ -106,13 +106,15 @@ export class NewTicketDocument {
         NewTicketDocument.pushIfPresent(entries, TicketField.ASSIGNEE, facts.assignee);
         NewTicketDocument.pushIfPresent(entries, TicketField.EXTERNAL_REF, options.externalRef);
         NewTicketDocument.pushIfPresent(entries, TicketField.PARENT, facts.parentId);
-        // `a,b , c` -> `[a, b ,  c]`: bash substitutes `,` with `, ` and trims nothing.
-        NewTicketDocument.pushIfPresent(entries, TicketField.TAGS, NewTicketDocument.tagsValue(options.tags));
+        // `tags` is ALWAYS written (empty array when none), so every fresh ticket carries the
+        // field ready to be hand-edited — divergence #22 from bash, which omitted it when empty.
+        entries.push({ key: TicketField.TAGS, rawValue: NewTicketDocument.tagsValue(options.tags) });
         return entries;
     }
 
+    /** `a,b , c` -> `[a, b ,  c]`: bash substitutes `,` with `, ` and trims nothing; no tags -> `[]`. */
     private static tagsValue(tags: string): string {
-        return tags === "" ? "" : `[${tags.replace(/,/g, ", ")}]`;
+        return tags === "" ? EMPTY_ARRAY : `[${tags.replace(/,/g, ", ")}]`;
     }
 
     private static pushIfPresent(entries: FrontmatterEntry[], key: string, rawValue: string): void {

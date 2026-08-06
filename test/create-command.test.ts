@@ -67,8 +67,9 @@ describe("CreateOptionsParser", () => {
 });
 
 describe("NewTicketDocument", () => {
-    // Golden bytes captured from bash `./ticket create bb` (ids/timestamps substituted).
-    it("writes bash's frontmatter order and a body of one blank line", () => {
+    // Golden bytes for `ticket create bb` (ids/timestamps substituted). `tags: []` is always
+    // emitted for a fresh ticket — divergence #22; bash omitted the line when there were no tags.
+    it("writes the frontmatter order and a body of one blank line", () => {
         assert.equal(
             documentText(["bb"]),
             [
@@ -82,6 +83,7 @@ describe("NewTicketDocument", () => {
                 `status_updated_iso: ${NOW}`,
                 "type: task",
                 "priority: 2",
+                "tags: []",
                 "---",
                 "",
                 "",
@@ -164,7 +166,7 @@ describe("NewTicketDocument", () => {
         assert.equal(
             ticket.toJsonText(),
             `{"id":"${ID}","title":"bb","status":"open","deps":[],"links":[],` +
-                `"created_iso":"${NOW}","status_updated_iso":"${NOW}","type":"task","priority":"2",` +
+                `"created_iso":"${NOW}","status_updated_iso":"${NOW}","type":"task","priority":"2","tags":[],` +
                 `"full_path":"/x/_tickets/bb.md"}`,
         );
     });
