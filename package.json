@@ -1,6 +1,6 @@
 {
   "name": "note-ticket",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Markdown-frontmatter ticket tracker: `ticket` CLI plus a TicketManager library API",
   "license": "MIT",
   "repository": {
