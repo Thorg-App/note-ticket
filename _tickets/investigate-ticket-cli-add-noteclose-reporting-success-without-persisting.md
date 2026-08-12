@@ -1,13 +1,14 @@
 ---
+closed_iso: 2026-08-12T23:12:19Z
 session_ids: [{"a": "claude", "type": "execution", "id": "2b29286f-a3f4-499e-85d5-ce2197e17d6f"}]
 working_dir: note-ticket
 id: nid_j5qv3jof5ldktdnvuwgw5q2ml_e
 title: "Investigate ticket CLI add-note/close reporting success without persisting"
-status: in_progress
+status: closed
 deps: []
 links: []
 created_iso: 2026-08-12T22:29:44Z
-status_updated_iso: 2026-08-12T23:06:55Z
+status_updated_iso: 2026-08-12T23:12:19Z
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
@@ -70,4 +71,65 @@ Edited the ticket markdown directly (frontmatter `status: closed` + `closed_iso`
 - Root cause identified for add-note/close reporting success without persisting under this environment.
 - Mutation commands either persist correctly or exit non-zero with a real error — success output is trustworthy again.
 - Repro covered (test or documented manual check) so the silent-success class cannot return.
+
+## Investigation & Resolution (2026-08-12)
+
+**Root cause: this is NOT a CLI persistence defect.** The `add-note` and `close`
+invocations ran with a working directory that `git rev-parse --show-toplevel`
+resolved to a **different checkout** than the verification commands. That
+environment has a parallel/mirror tree under `/Users/nkondrat/vintrin-env/…`
+(the same tree the env stack sources on every Bash invocation and the one the
+agent memory dir lives in), and it contained a copy of the same repo with the
+same ticket ids. The mutations persisted correctly — into the *other* tree —
+while `git status`, `grep`, and `ticket query` ran against the tree the human
+was looking at, which was genuinely untouched. Success output was truthful
+*relative to the tree the command resolved*.
+
+**Why the CLI itself cannot report success without persisting (verified in
+code):**
+
+- `add-note` (`src/cli/commands/add-note.ts`) calls `store.appendTo(...)` and
+  `close`/`status` (`src/cli/commands/status.ts`) call `store.save(...)` — both
+  **synchronous** `node:fs` writes (`appendFileSync`; `writeFileSync`+`renameSync`)
+  wrapped in `FileSystemError.guarding(...)` (`src/core/ticket-store.ts`). The
+  success line is printed only *after* the write returns; any OS-level failure
+  throws and exits non-zero. There is no code path that prints success while
+  skipping or losing the write.
+- Every command in a single invocation resolves the SAME tickets dir via
+  `TicketsDirectory.resolve()` → `Git.repoRoot(cwd)` (`src/core/ticket-store.ts`,
+  `src/cli/store-resolver.ts`), so read and write within one process are always
+  consistent. The divergence in the report is strictly *between* invocations
+  (different cwd → different git top-level → different `_tickets/`).
+
+**Reproduction (documented manual check).** Two separate git checkouts holding
+the same ticket id; run the mutations with cwd inside the mirror, then inspect
+the real tree:
+
+```bash
+node dist/ticket.mjs add-note nid_demo_e "shadow note" && node dist/ticket.mjs close nid_demo_e
+#   (cwd = mirror)  ->  "Note added to nid_demo_e" / "Updated nid_demo_e -> closed"
+# real tree:   grep 'shadow note' -> no match;  query .status -> "open";  git status -> clean
+# mirror tree: grep 'shadow note' -> present;   query .status -> "closed"
+```
+
+This reproduces the exact reported symptom (success printed, real tree
+unchanged, `query` still `open`, `git status` clean) with a completely correct
+CLI — proving the mechanism is tree/cwd divergence, not a lost write.
+
+**Acceptance criteria disposition:**
+
+1. Root cause identified — cross-checkout cwd divergence, above.
+2. Mutations already persist-or-throw; success output IS trustworthy relative to
+   the resolved tree. No code change was warranted — adding one to "look
+   productive" would be a hack against a non-existent bug.
+3. Silent-success as a CLI defect is already guarded: `features/ticket_notes.feature`
+   asserts appended note text lands in the file, and `features/ticket_status.feature`
+   asserts `status`/`close` change the persisted `status` field. A real in-tree
+   no-op would fail these on CI.
+
+**How to tell which tree a command hit, in future:** `ticket query` emits
+`full_path` for every ticket — the authoritative signal for *which* file/checkout
+is in play. When results look "not persisted," compare `full_path` (and
+`git rev-parse --show-toplevel`) between the mutating and the inspecting shell;
+if they differ, the shells are in different checkouts of the same repo.
 
