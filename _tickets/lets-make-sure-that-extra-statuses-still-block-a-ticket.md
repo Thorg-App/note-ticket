@@ -1,4 +1,5 @@
 ---
+session_ids: [{"a": "claude", "type": "execution", "id": "3a8762b6-b170-42a8-a789-8d94ad69414c"}]
 working_dir: note-ticket
 id: nid_y97pkv7n102f9wklmlhhesr6e_e
 title: "Lets make sure that extra statuses still block a ticket"
