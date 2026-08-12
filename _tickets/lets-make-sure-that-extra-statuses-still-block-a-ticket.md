@@ -1,11 +1,12 @@
 ---
+working_dir: note-ticket
 id: nid_y97pkv7n102f9wklmlhhesr6e_e
 title: "Lets make sure that extra statuses still block a ticket"
-status: open
+status: in_progress
 deps: []
 links: []
 created_iso: 2026-08-12T23:39:04Z
-status_updated_iso: 2026-08-12T23:39:04Z
+status_updated_iso: 2026-08-12T23:43:28Z
 type: task
 priority: 3
 assignee: nickolaykondratyev
