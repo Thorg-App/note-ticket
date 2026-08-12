@@ -51,3 +51,8 @@ unrecognized status (`in_review`) to cover exactly the ticket's example (`t1 --d
   status".
 
 All 473 unit tests and the `ticket_listing.feature` suite (50 scenarios) pass.
+## Notes
+
+**2026-08-12T23:47:37Z**
+
+__READY_AS_IS__: test-only branch locks in that a non-closed/unrecognized status still blocks dependents; full suite (271 scenarios + unit tests) passes.
