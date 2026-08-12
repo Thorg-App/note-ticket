@@ -1,4 +1,5 @@
 ---
+session_ids: [{"a": "claude", "type": "execution", "id": "2b29286f-a3f4-499e-85d5-ce2197e17d6f"}]
 working_dir: note-ticket
 id: nid_j5qv3jof5ldktdnvuwgw5q2ml_e
 title: "Investigate ticket CLI add-note/close reporting success without persisting"
