@@ -1,6 +1,6 @@
 ---
 closed_iso: 2026-08-12T23:46:00Z
-session_ids: [{"a": "claude", "type": "execution", "id": "3a8762b6-b170-42a8-a789-8d94ad69414c"}]
+session_ids: [{"a": "claude", "type": "execution", "id": "3a8762b6-b170-42a8-a789-8d94ad69414c"}, {"a": "claude", "type": "review", "id": "619801ad-4fe0-4574-be1d-0f489ad9108b"}]
 working_dir: note-ticket
 id: nid_y97pkv7n102f9wklmlhhesr6e_e
 title: "Lets make sure that extra statuses still block a ticket"
