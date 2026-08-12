@@ -77,6 +77,12 @@ describe("DepGraph.isClosed", () => {
     it("is false for an unknown id", () => {
         assert.equal(graphOf([]).isClosed("ghost"), false);
     });
+
+    // Only "closed" counts as closed; ANY other status on disk — including a custom one this
+    // CLI never writes — is not closed, so it keeps blocking (ticket nid_y97pkv7n102f9wklmlhhesr6e_e).
+    it("is false for a status that is not a recognized one", () => {
+        assert.equal(graphOf([{ id: "a", status: "in_review" }]).isClosed("a"), false);
+    });
 });
 
 describe("DepGraph.ready", () => {
@@ -112,6 +118,14 @@ describe("DepGraph.ready", () => {
 
     it("excludes an open ticket with a punted dependency", () => {
         const graph = graphOf([{ id: "a", deps: ["b"] }, { id: "b", status: "punted" }]);
+        assert.deepEqual(idsOf(graph.ready()), []);
+    });
+
+    // A dependency in a status this CLI does not recognize is treated exactly like any other
+    // not-closed dependency: it holds the dependent back until it reaches "closed"
+    // (ticket nid_y97pkv7n102f9wklmlhhesr6e_e).
+    it("excludes an open ticket with a dependency in an unrecognized status", () => {
+        const graph = graphOf([{ id: "a", deps: ["b"] }, { id: "b", status: "in_review" }]);
         assert.deepEqual(idsOf(graph.ready()), []);
     });
 
@@ -173,6 +187,13 @@ describe("DepGraph.blocked", () => {
     it("counts a punted dependency as a blocker of an open ticket", () => {
         const puntedBlocker = graphOf([{ id: "a", deps: ["b"] }, { id: "b", status: "punted" }]);
         assert.deepEqual(puntedBlocker.blocked()[0]?.blockerIds, ["b"]);
+    });
+
+    // A dependency in an unrecognized status blocks like any not-closed one
+    // (ticket nid_y97pkv7n102f9wklmlhhesr6e_e).
+    it("counts a dependency in an unrecognized status as a blocker of an open ticket", () => {
+        const oddBlocker = graphOf([{ id: "a", deps: ["b"] }, { id: "b", status: "in_review" }]);
+        assert.deepEqual(oddBlocker.blocked()[0]?.blockerIds, ["b"]);
     });
 
     it("excludes a punted ticket even with open dependencies", () => {
