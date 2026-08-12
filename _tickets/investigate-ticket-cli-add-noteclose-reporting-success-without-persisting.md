@@ -133,3 +133,9 @@ is in play. When results look "not persisted," compare `full_path` (and
 `git rev-parse --show-toplevel`) between the mutating and the inspecting shell;
 if they differ, the shells are in different checkouts of the same repo.
 
+
+## Notes
+
+**2026-08-12T23:13:58Z**
+
+__READY_AS_IS__: investigation-only branch; verified persist-or-throw code + existing persistence tests; no code change warranted.
