@@ -101,6 +101,18 @@ Feature: Ticket Listing
     Then the command should succeed
     And the output should not contain "ready-001"
 
+  # An unrecognized status (one this CLI never writes) is not "closed", so a dependency in it
+  # keeps its dependent out of `ready` until it reaches "closed" (ticket
+  # nid_y97pkv7n102f9wklmlhhesr6e_e).
+  Scenario: Ready excludes an open ticket whose dependency has an unrecognized status
+    Given a ticket exists with ID "ready-001" and title "Dependent ticket"
+    And a ticket exists with ID "ready-002" and title "Odd-status dependency"
+    And ticket "ready-001" depends on "ready-002"
+    And ticket "ready-002" has status "in_review"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should not contain "ready-001"
+
   Scenario: Ready shows priority in output
     Given a ticket exists with ID "ready-001" and title "Priority ticket"
     When I run "ticket ready"
@@ -162,6 +174,18 @@ Feature: Ticket Listing
     When I run "ticket blocked"
     Then the command should succeed
     And the output should not contain "block-001"
+
+  # The mirror of the `ready` case: the dependent stays blocked, listing the odd-status
+  # dependency as its blocker (ticket nid_y97pkv7n102f9wklmlhhesr6e_e).
+  Scenario: Blocked shows an open ticket whose dependency has an unrecognized status
+    Given a ticket exists with ID "block-001" and title "Dependent ticket"
+    And a ticket exists with ID "block-002" and title "Odd-status dependency"
+    And ticket "block-001" depends on "block-002"
+    And ticket "block-002" has status "in_review"
+    When I run "ticket blocked"
+    Then the command should succeed
+    And the output should contain "block-001"
+    And the output should contain "<- [block-002]"
 
   Scenario: List without a status filter shows punted tickets
     Given a ticket exists with ID "list-0001" and title "Punted ticket"
