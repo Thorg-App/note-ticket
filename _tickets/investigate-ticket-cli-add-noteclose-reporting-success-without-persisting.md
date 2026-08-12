@@ -1,11 +1,12 @@
 ---
+working_dir: note-ticket
 id: nid_j5qv3jof5ldktdnvuwgw5q2ml_e
 title: "Investigate ticket CLI add-note/close reporting success without persisting"
-status: open
+status: in_progress
 deps: []
 links: []
 created_iso: 2026-08-12T22:29:44Z
-status_updated_iso: 2026-08-12T22:29:44Z
+status_updated_iso: 2026-08-12T23:06:55Z
 type: task
 priority: 2
 assignee: CC_WITH-nickolaykondratyev
