@@ -42,6 +42,23 @@ export type TicketStatus = (typeof VALID_TICKET_STATUSES)[number];
 /** Priority when the field is absent — 0 is highest, 4 lowest. */
 export const DEFAULT_PRIORITY = "2";
 
+/** The ordinary processing profile. */
+export const TICKET_PROFILE_STANDARD = "standard";
+/** A profile calling for heavier processing than the default. */
+export const TICKET_PROFILE_HIGHER = "higher";
+
+/** The values the `profile` field accepts — the argument `ticket profile` takes. */
+export const VALID_TICKET_PROFILES = [TICKET_PROFILE_STANDARD, TICKET_PROFILE_HIGHER] as const;
+
+/**
+ * A profile this CLI is willing to WRITE, as a compile-time union — the same guard the
+ * status union gives (see `TicketStatus`): a mistyped literal downstream is a type error.
+ *
+ * WHY optional and never defaulted: unlike `status` or `priority`, a ticket has NO profile
+ * until one is set explicitly, so the field is simply absent rather than carrying a default.
+ */
+export type TicketProfile = (typeof VALID_TICKET_PROFILES)[number];
+
 /**
  * The on-disk frontmatter key names, in one place.
  *
@@ -57,6 +74,7 @@ export class TicketField {
     static readonly TAGS = "tags";
     static readonly PRIORITY = "priority";
     static readonly ASSIGNEE = "assignee";
+    static readonly PROFILE = "profile";
     static readonly PARENT = "parent";
     static readonly TYPE = "type";
     /** Hyphenated on disk, unlike every other key. */

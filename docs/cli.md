@@ -64,6 +64,7 @@ Commands:
   close <id>               Set status to closed
   reopen <id>              Set status to open
   status <id> <status>     Update status (open|in_progress|closed|punted)
+  profile <id> <profile>   Set processing profile (standard|higher)
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
   dep tree [--full] <id>   Show dependency tree (--full disables dedup)
   dep cycle                Find dependency cycles in open tickets
@@ -132,6 +133,13 @@ Every command that takes an `<id>` accepts a partial one: an exact match wins, o
 the id must contain the text you typed as a substring, and more than one match at the
 winning tier is an error. Surrounding whitespace is trimmed. An **empty** id matches
 nothing, so `ticket show "$UNSET_VAR"` fails instead of picking an arbitrary ticket.
+
+## Profile
+
+`profile <id> <profile>` sets the optional `profile` field to `standard` or `higher`. The
+field is absent until you set it — it is never given a default — and any other value is
+rejected (`Error: invalid profile '<x>'`) with the ticket left untouched, exactly as an
+invalid `status` is.
 
 ## Dependencies and links
 

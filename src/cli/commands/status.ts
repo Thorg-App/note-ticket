@@ -7,14 +7,12 @@ import {
     VALID_TICKET_STATUSES,
 } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
-import { CliError, UsageError } from "../cli-error.js";
+import { ChoiceArgument } from "../choice-argument.js";
+import { UsageError } from "../cli-error.js";
 import type { CommandEnvironment } from "../command-environment.js";
 import { ExitCode } from "../exit-codes.js";
 import { TicketLookup } from "../ticket-lookup.js";
 import { LINE_SEPARATOR } from "../../core/text.js";
-
-/** The `Valid statuses:` tail bash prints, and the list its error message names. */
-const STATUS_LIST = VALID_TICKET_STATUSES.join(" ");
 
 /**
  * A command that is `status` with the status already decided.
@@ -27,20 +25,8 @@ export interface StatusWrapper {
     readonly status: TicketStatus;
 }
 
-/**
- * The ONE place user-typed text becomes a `TicketStatus`. Past this boundary the status is
- * a union member, so no downstream signature has to re-check it.
- */
-export class TicketStatusArgument {
-    /** @throws CliError naming the accepted statuses, as bash `validate_status` does. */
-    static parsed(text: string): TicketStatus {
-        const status = VALID_TICKET_STATUSES.find((valid) => valid === text);
-        if (status === undefined) {
-            throw new CliError(`invalid status '${text}'. Must be one of: ${STATUS_LIST}`);
-        }
-        return status;
-    }
-}
+/** The ONE place user-typed text becomes a `TicketStatus` — see `ChoiceArgument`. */
+export const TicketStatusArgument = new ChoiceArgument("status", VALID_TICKET_STATUSES);
 
 export const STATUS_WRAPPERS = {
     start: { command: "start", status: TICKET_STATUS_IN_PROGRESS },
@@ -57,7 +43,7 @@ export class StatusCommand {
         if (args.length < 2) {
             throw new UsageError([
                 `Usage: ${environment.programName} status <id> <status>`,
-                `Valid statuses: ${STATUS_LIST}`,
+                `Valid statuses: ${TicketStatusArgument.list}`,
             ]);
         }
         return StatusCommand.apply(
