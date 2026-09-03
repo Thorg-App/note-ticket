@@ -1,28 +1,14 @@
 import { LINE_SEPARATOR } from "../../core/text.js";
 import { TicketField, type TicketProfile, VALID_TICKET_PROFILES } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
-import { CliError, UsageError } from "../cli-error.js";
+import { ChoiceArgument } from "../choice-argument.js";
+import { UsageError } from "../cli-error.js";
 import type { CommandEnvironment } from "../command-environment.js";
 import { ExitCode } from "../exit-codes.js";
 import { TicketLookup } from "../ticket-lookup.js";
 
-/** The `Valid profiles:` tail the usage prints, and the list the error message names. */
-const PROFILE_LIST = VALID_TICKET_PROFILES.join(" ");
-
-/**
- * The ONE place user-typed text becomes a `TicketProfile`. Mirrors `TicketStatusArgument`:
- * past this boundary the profile is a union member, so no downstream signature re-checks it.
- */
-export class TicketProfileArgument {
-    /** @throws CliError naming the accepted profiles, as `TicketStatusArgument.parsed` does. */
-    static parsed(text: string): TicketProfile {
-        const profile = VALID_TICKET_PROFILES.find((valid) => valid === text);
-        if (profile === undefined) {
-            throw new CliError(`invalid profile '${text}'. Must be one of: ${PROFILE_LIST}`);
-        }
-        return profile;
-    }
-}
+/** The ONE place user-typed text becomes a `TicketProfile` — see `ChoiceArgument`. */
+export const TicketProfileArgument = new ChoiceArgument("profile", VALID_TICKET_PROFILES);
 
 /**
  * `profile <id> <profile>`: set one ticket's optional `profile` field.
@@ -35,7 +21,7 @@ export class ProfileCommand {
         if (args.length < 2) {
             throw new UsageError([
                 `Usage: ${environment.programName} profile <id> <profile>`,
-                `Valid profiles: ${PROFILE_LIST}`,
+                `Valid profiles: ${TicketProfileArgument.list}`,
             ]);
         }
         return ProfileCommand.apply(store, args[0] as string, TicketProfileArgument.parsed(args[1] as string));
