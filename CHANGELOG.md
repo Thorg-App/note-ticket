@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- New `profile <id> <profile>` command: set an optional `profile` field to `standard` or `higher`. The field is never defaulted — a ticket has no profile until one is set explicitly — and an invalid value is rejected with the ticket left untouched, the same way an invalid `status` is.
 - New `punted` status (`ticket status <id> punted`): the ticket is deferred to the future. A punted ticket is not listed by `ready`/`blocked`, still appears in status-unfiltered listings (`ls`, `query`), and — unlike `closed` — keeps blocking tickets that depend on it.
 
 ### Changed

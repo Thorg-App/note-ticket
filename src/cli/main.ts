@@ -13,6 +13,7 @@ import { EditCommand } from "./commands/edit.js";
 import { HelpCommand } from "./commands/help.js";
 import { LinkCommand } from "./commands/link.js";
 import { LsCommand } from "./commands/ls.js";
+import { ProfileCommand } from "./commands/profile.js";
 import { QueryCommand } from "./commands/query.js";
 import { ReadyCommand } from "./commands/ready.js";
 import { ShowCommand } from "./commands/show.js";
@@ -88,6 +89,8 @@ class Cli {
                 return Cli.setStatus(args, environment, STATUS_WRAPPERS.close);
             case "reopen":
                 return Cli.setStatus(args, environment, STATUS_WRAPPERS.reopen);
+            case "profile":
+                return ProfileCommand.run(StoreResolver.forWriteCommand(), args, environment);
             case "undep":
                 return UndepCommand.run(StoreResolver.forWriteCommand(), args);
             case "link":
