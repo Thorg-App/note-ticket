@@ -1,4 +1,5 @@
 ---
+session_ids: [{"a": "claude", "type": "execution", "id": "696b908f-81da-4aa1-88ad-08bf64ca55df"}]
 working_dir: note-ticket
 id: nid_tal154ct9c0afwe3l8aacsar6_e
 title: "epics are not ready but if all the dependencies of epic are closed we should auto close the epic"
