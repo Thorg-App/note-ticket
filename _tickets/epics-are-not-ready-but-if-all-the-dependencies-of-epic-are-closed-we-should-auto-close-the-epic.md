@@ -1,11 +1,12 @@
 ---
+working_dir: note-ticket
 id: nid_tal154ct9c0afwe3l8aacsar6_e
 title: "epics are not ready but if all the dependencies of epic are closed we should auto close the epic"
-status: open
+status: in_progress
 deps: []
 links: []
 created_iso: 2026-09-14T23:21:48Z
-status_updated_iso: 2026-09-14T23:21:48Z
+status_updated_iso: 2026-09-14T23:24:27Z
 type: task
 priority: 3
 assignee: nickolaykondratyev
