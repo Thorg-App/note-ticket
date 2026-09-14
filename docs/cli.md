@@ -65,6 +65,7 @@ Commands:
   reopen <id>              Set status to open
   status <id> <status>     Update status (open|in_progress|closed|punted)
   profile <id> <profile>   Set processing profile (standard|higher)
+  auto-close-epics         Close every epic whose dependencies are all closed
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
   dep tree [--full] <id>   Show dependency tree (--full disables dedup)
   dep cycle                Find dependency cycles in open tickets
@@ -72,7 +73,7 @@ Commands:
   link <id> <id> [id...]   Link tickets together (symmetric)
   unlink <id> <target-id>  Remove link between tickets
   ls|list [--status=X] [-a X] [-T X]   List tickets
-  ready [-a X] [-T X]      List open/in-progress tickets with deps resolved
+  ready [-a X] [-T X]      List open/in-progress tickets with deps resolved (never epics)
   blocked [-a X] [-T X]    List open/in-progress tickets with unresolved deps
   closed [--limit=N] [-a X] [-T X] List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
@@ -140,6 +141,27 @@ nothing, so `ticket show "$UNSET_VAR"` fails instead of picking an arbitrary tic
 field is absent until you set it — it is never given a default — and any other value is
 rejected (`Error: invalid profile '<x>'`) with the ticket left untouched, exactly as an
 invalid `status` is.
+
+## Epics
+
+A ticket created with `-t epic` TRACKS other tickets instead of being work itself, and the
+tool treats it differently in two places:
+
+- **`ready` never lists an epic.** It lists work you can pick up, and an epic is not that.
+  `blocked` still lists one whose dependencies are not all closed, so an epic in flight
+  stays visible with the ids that are still holding it up.
+- **`auto-close-epics` closes every epic whose dependencies are ALL closed**, printing one
+  `Updated <id> -> closed` line per epic (or `No epics to auto-close`). Nothing closes an
+  epic implicitly — `close <id>` on the last dependency does NOT cascade — so the statement
+  "this body of work is finished" is only ever made when you ask for it.
+
+An epic with **no** dependencies is never auto-closed: it tracks nothing, so nothing about
+it is finished. One run settles nested epics too — an epic that depends only on other epics
+the same run closes is closed by that run — so running the command twice in a row closes
+nothing the second time. Undo one with `reopen <id>`.
+
+`type` is otherwise free text (`bug`/`feature`/`task`/`epic`/`chore` by convention) and is
+not validated; `epic` is the only value that changes behavior.
 
 ## Dependencies and links
 

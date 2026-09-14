@@ -57,6 +57,18 @@ export interface TicketManager {
     setStatus(id: string, status: TicketStatus): Ticket;
 
     /**
+     * Close every epic (`type: epic`) whose dependencies are ALL closed, and return them in
+     * their closed form. Nothing else in this interface ever closes an epic — the owner's rule
+     * is that the tool only makes that statement when asked to.
+     *
+     * An epic with NO dependencies is left alone: it tracks nothing, so nothing about it is
+     * finished. Closing runs to a fixed point, so an epic that depends only on other epics
+     * closed by the same call closes in that call too, and a second call right after closes
+     * nothing. Reversible one ticket at a time with `setStatus(id, "open")`.
+     */
+    autoCloseEpics(): readonly Ticket[];
+
+    /**
      * Append a timestamped note under the ticket's `## Notes` heading (added only if the
      * file has none). Only appends bytes — the frontmatter is untouched and a symlinked
      * ticket file stays a symlink.

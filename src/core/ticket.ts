@@ -42,6 +42,15 @@ export type TicketStatus = (typeof VALID_TICKET_STATUSES)[number];
 /** Priority when the field is absent — 0 is highest, 4 lowest. */
 export const DEFAULT_PRIORITY = "2";
 
+/**
+ * The `type` of a ticket that TRACKS other tickets instead of being work itself.
+ *
+ * WHY this one type is named while `bug`/`feature`/`chore` are not: `type` is free text that
+ * nothing validates, and only `epic` changes behavior — an epic is excluded from `ready`
+ * (nobody "works on" it) and is what `auto-close-epics` acts on.
+ */
+export const TICKET_TYPE_EPIC = "epic";
+
 /** The ordinary processing profile. */
 export const TICKET_PROFILE_STANDARD = "standard";
 /** A profile calling for heavier processing than the default. */
@@ -170,6 +179,16 @@ export class Ticket {
     /** `""` when the file carries no `assignee` line. */
     get assignee(): string {
         return this.frontmatter.getString(TicketField.ASSIGNEE) ?? "";
+    }
+
+    /** Free-text `type` as the file spells it (`task`, `epic`, …), `""` when absent. */
+    get type(): string {
+        return this.frontmatter.getString(TicketField.TYPE) ?? "";
+    }
+
+    /** A container ticket rather than work — see `TICKET_TYPE_EPIC`. */
+    get isEpic(): boolean {
+        return this.type === TICKET_TYPE_EPIC;
     }
 
     /** FULL id of the parent ticket, `""` when there is none. */
