@@ -29,6 +29,7 @@ Commands:
   reopen <id>              Set status to open
   status <id> <status>     Update status (open|in_progress|closed|punted)
   profile <id> <profile>   Set processing profile (standard|higher)
+  auto-close-epics         Close every epic whose dependencies are all closed
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
   dep tree [--full] <id>   Show dependency tree (--full disables dedup)
   dep cycle                Find dependency cycles in open tickets
@@ -36,7 +37,7 @@ Commands:
   link <id> <id> [id...]   Link tickets together (symmetric)
   unlink <id> <target-id>  Remove link between tickets
   ls|list [--status=X] [-a X] [-T X]   List tickets
-  ready [-a X] [-T X]      List open/in-progress tickets with deps resolved
+  ready [-a X] [-T X]      List open/in-progress tickets with deps resolved (never epics)
   blocked [-a X] [-T X]    List open/in-progress tickets with unresolved deps
   closed [--limit=N] [-a X] [-T X] List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket

@@ -22,8 +22,22 @@ function managerOf(nextId: string = ID_A): FileTicketManager {
     });
 }
 
-function ticketFileOf(id: string, title: string): string {
-    return ["---", `id: ${id}`, `title: "${title}"`, "status: open", "---", ""].join("\n");
+interface TicketFileFields {
+    readonly status?: string;
+    readonly type?: string;
+    readonly deps?: readonly string[];
+}
+
+function ticketFileOf(id: string, title: string, fields: TicketFileFields = {}): string {
+    const lines = ["---", `id: ${id}`, `title: "${title}"`, `status: ${fields.status ?? "open"}`];
+    if (fields.deps !== undefined) {
+        lines.push(`deps: [${fields.deps.join(", ")}]`);
+    }
+    if (fields.type !== undefined) {
+        lines.push(`type: ${fields.type}`);
+    }
+    lines.push("---", "");
+    return lines.join("\n");
 }
 
 beforeEach(() => {
@@ -109,6 +123,51 @@ describe("FileTicketManager.setStatus", () => {
         manager.setStatus(ID_A, "closed");
         const reloaded = manager.get(ID_A);
         assert.equal(reloaded.frontmatter.getString("closed_iso"), NOW);
+    });
+});
+
+describe("FileTicketManager.autoCloseEpics", () => {
+    /** An epic over one task, with the task's status as given. */
+    function epicOverTask(taskStatus: string): FileTicketManager {
+        const manager = managerOf();
+        mkdirSync(manager.ticketsDir, { recursive: true });
+        writeFileSync(join(manager.ticketsDir, "task.md"), ticketFileOf(ID_A, "Task", { status: taskStatus }));
+        writeFileSync(
+            join(manager.ticketsDir, "epic.md"),
+            ticketFileOf(ID_B, "Epic", { type: "epic", deps: [ID_A] }),
+        );
+        return manager;
+    }
+
+    it("returns the epic it closed", () => {
+        assert.deepEqual(
+            epicOverTask("closed").autoCloseEpics().map((epic) => epic.id),
+            [ID_B],
+        );
+    });
+
+    it("persists the closed status to disk", () => {
+        const manager = epicOverTask("closed");
+        manager.autoCloseEpics();
+        assert.equal(manager.get(ID_B).status, "closed");
+    });
+
+    it("stamps closed_iso from the clock", () => {
+        const manager = epicOverTask("closed");
+        manager.autoCloseEpics();
+        assert.equal(manager.get(ID_B).frontmatter.getString("closed_iso"), NOW);
+    });
+
+    it("leaves an epic with an open dependency alone", () => {
+        const manager = epicOverTask("open");
+        manager.autoCloseEpics();
+        assert.equal(manager.get(ID_B).status, "open");
+    });
+
+    it("is idempotent: a second run closes nothing", () => {
+        const manager = epicOverTask("closed");
+        manager.autoCloseEpics();
+        assert.deepEqual(manager.autoCloseEpics(), []);
     });
 });
 

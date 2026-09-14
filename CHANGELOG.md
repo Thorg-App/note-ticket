@@ -3,10 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- New `auto-close-epics` command: closes every epic (`type: epic`) whose dependencies are ALL closed, printing one `Updated <id> -> closed` line per epic (or `No epics to auto-close`). Nothing closes an epic implicitly — closing its last dependency does not cascade. An epic with no dependencies is never auto-closed, a `punted` epic is left alone, and one run settles nested epics, so an immediate second run closes nothing. Available to library consumers as `TicketManager.autoCloseEpics()`.
 - New `profile <id> <profile>` command: set an optional `profile` field to `standard` or `higher`. The field is never defaulted — a ticket has no profile until one is set explicitly — and an invalid value is rejected with the ticket left untouched, the same way an invalid `status` is.
 - New `punted` status (`ticket status <id> punted`): the ticket is deferred to the future. A punted ticket is not listed by `ready`/`blocked`, still appears in status-unfiltered listings (`ls`, `query`), and — unlike `closed` — keeps blocking tickets that depend on it.
 
 ### Changed
+- **`ready` no longer lists epics.** A `type: epic` ticket tracks other tickets instead of being work, so it is never offered up as something to pick up. `blocked` still lists an epic whose dependencies are not all closed, so an epic in flight stays visible with the ids holding it up.
 - Every new ticket now carries a `tags` line — `tags: []` when no `--tags` were given — so a fresh ticket is ready to hand-edit tags into, the same way `deps: []`/`links: []` already work. Previously the field was written only when tags were supplied.
 
 ### Removed

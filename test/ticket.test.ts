@@ -58,6 +58,22 @@ describe("Ticket accessors", () => {
         assert.equal(ticket.assignee, "Some One");
     });
 
+    it("reads the type", () => {
+        assert.equal(ticket.type, "bug");
+    });
+
+    it("reads an absent type as empty", () => {
+        assert.equal(Ticket.parse(PATH, '---\nid: a\n---\n').type, "");
+    });
+
+    it("is not an epic for any other type", () => {
+        assert.equal(ticket.isEpic, false);
+    });
+
+    it("is an epic when the type says so", () => {
+        assert.equal(Ticket.parse(PATH, "---\nid: a\ntype: epic\n---\n").isEpic, true);
+    });
+
     it("reads the parent", () => {
         assert.equal(ticket.parent, "nid_parent_e");
     });

@@ -22,7 +22,8 @@ User docs are split by surface: `README.md` is the landing page, `docs/cli.md` i
 - `git.ts` — the only place git is invoked: repo root (for `TicketsDirectory`) and `user.name` (`create`'s default assignee); every probe answers `undefined` rather than throwing
 - `slug.ts` — title → filename, collision suffixes
 - `text.ts` — `LINE_SEPARATOR`; import it rather than re-declaring `"\n"` in a seventh module
-- `dep-graph.ts` — `DepGraph`: ready/blocked, cycles, dependency-tree layout rows
+- `dep-graph.ts` — `DepGraph`: ready/blocked, completed epics, cycles, dependency-tree layout rows. `ready` excludes `type: epic` (divergence #23); `completedEpics()` is one round of "epic with >=1 dep, all closed"
+- `epic-auto-close.ts` — `EpicAutoClose.closedEpics()`: the pure auto-close run, iterated to a FIXED POINT so the command is idempotent. Shared by CLI `auto-close-epics` and `TicketManager.autoCloseEpics`
 - `ticket-relations.ts` — `TicketRelation.DEPENDENCY`/`.LINK`: the add/remove/membership rules for the `deps` and `links` id arrays, shared by `dep`/`undep`/`link`/`unlink`
 - `new-ticket.ts` — `CreateOptions` (raw new-ticket values) + `CreateOptionsDefaults` (the one place the defaults live) + `NewTicketFacts` + `NewTicketDocument` (the file a new ticket starts life as, key order = contract). Pure; shared by CLI `create` and `TicketManager.create`
 - `status-update.ts` — `StatusUpdate.applied()`: the pure status/timestamp frontmatter change (a new field lands FIRST, as bash's `sed` insert did). Shared by the `status` family and `TicketManager.setStatus`
@@ -48,7 +49,7 @@ User docs are split by surface: `README.md` is the landing page, `docs/cli.md` i
 - `exit-codes.ts` — every exit code in one place, including `128 + signal` for a signalled child
 - `broken-pipe.ts` — node ignores SIGPIPE, so a closed stdout is turned into exit 141 here
 
-**Deliberate divergences from the historical bash implementation** — the 21 numbered entries in `docs-internal/migration-to-ts-high-level.md` ("Deliberate divergences from bash"). ~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER, so the numbering is stable: never renumber, only append. Behavior changes there carry an owner approval id.
+**Deliberate divergences from the historical bash implementation** — the numbered entries in `docs-internal/migration-to-ts-high-level.md` ("Deliberate divergences from bash"). ~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER, so the numbering is stable: never renumber, only append. Behavior changes there carry an owner approval id.
 
 Data model: Filenames are title-based (e.g., `my-note.md`). The `id` field in frontmatter is the stable identifier. `title` is stored in frontmatter (double-quoted). No `# heading` for title in body.
 

@@ -268,7 +268,7 @@ Runtime dependency lists changed from `bash/coreutils/findutils/gawk` to
 
 ## Deliberate divergences from bash
 
-The 21 entries below are the places where the TS CLI intentionally does NOT reproduce bash.
+The entries below are the places where the TS CLI intentionally does NOT reproduce bash.
 **~14 comments in `src/`, `test/` and `features/steps/` cite them BY NUMBER**, so the numbering
 is frozen: never renumber, only append.
 
@@ -494,6 +494,19 @@ on 2026-07-30 (`nid_r3mp6uylht7t77iwxtuqvhxv2_e`), and #20 on
    **Approved by the owner on 2026-08-06 (`nid_dzwr4djukvk97b5sempjig34m_e`).**
    Pinned by `features/ticket_creation.feature` → "Ticket has empty tags by default" and
    `test/create-command.test.ts` → "writes the frontmatter order and a body of one blank line".
+
+23. **`ready` never lists a ticket whose `type` is `epic`.** bash had no notion of a ticket
+   type at all: `ready` listed every open/in_progress ticket with all deps closed, epics
+   included. An epic TRACKS work rather than being work, so offering one up as actionable
+   was noise in exactly the list that is supposed to be free of it. `blocked` is unchanged
+   and still lists an epic with unresolved deps, so one in flight stays visible with its
+   blockers. The epic that `ready` now drops is reached instead by the new
+   `auto-close-epics` command (`DepGraph.completedEpics` / `EpicAutoClose`), which is
+   EXPLICIT — no other code path ever closes an epic. `DepGraph.ready`'s filter cites this
+   number.
+   **Approved by the owner on 2026-09-14 (`nid_tal154ct9c0afwe3l8aacsar6_e`).**
+   Pinned by `features/ticket_epics.feature` → "Ready never lists an epic whose dependencies
+   are all closed" and `test/dep-graph.test.ts` → "excludes an epic whose deps are all closed".
 
 Two notes carried over from the harness README, still true of the TS side:
 `harness.HOSTILE_TITLES` deliberately contained no `|` (#3), no tab (#5) and no newline (#11).

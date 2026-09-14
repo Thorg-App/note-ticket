@@ -20,6 +20,7 @@ export {
     TICKET_STATUS_CLOSED,
     TICKET_STATUS_DONE,
     TICKET_STATUS_PUNTED,
+    TICKET_TYPE_EPIC,
     VALID_TICKET_STATUSES,
     type TicketStatus,
 } from "./core/ticket.js";
@@ -37,6 +38,9 @@ export { TicketStore, TicketsDirectory, type TicketsDirResolution } from "./core
 export { TicketId, IdResolver, type IdCandidate, type IdResolution } from "./core/id.js";
 export { TicketRelation, type RelationAddition } from "./core/ticket-relations.js";
 export { DepGraph, type BlockedTicket, type DepCycle, type TreeOptions, type TreeRow } from "./core/dep-graph.js";
+// The pure computation behind `TicketManager.autoCloseEpics`, for a consumer that wants to
+// PREVIEW a run (or apply it through its own persistence) instead of writing files.
+export { EpicAutoClose } from "./core/epic-auto-close.js";
 export { type Clock, SystemClock, FixedClock } from "./core/clock.js";
 export {
     CorruptTicketFileError,

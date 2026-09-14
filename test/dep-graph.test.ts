@@ -11,6 +11,7 @@ interface TicketSpec {
     readonly priority?: string;
     readonly parent?: string;
     readonly title?: string;
+    readonly type?: string;
 }
 
 /** Builds tickets from specs, in the given order (= enumeration order). */
@@ -29,6 +30,9 @@ function graphOf(specs: readonly TicketSpec[]): DepGraph {
             }
             if (spec.parent !== undefined) {
                 lines.push(`parent: ${spec.parent}`);
+            }
+            if (spec.type !== undefined) {
+                lines.push(`type: ${spec.type}`);
             }
             lines.push("---", "");
             return Ticket.parse(`/t/${spec.id}.md`, lines.join("\n"));
@@ -156,6 +160,115 @@ describe("DepGraph.ready", () => {
         ]);
         assert.deepEqual(idsOf(graph.ready()), ["b", "a"]);
     });
+
+    // Divergence #23: an epic is a container, not work, so it is never offered up as ready.
+    it("excludes an epic whose deps are all closed", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", deps: ["a"] },
+            { id: "a", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.ready()), []);
+    });
+
+    it("excludes an epic with no deps at all", () => {
+        assert.deepEqual(idsOf(graphOf([{ id: "e", type: "epic" }]).ready()), []);
+    });
+
+    it("keeps a non-epic type", () => {
+        assert.deepEqual(idsOf(graphOf([{ id: "a", type: "bug" }]).ready()), ["a"]);
+    });
+});
+
+describe("DepGraph.completedEpics", () => {
+    it("lists an epic whose every dep is closed", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", deps: ["a", "b"] },
+            { id: "a", status: "closed" },
+            { id: "b", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), ["e"]);
+    });
+
+    it("excludes an epic with a dep that is not closed", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", deps: ["a", "b"] },
+            { id: "a", status: "closed" },
+            { id: "b" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), []);
+    });
+
+    // A dangling id is not closed (module doc), so it must keep the epic open.
+    it("excludes an epic whose dep names no ticket", () => {
+        assert.deepEqual(idsOf(graphOf([{ id: "e", type: "epic", deps: ["ghost"] }]).completedEpics()), []);
+    });
+
+    it("excludes an epic with no deps, which tracks nothing", () => {
+        assert.deepEqual(idsOf(graphOf([{ id: "e", type: "epic" }]).completedEpics()), []);
+    });
+
+    it("excludes a non-epic whose deps are all closed", () => {
+        const graph = graphOf([
+            { id: "t", deps: ["a"] },
+            { id: "a", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), []);
+    });
+
+    it("includes an in_progress epic", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", status: "in_progress", deps: ["a"] },
+            { id: "a", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), ["e"]);
+    });
+
+    it("excludes an already closed epic", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", status: "closed", deps: ["a"] },
+            { id: "a", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), []);
+    });
+
+    // Punting is a deliberate deferral; auto-close must not undo it.
+    it("excludes a punted epic", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", status: "punted", deps: ["a"] },
+            { id: "a", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), []);
+    });
+
+    // The legacy `done` does not close a dependency anywhere else either (see Ticket.isFinished).
+    it("excludes an epic whose dep is the legacy done", () => {
+        const graph = graphOf([
+            { id: "e", type: "epic", deps: ["a"] },
+            { id: "a", status: "done" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), []);
+    });
+
+    it("orders by priority then id", () => {
+        const graph = graphOf([
+            { id: "b", type: "epic", priority: "1", deps: ["x"] },
+            { id: "c", type: "epic", priority: "0", deps: ["x"] },
+            { id: "a", type: "epic", priority: "1", deps: ["x"] },
+            { id: "x", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), ["c", "a", "b"]);
+    });
+
+    // One round only: `f` still has the open epic `e` as a dependency. EpicAutoClose is what
+    // iterates to the fixed point.
+    it("reports only the epics closable right now", () => {
+        const graph = graphOf([
+            { id: "f", type: "epic", deps: ["e"] },
+            { id: "e", type: "epic", deps: ["a"] },
+            { id: "a", status: "closed" },
+        ]);
+        assert.deepEqual(idsOf(graph.completedEpics()), ["e"]);
+    });
 });
 
 describe("DepGraph.blocked", () => {
@@ -168,6 +281,16 @@ describe("DepGraph.blocked", () => {
 
     it("lists only tickets with an unresolved dependency", () => {
         assert.deepEqual(graph.blocked().map((blocked) => blocked.ticket.id), ["a"]);
+    });
+
+    // Unlike `ready`, `blocked` keeps epics: an epic in flight must stay visible together
+    // with the ids still holding it up.
+    it("keeps an epic with an unresolved dependency", () => {
+        const withEpic = graphOf([
+            { id: "e", type: "epic", deps: ["a"] },
+            { id: "a" },
+        ]);
+        assert.deepEqual(withEpic.blocked().map((blocked) => blocked.ticket.id), ["e"]);
     });
 
     it("reports only the dependencies that are not closed", () => {

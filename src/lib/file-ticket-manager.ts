@@ -5,6 +5,7 @@
  */
 
 import { type Clock, SystemClock } from "../core/clock.js";
+import { EpicAutoClose } from "../core/epic-auto-close.js";
 import { Git } from "../core/git.js";
 import { type IdResolution, IdResolver, TicketId } from "../core/id.js";
 import { CreateOptionsDefaults, NewTicketDocument, type NewTicketFacts } from "../core/new-ticket.js";
@@ -95,6 +96,14 @@ export class FileTicketManager implements TicketManager {
         const updated = StatusUpdate.applied(this.get(id), status, this.clock.nowIso());
         this.store.save(updated);
         return updated;
+    }
+
+    autoCloseEpics(): readonly Ticket[] {
+        const closed = EpicAutoClose.closedEpics(this.list(), this.clock.nowIso());
+        for (const epic of closed) {
+            this.store.save(epic);
+        }
+        return closed;
     }
 
     addNote(id: string, note: string): void {

@@ -110,10 +110,31 @@ export class DepGraph {
         return this.byId.get(id)?.deps ?? [];
     }
 
-    /** Open/in_progress tickets whose every dependency is closed. */
+    /**
+     * Open/in_progress NON-EPIC tickets whose every dependency is closed — the actionable work.
+     *
+     * Epics are excluded because they are containers, not work: an epic whose dependencies are
+     * all closed is finished, not ready to be picked up (`completedEpics` is what acts on it),
+     * and one whose dependencies are not all closed never reaches here anyway. Divergence #23
+     * from bash, which had no notion of a ticket type.
+     */
     ready(): readonly Ticket[] {
         return this.activeTickets()
-            .filter((ticket) => ticket.deps.every((dep) => this.isClosed(dep)))
+            .filter((ticket) => !ticket.isEpic && this.hasEveryDepClosed(ticket))
+            .sort(TicketOrder.byPriorityThenId);
+    }
+
+    /**
+     * Open/in_progress epics whose every dependency is closed — the epics whose tracked work
+     * is over, and exactly what `auto-close-epics` / `TicketManager.autoCloseEpics` close.
+     *
+     * An epic with NO dependencies is NOT included: it tracks nothing, so "all its work is
+     * done" says nothing about it, and closing a freshly created epic the moment it is
+     * mentioned would be the opposite of what the field is for.
+     */
+    completedEpics(): readonly Ticket[] {
+        return this.activeTickets()
+            .filter((ticket) => ticket.isEpic && ticket.deps.length > 0 && this.hasEveryDepClosed(ticket))
             .sort(TicketOrder.byPriorityThenId);
     }
 
@@ -166,6 +187,10 @@ export class DepGraph {
             return [];
         }
         return new TreeLayout(this, rootId, options).rows();
+    }
+
+    private hasEveryDepClosed(ticket: Ticket): boolean {
+        return ticket.deps.every((dep) => this.isClosed(dep));
     }
 
     private activeTickets(): Ticket[] {

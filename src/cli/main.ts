@@ -5,6 +5,7 @@ import { BrokenPipe } from "./broken-pipe.js";
 import { CliError } from "./cli-error.js";
 import { CommandEnvironment } from "./command-environment.js";
 import { AddNoteCommand } from "./commands/add-note.js";
+import { AutoCloseEpicsCommand } from "./commands/auto-close-epics.js";
 import { BlockedCommand } from "./commands/blocked.js";
 import { ClosedCommand } from "./commands/closed.js";
 import { CreateCommand } from "./commands/create.js";
@@ -91,6 +92,10 @@ class Cli {
                 return Cli.setStatus(args, environment, STATUS_WRAPPERS.reopen);
             case "profile":
                 return ProfileCommand.run(StoreResolver.forWriteCommand(), args, environment);
+            // No arguments: the whole tickets directory is the subject. Extra words are
+            // ignored, as every other command here ignores what it does not recognise.
+            case "auto-close-epics":
+                return AutoCloseEpicsCommand.run(StoreResolver.forWriteCommand(), environment);
             case "undep":
                 return UndepCommand.run(StoreResolver.forWriteCommand(), args);
             case "link":

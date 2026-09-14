@@ -287,6 +287,15 @@ def step_ticket_has_status(context, ticket_id, status):
     ticket_path.write_text(content)
 
 
+@given(r'ticket "(?P<ticket_id>[^"]+)" has type "(?P<ticket_type>[^"]+)"')
+def step_ticket_has_type(context, ticket_id, ticket_type):
+    """Set the ticket's `type` field (created tickets are `task`)."""
+    ticket_path = find_ticket_file(context, ticket_id)
+    content = ticket_path.read_text()
+    content = re.sub(r'^type: \S+', f'type: {ticket_type}', content, count=1, flags=re.MULTILINE)
+    ticket_path.write_text(content)
+
+
 @given(r'ticket "(?P<ticket_id>[^"]+)" depends on "(?P<dep_id>[^"]+)"')
 def step_ticket_depends_on(context, ticket_id, dep_id):
     """Add dependency to ticket."""

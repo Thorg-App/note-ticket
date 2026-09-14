@@ -42,7 +42,7 @@ Installing the package also puts the `ticket` CLI on your bin path. Its usage is
 | **`TicketField`** | The on-disk frontmatter key names, in one place. |
 | **`TicketNotFoundError` / `AmbiguousTicketIdError`** | Id resolution failures. |
 | **`CorruptTicketFileError` / `FileSystemError`** | A `.md` file that is not a ticket / an OS-level failure. |
-| **`DepGraph`** | Dependency graph over a set of tickets: ready, blocked, cycles, tree. |
+| **`DepGraph`** | Dependency graph over a set of tickets: ready, blocked, completed epics, cycles, tree. |
 | **`TicketRelation`** | The add/remove rules for the `deps` and `links` id arrays. |
 
 Lower-level pieces (`TicketStore`, `TicketsDirectory`, `IdResolver`, `TicketId`, `Frontmatter`,
@@ -88,6 +88,7 @@ const manager = FileTicketManager.forDirectory(tmpDir, {
 | `get(id)` | `Ticket` | Partial ids allowed; see **Id resolution**. |
 | `create(input)` | `Ticket` | Writes a new file at the TOP level of the tickets dir. |
 | `setStatus(id, status)` | `Ticket` | Restamps `status_updated_iso`, and `closed_iso` (which exists exactly while the ticket is closed). |
+| `autoCloseEpics()` | `readonly Ticket[]` | Closes every epic whose deps are all closed; see **Epics**. |
 | `addNote(id, note)` | `void` | APPENDS a timestamped note under `## Notes`; touches nothing else. |
 | `save(ticket)` | `void` | Persists a ticket you edited through the `with…` accessors. |
 
@@ -156,6 +157,29 @@ type error. It deliberately does NOT describe what is on disk: frontmatter is ha
 `Ticket.status` is plain `string` (it may hold the legacy `done`, or a typo). `VALID_TICKET_STATUSES`
 is the runtime list, for validating text you got from a user.
 
+### Epics
+
+A ticket with `type: "epic"` tracks other tickets instead of being work itself.
+`autoCloseEpics()` closes every epic whose dependencies are **all** closed and returns them
+in their closed form; nothing else in the API ever closes an epic, so the statement "this
+body of work is finished" is only made when your app asks for it.
+
+```typescript
+for (const epic of manager.autoCloseEpics()) {
+    console.log(`closed ${epic.id} — ${epic.title}`);
+}
+```
+
+- An epic with **no** dependencies is left alone: it tracks nothing.
+- A `punted` epic is left alone; only `open`/`in_progress` epics are candidates.
+- The run settles to a **fixed point** — an epic depending only on other epics the same run
+  closes is closed by that run — so an immediate second call returns an empty list.
+- Every ticket a run closes carries the same `closed_iso`: one call is one event.
+- `DepGraph.ready()` **excludes epics**, so an epic never shows up as actionable work.
+  `DepGraph.completedEpics()` is the preview — exactly what a single round would close —
+  and `EpicAutoClose.closedEpics(tickets, nowIso)` is the whole pure computation, for
+  previewing a full run without writing anything.
+
 ## `Ticket`
 
 Immutable. Every `with…` method returns a NEW `Ticket` and changes nothing on disk; persist with
@@ -172,6 +196,7 @@ Immutable. Every `with…` method returns a NEW `Ticket` and changes nothing on 
 | `isClosed` / `isFinished` | `boolean` | `closed` / `closed`-or-legacy-`done`. Dependencies block until `isClosed`. |
 | `deps` / `links` / `tags` | `readonly string[]` | File order. `deps` is NOT deduplicated — a hand-edited file may repeat an id. |
 | `priority` | `string` | Defaults to `"2"` when the field is absent. |
+| `type` / `isEpic` | `string` / `boolean` | Raw text (`""` when absent); `isEpic` is `type === "epic"`. |
 | `assignee` / `parent` | `string` | `""` when absent. |
 | `body` | `string` | Markdown after the closing `---`. |
 | `frontmatter` | `Frontmatter` | The whole block, for fields with no named accessor. |
@@ -228,7 +253,8 @@ import { DepGraph } from "note-ticket";
 
 const graph = DepGraph.build(manager.list());
 
-graph.ready();                  // readonly Ticket[]      open/in_progress, every dep closed
+graph.ready();                  // readonly Ticket[]      open/in_progress NON-EPIC, every dep closed
+graph.completedEpics();         // readonly Ticket[]      open/in_progress epics, >=1 dep, all closed
 graph.blocked();                // readonly BlockedTicket[]  { ticket, blockerIds }
 graph.blockerIdsOf(id);         // readonly string[]      deps that are not closed
 graph.activeDependents(id);     // readonly Ticket[]      what closing `id` would unblock
@@ -237,7 +263,7 @@ graph.excludingClosed().cycles();  // readonly DepCycle[]  { pathIds, memberIds 
 graph.tree(rootId, { full: false });  // readonly TreeRow[]  { id, depth, prefix, connector }
 ```
 
-`ready`/`blocked` are ordered by priority then id, as the CLI lists them. `tree` returns rows,
+`ready`/`blocked`/`completedEpics` are ordered by priority then id, as the CLI lists them. `tree` returns rows,
 not text: render one line as `prefix + connector + <whatever you want to show>`. With
 `full: false` each ticket appears once, at its deepest position; `full: true` draws every path.
 `tree` returns an empty list for an unknown root.
@@ -271,6 +297,8 @@ Reach for these when `TicketManager` is not enough:
 | `TicketStore` | Discovery/load/save over one directory: `collectFiles`, `load`, `loadAll`, `loadRecent`, `save`, `appendTo`. `collectFiles` is the single source of truth for "what is a ticket file". |
 | `IdResolver` / `IdCandidate` / `IdResolution` | Id resolution as DATA (`resolved` / `not-found` / `ambiguous`) instead of thrown errors — useful for building your own message. |
 | `TicketId.generate()` | A fresh `nid_<25 chars of [a-z0-9]>_e`. |
+| `EpicAutoClose.closedEpics(tickets, nowIso)` | The whole auto-close run as a PURE function: the epics it would close, already stamped. Save them yourself, or just show them. |
+| `TICKET_TYPE_EPIC` | The `type` value that makes a ticket an epic — the one type that changes behavior. |
 | `Frontmatter`, `FrontmatterValue`, `TicketDocument`, `FrontmatterEntry`, `FrontmatterJsonValue` | The frontmatter layer `Ticket.frontmatter` / `Ticket.document` hand back. Values are RAW; `FrontmatterValue` interprets them. |
 | `Clock`, `SystemClock`, `FixedClock` | The timestamp source, injectable through `FileTicketManagerOptions`. |
 
