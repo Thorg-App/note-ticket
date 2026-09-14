@@ -1,6 +1,6 @@
 ---
 closed_iso: 2026-09-14T23:33:22Z
-session_ids: [{"a": "claude", "type": "execution", "id": "696b908f-81da-4aa1-88ad-08bf64ca55df"}]
+session_ids: [{"a": "claude", "type": "execution", "id": "696b908f-81da-4aa1-88ad-08bf64ca55df"}, {"a": "claude", "type": "review", "id": "99a87bb9-2965-4645-888c-234b69e21c3e"}]
 working_dir: note-ticket
 id: nid_tal154ct9c0afwe3l8aacsar6_e
 title: "epics are not ready but if all the dependencies of epic are closed we should auto close the epic"
