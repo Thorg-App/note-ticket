@@ -85,3 +85,9 @@ either way. Clock read once per run, so every epic a run closes shares one `clos
 subsection plus `autoCloseEpics`/`completedEpics`/`type`/`isEpic`/`EpicAutoClose` rows;
 help text and CHANGELOG updated. The `ready` change is **divergence #23** in
 `docs-internal/migration-to-ts-high-level.md`, approved on this ticket id.
+
+## Notes
+
+**2026-09-14T23:36:39Z**
+
+__READY_AS_IS__: epics excluded from ready + fixed-point auto-close; CLI/lib parity, thorough tests, docs consistent, make test + build-lib green; no bugs found
