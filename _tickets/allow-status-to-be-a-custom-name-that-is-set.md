@@ -1,6 +1,6 @@
 ---
 closed_iso: 2026-09-16T15:57:19Z
-session_ids: [{"a": "claude", "type": "execution", "id": "6c9dc888-84fe-4b3f-b6f2-a159cbee5277"}]
+session_ids: [{"a": "claude", "type": "execution", "id": "6c9dc888-84fe-4b3f-b6f2-a159cbee5277"}, {"a": "claude", "type": "review", "id": "87604c51-ca39-453f-8b41-1a04fc716272"}]
 working_dir: note-ticket
 id: nid_55ulmcqjp79p41jsgwctgg2qj_e
 title: "Allow status to be a custom name that is set"
