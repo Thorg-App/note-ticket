@@ -1,11 +1,12 @@
 ---
+working_dir: note-ticket
 id: nid_55ulmcqjp79p41jsgwctgg2qj_e
 title: "Allow status to be a custom name that is set"
-status: open
+status: in_progress
 deps: []
 links: []
 created_iso: 2026-09-16T15:52:58Z
-status_updated_iso: 2026-09-16T15:52:58Z
+status_updated_iso: 2026-09-16T15:54:26Z
 type: task
 priority: 3
 assignee: nickolaykondratyev
