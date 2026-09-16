@@ -1,4 +1,5 @@
 ---
+session_ids: [{"a": "claude", "type": "execution", "id": "6c9dc888-84fe-4b3f-b6f2-a159cbee5277"}]
 working_dir: note-ticket
 id: nid_55ulmcqjp79p41jsgwctgg2qj_e
 title: "Allow status to be a custom name that is set"
