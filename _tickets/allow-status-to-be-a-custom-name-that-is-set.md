@@ -31,3 +31,9 @@ Assumptions made (non-interactive):
 - `invalid` is now a *valid* custom status, so the existing "invalid status" BDD scenarios now use `in:valid` (same intent, still rejected).
 - `done` (legacy) is not rejected as a custom name; it keeps its existing legacy meaning in `closed` listing.
 - Library `setStatus` accepts custom statuses via `CustomTicketStatusParser.of("p2")` (parity with the CLI).
+
+## Notes
+
+**2026-09-16T15:59:33Z**
+
+__READY_AS_IS__: focused, well-tested custom-status change; dep-graph correctly parks custom statuses; make test + unit-test both green; no bugs found.
