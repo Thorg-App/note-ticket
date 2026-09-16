@@ -27,6 +27,8 @@ import type {
     RelationAddition,
     TicketManager,
     TicketStatus,
+    BuiltInTicketStatus,
+    CustomTicketStatus,
     TicketsDirResolution,
     TreeOptions,
     TreeRow,
@@ -46,6 +48,9 @@ const EXPORTED_VALUES = [
     "TICKET_STATUS_PUNTED",
     "TICKET_TYPE_EPIC",
     "VALID_TICKET_STATUSES",
+    "CustomTicketStatusParser",
+    "InvalidTicketStatusError",
+    "CUSTOM_TICKET_STATUS_RULE",
     "Frontmatter",
     "FrontmatterValue",
     "TicketDocument",
@@ -89,6 +94,8 @@ describe("package entry point", () => {
             relationAddition?: RelationAddition;
             manager?: TicketManager;
             status?: TicketStatus;
+            builtInStatus?: BuiltInTicketStatus;
+            customStatus?: CustomTicketStatus;
             ticketsDir?: TicketsDirResolution;
             treeOptions?: TreeOptions;
             treeRow?: TreeRow;

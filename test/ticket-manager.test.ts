@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { FixedClock } from "../src/core/clock.js";
+import { CustomTicketStatusParser } from "../src/core/custom-ticket-status.js";
 import { FileTicketManager } from "../src/lib/file-ticket-manager.js";
 import { AmbiguousTicketIdError, TicketNotFoundError } from "../src/lib/ticket-manager-error.js";
 
@@ -123,6 +124,15 @@ describe("FileTicketManager.setStatus", () => {
         manager.setStatus(ID_A, "closed");
         const reloaded = manager.get(ID_A);
         assert.equal(reloaded.frontmatter.getString("closed_iso"), NOW);
+    });
+});
+
+describe("FileTicketManager.setStatus with a custom status", () => {
+    it("persists the custom status", () => {
+        const manager = managerOf();
+        manager.create({ title: "Work" });
+        manager.setStatus(ID_A, CustomTicketStatusParser.of("p2"));
+        assert.equal(manager.get(ID_A).status, "p2");
     });
 });
 

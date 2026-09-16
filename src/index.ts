@@ -22,8 +22,15 @@ export {
     TICKET_STATUS_PUNTED,
     TICKET_TYPE_EPIC,
     VALID_TICKET_STATUSES,
+    type BuiltInTicketStatus,
     type TicketStatus,
 } from "./core/ticket.js";
+export {
+    CustomTicketStatusParser,
+    InvalidTicketStatusError,
+    type CustomTicketStatus,
+    CUSTOM_TICKET_STATUS_RULE,
+} from "./core/custom-ticket-status.js";
 export type { CreateOptions } from "./core/new-ticket.js";
 // The frontmatter layer `Ticket.frontmatter` / `Ticket.document` hand back: without these a
 // consumer cannot name the type of what those accessors return.

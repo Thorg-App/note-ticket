@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Custom statuses: `ticket status <id> p2` accepts any name made of letters, digits, `_` and `-` (starting with a letter or digit) besides the built-in `open`/`in_progress`/`closed`/`punted`. A ticket in a custom status is not open — `ready`/`blocked` never list it — and it keeps blocking its dependents. `ticket help` says so. Library consumers pass `CustomTicketStatusParser.of("p2")` to `setStatus`.
 - New `auto-close-epics` command: closes every epic (`type: epic`) whose dependencies are ALL closed, printing one `Updated <id> -> closed` line per epic (or `No epics to auto-close`). Nothing closes an epic implicitly — closing its last dependency does not cascade. An epic with no dependencies is never auto-closed, a `punted` epic is left alone, and one run settles nested epics, so an immediate second run closes nothing. Available to library consumers as `TicketManager.autoCloseEpics()`.
 - New `profile <id> <profile>` command: set an optional `profile` field to `standard` or `higher`. The field is never defaulted — a ticket has no profile until one is set explicitly — and an invalid value is rejected with the ticket left untouched, the same way an invalid `status` is.
 - New `punted` status (`ticket status <id> punted`): the ticket is deferred to the future. A punted ticket is not listed by `ready`/`blocked`, still appears in status-unfiltered listings (`ls`, `query`), and — unlike `closed` — keeps blocking tickets that depend on it.

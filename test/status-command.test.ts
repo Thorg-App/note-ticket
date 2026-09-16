@@ -7,7 +7,8 @@ import { Ticket } from "../src/core/ticket.js";
 import { TicketStore } from "../src/core/ticket-store.js";
 import { UsageError } from "../src/cli/cli-error.js";
 import { CommandEnvironment } from "../src/cli/command-environment.js";
-import { STATUS_WRAPPERS, StatusCommand } from "../src/cli/commands/status.js";
+import { CliError } from "../src/cli/cli-error.js";
+import { STATUS_WRAPPERS, StatusCommand, TicketStatusArgument } from "../src/cli/commands/status.js";
 
 const NOW = "2026-07-30T11:00:00Z";
 const CREATED = "2024-01-01T00:00:00Z";
@@ -94,14 +95,14 @@ describe("StatusCommand argument handling", () => {
     it("prints the invoked program name in the status usage line", () => {
         assert.deepEqual(usageLinesOf(() => StatusCommand.run(UNUSED_STORE, [], environment())), [
             "Usage: tk status <id> <status>",
-            "Valid statuses: open in_progress closed punted",
+            "Valid statuses: open in_progress closed punted, or a custom status (e.g. p2)",
         ]);
     });
 
     it("rejects a status command missing its status argument", () => {
         assert.deepEqual(usageLinesOf(() => StatusCommand.run(UNUSED_STORE, ["some-id"], environment())), [
             "Usage: tk status <id> <status>",
-            "Valid statuses: open in_progress closed punted",
+            "Valid statuses: open in_progress closed punted, or a custom status (e.g. p2)",
         ]);
     });
 
@@ -117,5 +118,27 @@ describe("StatusCommand argument handling", () => {
             [STATUS_WRAPPERS.start.status, STATUS_WRAPPERS.close.status, STATUS_WRAPPERS.reopen.status],
             ["in_progress", "closed", "open"],
         );
+    });
+});
+
+describe("TicketStatusArgument.parsed", () => {
+    it("GIVEN a built-in status THEN it is returned as is", () => {
+        assert.equal(TicketStatusArgument.parsed("punted"), "punted");
+    });
+
+    it("GIVEN a custom status name THEN it is returned as is", () => {
+        assert.equal(TicketStatusArgument.parsed("p2"), "p2");
+    });
+
+    it("GIVEN text that is neither THEN the message names built-ins and the custom rule", () => {
+        assert.throws(() => TicketStatusArgument.parsed("a b"), (error: unknown) => {
+            assert.ok(error instanceof CliError);
+            assert.equal(
+                error.message,
+                "invalid status 'a b'. Must be one of: open in_progress closed punted, " +
+                    "or a custom status of letters, digits, '_' and '-', starting with a letter or digit",
+            );
+            return true;
+        });
     });
 });

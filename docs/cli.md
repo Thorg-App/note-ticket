@@ -63,7 +63,8 @@ Commands:
   start <id>               Set status to in_progress
   close <id>               Set status to closed
   reopen <id>              Set status to open
-  status <id> <status>     Update status (open|in_progress|closed|punted)
+  status <id> <status>     Update status (open|in_progress|closed|punted), or a custom
+                           name like p2 that ready/blocked never pick up
   profile <id> <profile>   Set processing profile (standard|higher)
   auto-close-epics         Close every epic whose dependencies are all closed
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
@@ -134,6 +135,13 @@ Every command that takes an `<id>` accepts a partial one: an exact match wins, o
 the id must contain the text you typed as a substring, and more than one match at the
 winning tier is an error. Surrounding whitespace is trimmed. An **empty** id matches
 nothing, so `ticket show "$UNSET_VAR"` fails instead of picking an arbitrary ticket.
+
+## Custom statuses
+
+Besides `open`, `in_progress`, `closed` and `punted`, `status <id> <status>` accepts a custom
+name such as `p2` or `backlog` — letters, digits, `_` and `-`, starting with a letter or digit.
+A ticket in a custom status is **not open**: `ready` and `blocked` never list it, and (like
+`punted`) it keeps blocking the tickets that depend on it. `ls --status=p2` and `query` find it.
 
 ## Profile
 
