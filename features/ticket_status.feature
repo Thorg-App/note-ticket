@@ -61,16 +61,42 @@ Feature: Ticket Status Management
     And ticket "test-0001" should have field "status" with value "open"
 
   Scenario: Invalid status value
-    When I run "ticket status test-0001 invalid"
+    When I run "ticket status test-0001 in:valid"
     Then the command should fail
-    And the output should contain "Error: invalid status 'invalid'"
+    And the output should contain "Error: invalid status 'in:valid'"
     And the output should contain "open in_progress closed punted"
+
+  Scenario: Invalid status value names the custom status rule
+    When I run "ticket status test-0001 in:valid"
+    Then the command should fail
+    And the output should contain "or a custom status of letters, digits, '_' and '-'"
+
+  Scenario: Set status to a custom name
+    When I run "ticket status test-0001 p2"
+    Then the command should succeed
+    And the output should be "Updated test-0001 -> p2"
+    And ticket "test-0001" should have field "status" with value "p2"
+
+  Scenario: A custom status with whitespace is rejected and leaves the ticket untouched
+    When I run "ticket status test-0001 'p 2'"
+    Then the command should fail
+    And ticket "test-0001" should have field "status" with value "open"
+
+  Scenario: A custom status starting with a dash is rejected
+    When I run "ticket status test-0001 -p2"
+    Then the command should fail
+    And the output should contain "Error: invalid status '-p2'"
+
+  Scenario: Help states that a status can be a custom name
+    When I run "ticket help"
+    Then the command should succeed
+    And the output should contain "or a custom"
 
   Scenario: Status command with no arguments prints usage and the valid statuses
     When I run "ticket status"
     Then the command should fail
     And stderr should contain "status <id> <status>"
-    And stderr should contain "Valid statuses: open in_progress closed punted"
+    And stderr should contain "Valid statuses: open in_progress closed punted, or a custom status (e.g. p2)"
 
   Scenario: Status command with an id but no status prints usage
     When I run "ticket status test-0001"
@@ -84,7 +110,7 @@ Feature: Ticket Status Management
     And stderr should contain "close <id>"
 
   Scenario: An invalid status leaves the ticket untouched
-    When I run "ticket status test-0001 invalid"
+    When I run "ticket status test-0001 in:valid"
     Then the command should fail
     And ticket "test-0001" should have field "status" with value "open"
 
@@ -96,9 +122,9 @@ Feature: Ticket Status Management
   # The status is validated BEFORE the id is resolved, so the message names the mistake the
   # user can actually see in their command line.
   Scenario: An invalid status is reported even when the ticket does not exist
-    When I run "ticket status nonexistent invalid"
+    When I run "ticket status nonexistent in:valid"
     Then the command should fail
-    And the output should contain "Error: invalid status 'invalid'"
+    And the output should contain "Error: invalid status 'in:valid'"
 
   # The confirmation names the RESOLVED id, not the abbreviation typed: with an exact id the
   # two strings coincide, so only a partial id can pin it.

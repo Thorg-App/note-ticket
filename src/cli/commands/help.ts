@@ -27,7 +27,8 @@ Commands:
   start <id>               Set status to in_progress
   close <id>               Set status to closed
   reopen <id>              Set status to open
-  status <id> <status>     Update status (open|in_progress|closed|punted)
+  status <id> <status>     Update status (open|in_progress|closed|punted), or a custom
+                           name like p2 that ready/blocked never pick up
   profile <id> <profile>   Set processing profile (standard|higher)
   auto-close-epics         Close every epic whose dependencies are all closed
   dep <id> <dep-id>        Add dependency (id depends on dep-id)

@@ -1,3 +1,4 @@
+import { CUSTOM_TICKET_STATUS_RULE, CustomTicketStatusParser } from "../../core/custom-ticket-status.js";
 import { StatusUpdate } from "../../core/status-update.js";
 import {
     TICKET_STATUS_CLOSED,
@@ -8,7 +9,7 @@ import {
 } from "../../core/ticket.js";
 import type { TicketStore } from "../../core/ticket-store.js";
 import { ChoiceArgument } from "../choice-argument.js";
-import { UsageError } from "../cli-error.js";
+import { CliError, UsageError } from "../cli-error.js";
 import type { CommandEnvironment } from "../command-environment.js";
 import { ExitCode } from "../exit-codes.js";
 import { TicketLookup } from "../ticket-lookup.js";
@@ -25,8 +26,32 @@ export interface StatusWrapper {
     readonly status: TicketStatus;
 }
 
-/** The ONE place user-typed text becomes a `TicketStatus` — see `ChoiceArgument`. */
-export const TicketStatusArgument = new ChoiceArgument("status", VALID_TICKET_STATUSES);
+/**
+ * The ONE place user-typed text becomes a `TicketStatus`: a built-in status, or any
+ * `CustomTicketStatus` name (`p2`). WHY not a `ChoiceArgument` like `profile`: the set is open.
+ */
+export class TicketStatusArgument {
+    private static readonly BUILT_IN = new ChoiceArgument("status", VALID_TICKET_STATUSES);
+
+    /** The usage tail after `Valid statuses: `. */
+    static get list(): string {
+        return `${TicketStatusArgument.BUILT_IN.list}, or a custom status (e.g. p2)`;
+    }
+
+    /** @throws CliError naming both the built-in statuses and the custom-name rule. */
+    static parsed(text: string): TicketStatus {
+        if (VALID_TICKET_STATUSES.some((builtIn) => builtIn === text)) {
+            return TicketStatusArgument.BUILT_IN.parsed(text);
+        }
+        if (CustomTicketStatusParser.isValid(text)) {
+            return CustomTicketStatusParser.of(text);
+        }
+        throw new CliError(
+            `invalid status '${text}'. Must be one of: ${TicketStatusArgument.BUILT_IN.list}, ` +
+                `or a custom status of ${CUSTOM_TICKET_STATUS_RULE}`,
+        );
+    }
+}
 
 export const STATUS_WRAPPERS = {
     start: { command: "start", status: TICKET_STATUS_IN_PROGRESS },

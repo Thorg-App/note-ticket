@@ -3,6 +3,7 @@
  * loaded from. Field names mirror the on-disk keys.
  */
 
+import type { CustomTicketStatus } from "./custom-ticket-status.js";
 import { Frontmatter, FrontmatterValue, type FrontmatterJsonValue, TicketDocument } from "./frontmatter.js";
 
 // Statuses `create`/`status` accept. `done` also occurs in legacy files.
@@ -21,7 +22,7 @@ export const TICKET_STATUS_DONE = "done";
  */
 export const TICKET_STATUS_PUNTED = "punted";
 
-/** The statuses `TicketStatus` is the union of — the argument `setStatus`/`ticket status` take. */
+/** The built-in statuses. `TicketStatus` also admits a validated `CustomTicketStatus`. */
 export const VALID_TICKET_STATUSES = [
     TICKET_STATUS_OPEN,
     TICKET_STATUS_IN_PROGRESS,
@@ -29,15 +30,19 @@ export const VALID_TICKET_STATUSES = [
     TICKET_STATUS_PUNTED,
 ] as const;
 
+/** One of `VALID_TICKET_STATUSES`. */
+export type BuiltInTicketStatus = (typeof VALID_TICKET_STATUSES)[number];
+
 /**
- * A status this CLI is willing to WRITE, as a compile-time union: a mistyped status literal
- * anywhere downstream is a type error rather than a runtime `invalid status`.
+ * A status this CLI is willing to WRITE: a built-in one, or a custom name that passed
+ * `CustomTicketStatusParser.of`. A mistyped status literal anywhere downstream is a type error
+ * rather than a runtime `invalid status`, because a raw string is not a `CustomTicketStatus`.
  *
  * WHY it does not describe what is ON DISK: frontmatter is hand-editable, so `Ticket.status`
  * is arbitrary text (the legacy `done`, or a typo). Text becomes a `TicketStatus` in exactly
  * one place — the parse at the CLI boundary — and everything past that point is typed.
  */
-export type TicketStatus = (typeof VALID_TICKET_STATUSES)[number];
+export type TicketStatus = BuiltInTicketStatus | CustomTicketStatus;
 
 /** Priority when the field is absent — 0 is highest, 4 lowest. */
 export const DEFAULT_PRIORITY = "2";

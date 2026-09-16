@@ -38,7 +38,7 @@ Installing the package also puts the `ticket` CLI on your bin path. Its usage is
 | **`FileTicketManager`** | The file-backed implementation of `TicketManager`. |
 | **`Ticket`** | One ticket file in memory. Immutable — `with…` returns a new one. |
 | **`NewTicketInput`** | What `create` takes (`Partial<CreateOptions>`). |
-| **`TicketStatus`** | `"open" \| "in_progress" \| "closed" \| "punted"` — the statuses this tool WRITES. |
+| **`TicketStatus`** | `"open" \| "in_progress" \| "closed" \| "punted"`, or a `CustomTicketStatus` (e.g. `p2`) — the statuses this tool WRITES. |
 | **`TicketField`** | The on-disk frontmatter key names, in one place. |
 | **`TicketNotFoundError` / `AmbiguousTicketIdError`** | Id resolution failures. |
 | **`CorruptTicketFileError` / `FileSystemError`** | A `.md` file that is not a ticket / an OS-level failure. |
@@ -152,8 +152,11 @@ import { TICKET_STATUS_CLOSED, VALID_TICKET_STATUSES } from "note-ticket";
 manager.setStatus(id, TICKET_STATUS_CLOSED);   // or the literal "closed"
 ```
 
-`TicketStatus` is the compile-time union of the three statuses this tool writes, so a typo is a
-type error. It deliberately does NOT describe what is on disk: frontmatter is hand-editable, so
+`TicketStatus` is the compile-time union of the built-in statuses this tool writes plus a
+branded `CustomTicketStatus`, so a typo is a type error. A custom status name (`p2`, `backlog`) is
+built with `CustomTicketStatusParser.of("p2")`, which throws `InvalidTicketStatusError` unless the
+text is letters, digits, `_` and `-`, starting with a letter or digit. A custom status is never
+`ready`/`blocked`, and — like `punted` — still blocks tickets that depend on it. It deliberately does NOT describe what is on disk: frontmatter is hand-editable, so
 `Ticket.status` is plain `string` (it may hold the legacy `done`, or a typo). `VALID_TICKET_STATUSES`
 is the runtime list, for validating text you got from a user.
 

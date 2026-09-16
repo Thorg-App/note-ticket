@@ -85,6 +85,23 @@ Feature: Ticket Listing
 
   # A punted ticket is deferred work: not actionable itself, and unlike a closed one it
   # still blocks its dependents (ticket nid_t9w0uv9z3eytl974830ke884n_e).
+  # A custom status (e.g. `p2`, ticket nid_55ulmcqjp79p41jsgwctgg2qj_e) is parked the same way.
+  Scenario: Ready excludes a ticket set to a custom status
+    Given a ticket exists with ID "ready-001" and title "Parked ticket"
+    When I run "ticket status ready-001 p2"
+    And I run "ticket ready"
+    Then the command should succeed
+    And the output should not contain "ready-001"
+
+  Scenario: Blocked excludes a ticket set to a custom status
+    Given a ticket exists with ID "block-001" and title "Parked blocked"
+    And a ticket exists with ID "block-002" and title "Blocker"
+    And ticket "block-001" depends on "block-002"
+    When I run "ticket status block-001 p2"
+    And I run "ticket blocked"
+    Then the command should succeed
+    And the output should not contain "block-001"
+
   Scenario: Ready excludes punted tickets
     Given a ticket exists with ID "ready-001" and title "Punted ticket"
     And ticket "ready-001" has status "punted"
