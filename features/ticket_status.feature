@@ -226,7 +226,7 @@ Feature: Ticket Status Management
     And stderr should contain "permission denied (EACCES)"
     And the output should not contain "node:fs"
 
-  Scenario: Reopening preserves status_updated_iso
+  Scenario: Close then reopen keeps a valid status_updated_iso
     When I run "ticket close test-0001"
     Then the command should succeed
     And ticket "test-0001" should have a valid "status_updated_iso" timestamp
