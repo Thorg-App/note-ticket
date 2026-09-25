@@ -184,6 +184,37 @@ Feature: Ticket Status Management
     Then the command should succeed
     And ticket "test-0001" should have a valid "status_updated_iso" timestamp
 
+  # Every CLI path that writes `status` must restamp `status_updated_iso` (ticket
+  # nid_qhsvp59aqj1j9rgau319w89tw_e). The fixture's stamp is 2024-01-01, so "stamped during
+  # this scenario" proves the field was rewritten, not merely present.
+  Scenario Outline: <command> restamps status_updated_iso
+    When I run "ticket <command>"
+    Then the command should succeed
+    And ticket "test-0001" should have a "status_updated_iso" timestamp stamped during this scenario
+
+    Examples:
+      | command                      |
+      | status test-0001 in_progress |
+      | status test-0001 closed      |
+      | status test-0001 punted      |
+      | status test-0001 p2          |
+      | start test-0001              |
+      | close test-0001              |
+
+  Scenario: reopen restamps status_updated_iso
+    Given ticket "test-0001" has status "closed"
+    When I run "ticket reopen test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a "status_updated_iso" timestamp stamped during this scenario
+
+  # Setting the status a ticket already has is still a status write: the stamp records when
+  # the status was last SET, as `closed_iso` is refreshed by closing a closed ticket.
+  Scenario: Setting the status a ticket already has still restamps status_updated_iso
+    Given ticket "test-0001" has status "in_progress"
+    When I run "ticket start test-0001"
+    Then the command should succeed
+    And ticket "test-0001" should have a "status_updated_iso" timestamp stamped during this scenario
+
   # An unwritable ticket is the user's environment, not a crash: it must read like every
   # other failure, naming the file to fix (ticket nid_xioefs6t2rcs1gyl2mpcb1oyf_e).
   Scenario: A ticket file that cannot be rewritten fails with a message, not a stack trace

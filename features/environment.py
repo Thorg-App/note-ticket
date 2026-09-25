@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -30,6 +31,10 @@ def before_scenario(context, scenario):
     # so that `git rev-parse --show-toplevel` resolves it as the tickets root.
     context.test_dir = tempfile.mkdtemp(prefix='ticket_test_')
     _git_init(context.test_dir)
+
+    # Whole seconds, because the CLI stamps `*_iso` fields at second precision: a stamp
+    # written during this scenario is never earlier than this.
+    context.scenario_started_epoch_seconds = int(time.time())
 
     # No isolated copy of the tool unless the scenario asks for one: every other scenario
     # drives the checkout's own ./ticket.

@@ -27,7 +27,11 @@ interface TicketFileFields {
     readonly status?: string;
     readonly type?: string;
     readonly deps?: readonly string[];
+    readonly statusUpdatedIso?: string;
 }
+
+/** A stamp long before `NOW`, so a test can tell a rewritten `status_updated_iso` from a kept one. */
+const EARLIER = "2024-01-01T00:00:00Z";
 
 function ticketFileOf(id: string, title: string, fields: TicketFileFields = {}): string {
     const lines = ["---", `id: ${id}`, `title: "${title}"`, `status: ${fields.status ?? "open"}`];
@@ -36,6 +40,9 @@ function ticketFileOf(id: string, title: string, fields: TicketFileFields = {}):
     }
     if (fields.type !== undefined) {
         lines.push(`type: ${fields.type}`);
+    }
+    if (fields.statusUpdatedIso !== undefined) {
+        lines.push(`status_updated_iso: ${fields.statusUpdatedIso}`);
     }
     lines.push("---", "");
     return lines.join("\n");
@@ -125,6 +132,30 @@ describe("FileTicketManager.setStatus", () => {
         const reloaded = manager.get(ID_A);
         assert.equal(reloaded.frontmatter.getString("closed_iso"), NOW);
     });
+
+    describe("GIVEN a ticket whose status_updated_iso predates the clock", () => {
+        function managerWithStampedTicket(status: string): FileTicketManager {
+            const manager = managerOf();
+            mkdirSync(manager.ticketsDir, { recursive: true });
+            writeFileSync(
+                join(manager.ticketsDir, "work.md"),
+                ticketFileOf(ID_A, "Work", { status, statusUpdatedIso: EARLIER }),
+            );
+            return manager;
+        }
+
+        it("WHEN its status changes THEN status_updated_iso is restamped from the clock", () => {
+            const manager = managerWithStampedTicket("open");
+            manager.setStatus(ID_A, "in_progress");
+            assert.equal(manager.get(ID_A).frontmatter.getString("status_updated_iso"), NOW);
+        });
+
+        it("WHEN it is set to the status it already has THEN status_updated_iso is still restamped", () => {
+            const manager = managerWithStampedTicket("in_progress");
+            manager.setStatus(ID_A, "in_progress");
+            assert.equal(manager.get(ID_A).frontmatter.getString("status_updated_iso"), NOW);
+        });
+    });
 });
 
 describe("FileTicketManager.setStatus with a custom status", () => {
@@ -144,7 +175,7 @@ describe("FileTicketManager.autoCloseEpics", () => {
         writeFileSync(join(manager.ticketsDir, "task.md"), ticketFileOf(ID_A, "Task", { status: taskStatus }));
         writeFileSync(
             join(manager.ticketsDir, "epic.md"),
-            ticketFileOf(ID_B, "Epic", { type: "epic", deps: [ID_A] }),
+            ticketFileOf(ID_B, "Epic", { type: "epic", deps: [ID_A], statusUpdatedIso: EARLIER }),
         );
         return manager;
     }
@@ -166,6 +197,12 @@ describe("FileTicketManager.autoCloseEpics", () => {
         const manager = epicOverTask("closed");
         manager.autoCloseEpics();
         assert.equal(manager.get(ID_B).frontmatter.getString("closed_iso"), NOW);
+    });
+
+    it("restamps status_updated_iso from the clock", () => {
+        const manager = epicOverTask("closed");
+        manager.autoCloseEpics();
+        assert.equal(manager.get(ID_B).frontmatter.getString("status_updated_iso"), NOW);
     });
 
     it("leaves an epic with an open dependency alone", () => {

@@ -61,6 +61,11 @@ describe("StatusUpdate", () => {
         assert.equal(updated.frontmatter.get("status_updated_iso"), NOW);
     });
 
+    it("restamps status_updated_iso even when the status is unchanged", () => {
+        const updated = StatusUpdate.applied(ticketOf(), "open", NOW);
+        assert.equal(updated.frontmatter.get("status_updated_iso"), NOW);
+    });
+
     it("inserts closed_iso as the FIRST frontmatter entry, where bash's sed puts it", () => {
         const updated = StatusUpdate.applied(ticketOf(), "closed", NOW);
         assert.equal(frontmatterLines(updated)[0], `closed_iso: ${NOW}`);

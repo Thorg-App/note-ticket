@@ -41,6 +41,12 @@ Feature: Epics
     Then the command should succeed
     And ticket "epic-0001" should have a valid "closed_iso" timestamp
 
+  Scenario: An auto-closed epic gets its status_updated_iso restamped
+    Given ticket "task-0001" has status "closed"
+    When I run "ticket auto-close-epics"
+    Then the command should succeed
+    And ticket "epic-0001" should have a "status_updated_iso" timestamp stamped during this scenario
+
   Scenario: Auto-close leaves an epic with an open dependency alone
     When I run "ticket auto-close-epics"
     Then the command should succeed
