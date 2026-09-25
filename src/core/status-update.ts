@@ -12,6 +12,10 @@ export class StatusUpdate {
      * it is written only while the ticket is closed and dropped again on any other status —
      * a reopened ticket that kept a `closed_iso` would misreport as finished work.
      *
+     * `status_updated_iso` is restamped on EVERY call, including one that sets the status the
+     * ticket already has: the stamp records when the status was last SET, the same way closing
+     * a closed ticket refreshes `closed_iso` (bash behaved identically).
+     *
      * A field the file does not have yet is inserted as the FIRST frontmatter entry
      * (`Frontmatter.withField`), which is where bash's `sed` insert lands it.
      */

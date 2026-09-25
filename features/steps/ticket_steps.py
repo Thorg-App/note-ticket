@@ -8,6 +8,7 @@ import signal
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from behave import given, when, then, register_type, use_step_matcher
@@ -1228,6 +1229,20 @@ def step_ticket_has_valid_timestamp(context, ticket_id, field):
     pattern = rf'^{re.escape(field)}:\s*\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}Z'
     assert re.search(pattern, content, re.MULTILINE), \
         f"No valid ISO timestamp found in field '{field}'\nContent: {content}"
+
+
+# WHY not "a valid timestamp": the fixture tickets already carry a valid stamp
+# (2024-01-01T00:00:00Z), so only a lower bound proves the command REWROTE the field.
+@then(r'ticket "(?P<ticket_id>[^"]+)" should have a "(?P<field>[^"]+)" timestamp stamped during this scenario')
+def step_ticket_has_timestamp_from_this_scenario(context, ticket_id, field):
+    """Assert the ISO timestamp in `field` was written after the scenario started."""
+    content = find_ticket_file(context, ticket_id).read_text()
+    match = re.search(rf'^{re.escape(field)}:\s*(\S+)$', content, re.MULTILINE)
+    assert match, f"Field '{field}' not found in ticket\nContent: {content}"
+    stamped = datetime.strptime(match.group(1), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+    started = datetime.fromtimestamp(context.scenario_started_epoch_seconds, tz=timezone.utc)
+    assert stamped >= started, \
+        f"Field '{field}' value=[{match.group(1)}] predates the scenario start=[{started.isoformat()}]"
 
 
 @then(r'a file named "(?P<filename>[^"]+)" should exist in tickets directory')

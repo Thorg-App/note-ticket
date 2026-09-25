@@ -52,7 +52,8 @@ export interface TicketManager {
 
     /**
      * Move a ticket to `status`, restamping `status_updated_iso` (and `closed_iso`, which
-     * exists exactly while the ticket is closed). Returns the updated ticket.
+     * exists exactly while the ticket is closed) — even when `status` is the one it already
+     * has. Returns the updated ticket.
      */
     setStatus(id: string, status: TicketStatus): Ticket;
 

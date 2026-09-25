@@ -136,6 +136,13 @@ the id must contain the text you typed as a substring, and more than one match a
 winning tier is an error. Surrounding whitespace is trimmed. An **empty** id matches
 nothing, so `ticket show "$UNSET_VAR"` fails instead of picking an arbitrary ticket.
 
+## Status timestamps
+
+Every command that writes a status — `status`, `start`, `close`, `reopen` and
+`auto-close-epics` — sets `status_updated_iso` to the current UTC time, even when the ticket
+already had that status. `closed_iso` exists exactly while a ticket is closed: closing sets
+it, and any other status removes it.
+
 ## Custom statuses
 
 Besides `open`, `in_progress`, `closed` and `punted`, `status <id> <status>` accepts a custom

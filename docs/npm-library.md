@@ -87,7 +87,7 @@ const manager = FileTicketManager.forDirectory(tmpDir, {
 | `list()` | `readonly Ticket[]` | Every ticket, byte-wise path order — the order `ticket ls` / `query` use. |
 | `get(id)` | `Ticket` | Partial ids allowed; see **Id resolution**. |
 | `create(input)` | `Ticket` | Writes a new file at the TOP level of the tickets dir. |
-| `setStatus(id, status)` | `Ticket` | Restamps `status_updated_iso`, and `closed_iso` (which exists exactly while the ticket is closed). |
+| `setStatus(id, status)` | `Ticket` | Restamps `status_updated_iso` (even when the status is unchanged), and `closed_iso` (which exists exactly while the ticket is closed). |
 | `autoCloseEpics()` | `readonly Ticket[]` | Closes every epic whose deps are all closed; see **Epics**. |
 | `addNote(id, note)` | `void` | APPENDS a timestamped note under `## Notes`; touches nothing else. |
 | `save(ticket)` | `void` | Persists a ticket you edited through the `with…` accessors. |
