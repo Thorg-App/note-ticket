@@ -9,6 +9,6 @@ status_updated_iso: 2026-09-25T22:24:44Z
 type: task
 priority: 3
 assignee: nickolaykondratyev
-tags: []
+tags: [status_updated_iso]
 ---
 
